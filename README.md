@@ -14,7 +14,7 @@
   <a href="https://github.com/Yog-Sotho/LLM-fine-tuner/releases">
     <img src="https://img.shields.io/github/v/release/Yog-Sotho/LLM-fine-tuner?style=for-the-badge&color=3b82f6" alt="Release">
   </a>
-  <a href="https://huggingface.co/spaces?sort=trending&search=llm-fine-tuner">
+  <a href="https://huggingface.co/spaces?sort=trending">
     <img src="https://img.shields.io/badge/🤗-Try_on_HF_Spaces-8b5cf6?style=for-the-badge" alt="HF Spaces">
   </a>
 </div>
@@ -33,27 +33,34 @@
 
 Perfect for creators, small teams, researchers, and anyone who wants their own custom AI without the headache.
 
-Features Deep Dive
-Supported formats: CSV, JSONL, JSON, TXT, Excel, PDF, ZIP (with path-traversal protection)
-Hardware auto-detect + model recommendation
-Live training with stop button and Plotly loss curve
-One-click HF Hub push with beautiful auto-generated model card
-Batch inference (CSV or TXT prompts → downloadable results)
-PEFT methods: LoRA (with Unsloth), Prefix Tuning, Prompt Tuning, Adapters, Full Fine-Tuning
-Roadmap (v2.4 → v3.0)
-[ ] GGUF + AWQ export (one click)
-[ ] DPO / ORPO alignment tab
-[ ] Synthetic data generator
-[ ] Docker + CLI support
-[ ] Multi-GPU via Accelerate
+### 🔍 Features Deep Dive
 
-Contributing
+- **Supported formats:** CSV, JSONL, JSON, TXT, Excel, PDF, ZIP (with path-traversal protection)
+- **Hardware auto-detect + model recommendation**
+- **Live training with stop button and Plotly loss curve**
+- **One-click HF Hub push with beautiful auto-generated model card**
+- **Batch inference** (CSV or TXT prompts → downloadable results)
+- **PEFT methods:** LoRA (with Unsloth), Prefix Tuning, Prompt Tuning, Adapters, Full Fine-Tuning
+
+### 🗺️ Roadmap (v2.4 → v3.0)
+
+- [ ] GGUF + AWQ export (one click)
+- [ ] DPO / ORPO alignment tab
+- [ ] Synthetic data generator
+- [ ] Docker + CLI support
+- [ ] Multi-GPU via Accelerate
+
+## 🤝 Contributing
+
 Pull requests welcome!
 
 Fork → create feature branch → open PR with clear description.
 
-License
+## 📜 License
+
 GPL-3.0 — feel free to use, modify, and share. Attribution appreciated ❤️
+
+---
 
 Made with ❤️ for the open-source community
 
