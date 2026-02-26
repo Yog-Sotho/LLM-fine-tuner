@@ -1,3 +1,4 @@
+<img src="logo.jpg" alt="LLM Fine-Tuner Logo" width="200"/>
 <div align="center">
   <h1>🧠 LLM Fine-Tuner v2.3</h1>
   <p><strong>The easiest way to fine-tune LLMs — no coding required.</strong><br>
