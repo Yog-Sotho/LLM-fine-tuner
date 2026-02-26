@@ -32,20 +32,6 @@
 
 Perfect for creators, small teams, researchers, and anyone who wants their own custom AI without the headache.
 
-## 🚀 Quick Start (2 minutes)
-
-```bash
-git clone https://github.com/Yog-Sotho/LLM-fine-tuner.git
-cd LLM-fine-tuner
-
-# Install dependencies
-pip install -r requirements.txt
-
-# (Optional but recommended) Install Unsloth for massive speed boost
-pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git" --no-deps
-
-python LLM_Fine_Tuner_v2.3.py
-
 Features Deep Dive
 Supported formats: CSV, JSONL, JSON, TXT, Excel, PDF, ZIP (with path-traversal protection)
 Hardware auto-detect + model recommendation
@@ -59,10 +45,29 @@ Roadmap (v2.4 → v3.0)
 [ ] Synthetic data generator
 [ ] Docker + CLI support
 [ ] Multi-GPU via Accelerate
+
 Contributing
 Pull requests welcome!
+
 Fork → create feature branch → open PR with clear description.
+
 License
 GPL-3.0 — feel free to use, modify, and share. Attribution appreciated ❤️
+
 Made with ❤️ for the open-source community
+
 Star the repo if it helps you build something cool!
+
+## 🚀 Quick Start (2 minutes)
+
+```bash
+git clone https://github.com/Yog-Sotho/LLM-fine-tuner.git
+cd LLM-fine-tuner
+
+# Install dependencies
+pip install -r requirements.txt
+
+# (Optional but recommended) Install Unsloth for massive speed boost
+pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git" --no-deps
+
+python LLM_Fine_Tuner_v2.3.py
