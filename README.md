@@ -1,5 +1,5 @@
-<img src="logo.jpg" alt="LLM Fine-Tuner Logo" width="200"/>
 <div align="center">
+  <img src="logo.jpg" alt="LLM Fine-Tuner Logo" width="200"/>
   <h1>🧠 LLM Fine-Tuner v2.3</h1>
   <p><strong>The easiest way to fine-tune LLMs — no coding required.</strong><br>
   Upload your data → click Train → get a ready-to-use model in minutes.<br>
