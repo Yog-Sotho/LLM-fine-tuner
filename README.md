@@ -1,9 +1,9 @@
 <div align="center">
   <img src="logo.jpg" alt="LLM Fine-Tuner Logo" width="200"/>
-  <h1>🧠 LLM Fine-Tuner v2.3</h1>
+  <h1>🧠 LLM Fine-Tuner v2.4</h1>
   <p><strong>The easiest way to fine-tune LLMs — no coding required.</strong><br>
   Upload your data → click Train → get a ready-to-use model in minutes.<br>
-  Now powered by <strong>Unsloth</strong> (2-5× faster, 60-80% less VRAM) + Smart Chat Templates.</p>
+  Now powered by <strong>Unsloth</strong> (2-5× faster, 60-80% less VRAM) + Smart Chat Templates + GGUF Export + DPO Alignment + <strong>Heretic Mode</strong>.</p>
 
   <a href="https://github.com/Yog-Sotho/LLM-fine-tuner/stargazers">
     <img src="https://img.shields.io/github/stars/Yog-Sotho/LLM-fine-tuner?style=for-the-badge&logo=github&color=7c3aed" alt="Stars">
@@ -30,6 +30,8 @@
 - **Multiple PEFT methods** — LoRA, Prefix Tuning, Prompt Tuning, Adapters + Full Fine-Tuning
 - **Live loss chart + one-click stop** — Real-time monitoring
 - **Export ready** — ZIP download, HF Hub push, GGUF coming soon
+- **DPO Alignment** — Direct Preference Optimization for professional-grade helpfulness and alignment
+- **Heretic Mode** — One-click automatic uncensoring to unlock the full potential of your model (use responsibly)
 
 Perfect for creators, small teams, researchers, and anyone who wants their own custom AI without the headache.
 
@@ -41,11 +43,15 @@ Perfect for creators, small teams, researchers, and anyone who wants their own c
 - **One-click HF Hub push with beautiful auto-generated model card**
 - **Batch inference** (CSV or TXT prompts → downloadable results)
 - **PEFT methods:** LoRA (with Unsloth), Prefix Tuning, Prompt Tuning, Adapters, Full Fine-Tuning
+- **GGUF Export:** One-click quantized models (q8_0, q6_k, q5_k_m, q4_k_m) ready for Ollama, LM Studio, llama.cpp
+- **DPO Alignment:** Learn from chosen vs rejected responses for better alignment
+- **Heretic Mode:** Automatic restriction removal after training (use responsibly)
 
 ### 🗺️ Roadmap (v2.4 → v3.0)
 
-- [ ] GGUF + AWQ export (one click)
-- [ ] DPO / ORPO alignment tab
+- [x] GGUF Export (one click)
+- [x] DPO Alignment tab
+- [x] Heretic Mode integration
 - [ ] Synthetic data generator
 - [ ] Docker + CLI support
 - [ ] Multi-GPU via Accelerate
@@ -62,7 +68,7 @@ GPL-3.0 — feel free to use, modify, and share. Attribution appreciated ❤️
 
 ---
 
-Made with ❤️ for the open-source community
+**Made with ❤️ for the open-source community**
 
 Star the repo if it helps you build something cool!
 
@@ -75,7 +81,8 @@ cd LLM-fine-tuner
 # Install dependencies
 pip install -r requirements.txt
 
-# (Optional but recommended) Install Unsloth for massive speed boost
+# (Optional but highly recommended) Unsloth + Heretic + DPO
 pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git" --no-deps
+pip install heretic-llm trl
 
-python LLM_Fine_Tuner_v2.3.py
+python LLM_Fine_Tuner_v2.4.py
