@@ -1,0 +1,26 @@
+# LLM Fine-Tuner v2.3 – Requirements
+# Install with: pip install -r requirements.txt
+
+gradio>=5.0.0
+transformers>=4.48.0
+datasets>=3.0.0
+peft>=0.14.0
+accelerate>=1.3.0
+bitsandbytes>=0.45.0
+torch>=2.5.0
+torchvision>=0.20.0
+torchaudio>=2.5.0
+numpy>=2.0.0
+pandas>=2.2.0
+PyPDF2>=3.0.0
+openpyxl>=3.1.0
+psutil>=6.0.0
+huggingface_hub>=0.25.0
+
+# Unsloth (optional but highly recommended for 2-5× speed)
+# Install separately for best performance:
+# pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git" --no-deps
+
+# Development / optional
+black>=24.0.0
+pytest>=8.0.0
