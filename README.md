@@ -45,3 +45,24 @@ pip install -r requirements.txt
 pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git" --no-deps
 
 python LLM_Fine_Tuner_v2.3.py
+
+Features Deep Dive
+Supported formats: CSV, JSONL, JSON, TXT, Excel, PDF, ZIP (with path-traversal protection)
+Hardware auto-detect + model recommendation
+Live training with stop button and Plotly loss curve
+One-click HF Hub push with beautiful auto-generated model card
+Batch inference (CSV or TXT prompts → downloadable results)
+PEFT methods: LoRA (with Unsloth), Prefix Tuning, Prompt Tuning, Adapters, Full Fine-Tuning
+Roadmap (v2.4 → v3.0)
+[ ] GGUF + AWQ export (one click)
+[ ] DPO / ORPO alignment tab
+[ ] Synthetic data generator
+[ ] Docker + CLI support
+[ ] Multi-GPU via Accelerate
+Contributing
+Pull requests welcome!
+Fork → create feature branch → open PR with clear description.
+License
+GPL-3.0 — feel free to use, modify, and share. Attribution appreciated ❤️
+Made with ❤️ for the open-source community
+Star the repo if it helps you build something cool!
