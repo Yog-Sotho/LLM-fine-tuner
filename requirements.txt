@@ -1,5 +1,12 @@
-# LLM Fine-Tuner v2.4 – Requirements
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║              🧠 Advanced LLM Fine-Tuner  —  v2.6                    ║
+# ║    Updated requirements (Feb 2026) — includes CLI, SFTTrainer,       ║
+# ║    AWQ/GPTQ/EXL2 quant backends, typer headless mode & security      ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+#
 # Install with: pip install -r requirements.txt
+# Then (highly recommended):
+# pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git" --no-deps
 
 gradio>=5.0.0
 transformers>=4.48.0
@@ -7,7 +14,7 @@ datasets>=3.0.0
 peft>=0.14.0
 accelerate>=1.3.0
 bitsandbytes>=0.45.0
-trl>=0.12.0                    # DPO Alignment
+trl>=0.12.0                  # SFTTrainer + DPOTrainer (v2.6 unification)
 torch>=2.5.0
 torchvision>=0.20.0
 torchaudio>=2.5.0
@@ -17,12 +24,19 @@ PyPDF2>=3.0.0
 openpyxl>=3.1.0
 psutil>=6.0.0
 huggingface_hub>=0.25.0
-heretic-llm>=1.2.0             # Heretic (uncensoring) - one-click unlock
+heretic-llm>=1.2.0           # Heretic abliteration (post-training unlock)
 
-# Unsloth (highly recommended for 2-5× faster training + native GGUF export)
-# Install separately for best performance:
+# ── NEW IN v2.6 ───────────────────────────────────────────────────────
+typer>=0.15.0                # Production CLI entrypoint (headless training)
+auto-gptq>=0.7.1             # GPTQ support (optional quant backend)
+exllamav2                    # EXL2 support (optional quant backend)
+# Note: auto-gptq and exllamav2 are optional.
+# If you don't need extra quant formats, you can comment them out.
+
+# ── Unsloth (still highly recommended for 2-5× speed + native GGUF) ──
+# Install separately:
 # pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git" --no-deps
 
-# Optional / development
+# ── Optional / development ─────────────────────────────────────────────
 black>=24.0.0
 pytest>=8.0.0
