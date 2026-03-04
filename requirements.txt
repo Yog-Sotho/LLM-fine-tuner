@@ -1,20 +1,22 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
-# ║              🧠 Advanced LLM Fine-Tuner  —  v2.6                    ║
-# ║    Updated requirements (Feb 2026) — includes CLI, SFTTrainer,       ║
-# ║    AWQ/GPTQ/EXL2 quant backends, typer headless mode & security      ║
+# ║              🧠 Advanced LLM Fine-Tuner  —  v2.9 (FIXED)            ║
+# ║    Updated requirements (March 2026) — includes CLI, RLHF,          ║
+# ║    ORPO, vLLM, evaluation (BLEU/ROUGE/BERTScore),                   ║
+# ║    data augmentation (nlpaug), and all security fixes.              ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 #
 # Install with: pip install -r requirements.txt
-# Then (highly recommended):
+# Then (highly recommended for 2‑5× speed and native GGUF export):
 # pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git" --no-deps
 
+# ── Core dependencies ─────────────────────────────────────────────────
 gradio>=5.0.0
 transformers>=4.48.0
 datasets>=3.0.0
 peft>=0.14.0
 accelerate>=1.3.0
 bitsandbytes>=0.45.0
-trl>=0.12.0                  # SFTTrainer + DPOTrainer (v2.6 unification)
+trl>=0.8.0                  # Required for DPO, RewardTrainer, PPOTrainer, ORPO
 torch>=2.5.0
 torchvision>=0.20.0
 torchaudio>=2.5.0
@@ -24,19 +26,33 @@ PyPDF2>=3.0.0
 openpyxl>=3.1.0
 psutil>=6.0.0
 huggingface_hub>=0.25.0
-heretic-llm>=1.2.0           # Heretic abliteration (post-training unlock)
+heretic-llm>=1.2.0          # Heretic abliteration (post‑training unlock)
 
-# ── NEW IN v2.6 ───────────────────────────────────────────────────────
-typer>=0.15.0                # Production CLI entrypoint (headless training)
-auto-gptq>=0.7.1             # GPTQ support (optional quant backend)
-exllamav2                    # EXL2 support (optional quant backend)
-# Note: auto-gptq and exllamav2 are optional.
-# If you don't need extra quant formats, you can comment them out.
+# ── CLI / headless mode ───────────────────────────────────────────────
+typer>=0.15.0
 
-# ── Unsloth (still highly recommended for 2-5× speed + native GGUF) ──
+# ── Optional quantisation backends ───────────────────────────────────
+auto-gptq>=0.7.1            # GPTQ support (optional)
+exllamav2                   # EXL2 support (optional)
+# Note: auto-gptq and exllamav2 are optional. Comment them out if not needed.
+
+# ── v2.7 / v2.9 NEW OPTIONAL PACKAGES ────────────────────────────────
+# Evaluation metrics
+evaluate>=0.4.0             # HuggingFace evaluate (optional)
+rouge-score>=0.1.2          # ROUGE metric (optional)
+bert-score>=0.3.13          # BERTScore (optional)
+nltk>=3.8.0                 # BLEU and other NLP tools (optional)
+
+# Data augmentation
+nlpaug>=1.1.10              # Synonym / random word / spelling augmentation (optional)
+
+# High‑throughput inference
+vllm>=0.2.0                 # vLLM engine (optional, requires CUDA)
+
+# ── Unsloth (still highly recommended for 2‑5× speed + native GGUF) ──
 # Install separately:
 # pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git" --no-deps
 
-# ── Optional / development ─────────────────────────────────────────────
+# ── Development tools (optional) ─────────────────────────────────────
 black>=24.0.0
 pytest>=8.0.0
