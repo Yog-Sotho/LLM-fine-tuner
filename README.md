@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="logo.jpg" alt="LLM Fine-Tuner — Live Training Dashboard" width="800"/>
+  <img src="Images/logo.jpg" alt="LLM Fine-Tuner — Live Training Dashboard" width="800"/>
   <h1>🧠 LLM Fine-Tuner v3.2</h1>
   <p><strong>The easiest way to fine-tune LLMs — no coding required.</strong><br>
   Upload your data → click Train → get a ready-to-use model in minutes.<br>
@@ -49,21 +49,21 @@ Perfect for creators, small teams, researchers, and anyone who wants their own c
 <div align="center">
 
 ### ⚡ Forging Intelligence — How Fine-Tuning Works
-<img src="LLM1.png" alt="Neural network fine-tuning visualised as precision forging on an anvil" width="750"/>
+<img src="Images/LLM1.png" alt="Neural network fine-tuning visualised as precision forging on an anvil" width="750"/>
 
 *Fine-tuning is precision forging — every gradient update shapes your model's weights toward exactly the behaviour you need.*
 
 ---
 
 ### 🚀 Unsloth Acceleration
-<img src="unsloth.png" alt="Unsloth sloth mascot with NITRO rocket pack" width="750"/>
+<img src="Images/unsloth.png" alt="Unsloth sloth mascot with NITRO rocket pack" width="750"/>
 
 *With **Unsloth** enabled, training throughput increases 2–5× and VRAM usage drops 60–80%. Even a sloth goes supersonic.*
 
 ---
 
 ### 🔓 Heretic Mode
-<img src="heretic.png" alt="LLM Fine-Tuner with Heretic Mode ON" width="750"/>
+<img src="Images/heretic.png" alt="LLM Fine-Tuner with Heretic Mode ON" width="750"/>
 
 *Enable **Heretic Mode** to automatically remove post-training restrictions from your model after fine-tuning. Use responsibly.*
 
