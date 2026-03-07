@@ -218,7 +218,7 @@ Model recommendations are automatically selected based on available VRAM:
 
 ## 🛠️ v3.2 Release Notes — What's New & Fixed
 
-> **v3.2 is fully production-ready.** All bugs identified in three successive DeepSeek analysis reports have been resolved.
+> **v3.2 is fully production-ready.** All bugs identified in successive analysis and reports have been resolved.
 
 ### v3.2 Fixes (this release)
 
