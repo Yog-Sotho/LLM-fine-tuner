@@ -38,10 +38,10 @@ def validate_and_clean_dataset(
     """
     issues = []
 
-    # ── Compute lengths per row ────────────────────────────────────────────
+    # ── Compute lengths per row (strip whitespace for accurate empty detection) ──
     if is_dpo:
         lengths = [
-            len(str(p)) + len(str(c)) + len(str(r))
+            len(str(p).strip()) + len(str(c).strip()) + len(str(r).strip())
             for p, c, r in zip(
                 dataset[COL_PROMPT],
                 dataset[COL_CHOSEN],
@@ -49,16 +49,16 @@ def validate_and_clean_dataset(
             )
         ]
     elif COL_TEXT in dataset.column_names:
-        lengths = [len(str(t)) for t in dataset[COL_TEXT]]
+        lengths = [len(str(t).strip()) for t in dataset[COL_TEXT]]
     elif COL_INSTRUCTION in dataset.column_names and COL_OUTPUT in dataset.column_names:
         lengths = [
-            len(str(i)) + len(str(o))
+            len(str(i).strip()) + len(str(o).strip())
             for i, o in zip(dataset[COL_INSTRUCTION], dataset[COL_OUTPUT])
         ]
     else:
         return dataset, ["⚠️ Unknown column structure — cannot validate."]
 
-    # ── Report and remove empty examples ──────────────────────────────────
+    # ── Report and remove empty / whitespace-only examples ────────────────
     empty = sum(1 for ln in lengths if ln == 0)
     if empty:
         issues.append(f"⚠️ {empty} empty examples removed. ")
@@ -66,17 +66,37 @@ def validate_and_clean_dataset(
     if is_dpo:
         dataset = dataset.filter(
             lambda x: (
-                len(str(x[COL_PROMPT])) > 0
-                and len(str(x[COL_CHOSEN])) > 0
-                and len(str(x[COL_REJECTED])) > 0
+                len(str(x[COL_PROMPT]).strip()) > 0
+                and len(str(x[COL_CHOSEN]).strip()) > 0
+                and len(str(x[COL_REJECTED]).strip()) > 0
             )
         )
     elif COL_TEXT in dataset.column_names:
-        dataset = dataset.filter(lambda x: len(str(x[COL_TEXT])) > 0)
+        # BUG 3 FIX: strip so whitespace-only strings count as empty
+        dataset = dataset.filter(lambda x: len(str(x[COL_TEXT]).strip()) > 0)
     else:
+        # BUG 2 FIX: check each column independently with AND, not sum with OR
         dataset = dataset.filter(
-            lambda x: len(str(x[COL_INSTRUCTION])) + len(str(x[COL_OUTPUT])) > 0
+            lambda x: (
+                len(str(x[COL_INSTRUCTION]).strip()) > 0
+                and len(str(x[COL_OUTPUT]).strip()) > 0
+            )
         )
+
+    # ── Duplicate detection (BUG 4 FIX) ────────────────────────────────────
+    if COL_TEXT in dataset.column_names:
+        texts = [str(t) for t in dataset[COL_TEXT]]
+        if len(texts) != len(set(texts)):
+            n_dups = len(texts) - len(set(texts))
+            issues.append(f"⚠️ {n_dups} duplicate examples detected. ")
+    elif COL_INSTRUCTION in dataset.column_names and COL_OUTPUT in dataset.column_names:
+        pairs = list(zip(
+            [str(i) for i in dataset[COL_INSTRUCTION]],
+            [str(o) for o in dataset[COL_OUTPUT]],
+        ))
+        if len(pairs) != len(set(pairs)):
+            n_dups = len(pairs) - len(set(pairs))
+            issues.append(f"⚠️ {n_dups} duplicate examples detected. ")
 
     # ── Report long examples (will be truncated by tokeniser) ─────────────
     long_ = sum(1 for ln in lengths if ln > 2048)
