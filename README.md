@@ -1,10 +1,10 @@
 <div align="center">
-  <img src="Images/logo.jpg" alt="LLM Fine-Tuner — Live Training Dashboard" width="800"/>
+  <img src="Images/logo.jpg" alt="LLM Fine-Tuner" width="800"/>
+
   <h1>🧠 LLM Fine-Tuner v3.2</h1>
-  <p><strong>The easiest way to fine-tune LLMs — no coding required.</strong><br>
-  Upload your data → click Train → get a ready-to-use model in minutes.<br>
-  Now powered by <strong>Unsloth</strong> (2-5× faster, 60-80% less VRAM) · Smart Chat Templates · GGUF Export ·
-  DPO · RLHF/PPO · ORPO · Reward Training · CLI · vLLM · <strong>Heretic Mode</strong>.</p>
+
+  <p><strong>Your own custom AI — no coding, no PhD, no drama.</strong><br>
+  Upload your data → click Train → get a ready-to-use model in minutes.</p>
 
   <a href="https://github.com/Yog-Sotho/LLM-fine-tuner/stargazers">
     <img src="https://img.shields.io/github/stars/Yog-Sotho/LLM-fine-tuner?style=for-the-badge&logo=github&color=7c3aed" alt="Stars">
@@ -22,25 +22,28 @@
 
 ---
 
-## ✨ Why LLM Fine-Tuner?
+## 🤔 What is this?
 
-- **Zero coding** — Drag & drop CSV, JSONL, JSON, TXT, Excel, PDF, ZIP
-- **Smart defaults** — Auto-detects your hardware and recommends the best model
-- **Unsloth powered** — Train 7B–14B models on a single RTX 4090/5090
-- **Perfect chat formatting** — Automatic `apply_chat_template` for Llama-3, Mistral, Qwen, Gemma-2, Phi, etc.
-- **Multiple PEFT methods** — LoRA, QLoRA Enhanced (NF4+double-quant), Prefix Tuning, Prompt Tuning, Adapters, Full Fine-Tuning
-- **Full RLHF pipeline** — Reward Model Training → PPO → production-aligned model
-- **ORPO alignment** — Odds-Ratio Preference Optimization (no reference model needed)
-- **Live loss chart + one-click stop** — Real-time monitoring
-- **Export ready** — ZIP download, HF Hub push, GGUF quantized export
-- **DPO Alignment** — Direct Preference Optimization for professional-grade alignment
-- **Heretic Mode** — One-click automatic uncensoring to unlock the full potential of your model (use responsibly)
-- **Full CLI** — Headless / server operation with `train`, `reward`, `orpo`, `evaluate`, `ppo` commands
-- **vLLM inference** — High-throughput serving with cached engine (no reload on repeated calls)
-- **Evaluation suite** — BLEU, ROUGE-1/2/L, BERTScore, and HuggingFace `evaluate` hub — all in one tab
-- **Data augmentation** — Synonym, random-word, and spelling augmentation via `nlpaug`
+Imagine you could take a smart AI assistant and teach it to be an expert in *your* specific topic — your business, your writing style, your data. That's exactly what fine-tuning is.
 
-Perfect for creators, small teams, researchers, and anyone who wants their own custom AI without the headache.
+LLM Fine-Tuner lets you do it through a simple visual interface. No programming knowledge needed. If you can use a spreadsheet and a web browser, you can fine-tune an AI model.
+
+**What you can build:**
+- 💼 A customer support bot that knows your products inside and out
+- ✍️ A writing assistant that matches your exact tone and style
+- 🏥 A domain expert trained on your specialised knowledge
+- 🎮 A character AI with a specific personality
+- 📚 A Q&A tool trained on your own documents
+
+---
+
+## ✨ Why people love it
+
+- **No coding** — Everything happens through a point-and-click interface
+- **Works on regular hardware** — Even a gaming laptop with 8 GB of GPU memory is enough
+- **Fast** — Train a model in minutes, not days
+- **Your data stays yours** — Everything runs on your own machine
+- **Export anywhere** — Use your model in Ollama, LM Studio, or share it online
 
 ---
 
@@ -48,253 +51,204 @@ Perfect for creators, small teams, researchers, and anyone who wants their own c
 
 <div align="center">
 
-### ⚡ Forging Intelligence — How Fine-Tuning Works
-<img src="Images/LLM1.png" alt="Neural network fine-tuning visualised as precision forging on an anvil" width="750"/>
+### ⚡ What fine-tuning actually looks like
 
-*Fine-tuning is precision forging — every gradient update shapes your model's weights toward exactly the behaviour you need.*
+<img src="Images/LLM1.png" alt="Fine-tuning visualised as precision forging" width="750"/>
+
+*Think of fine-tuning like a master craftsman shaping raw material into a precision tool. The AI already knows a lot — you're just focusing that knowledge toward exactly what you need.*
 
 ---
 
-### 🚀 Unsloth Acceleration
-<img src="Images/unsloth.png" alt="Unsloth sloth mascot with NITRO rocket pack" width="750"/>
+### 🚀 Supercharged with Unsloth
 
-*With **Unsloth** enabled, training throughput increases 2–5× and VRAM usage drops 60–80%. Even a sloth goes supersonic.*
+<img src="Images/unsloth.png" alt="Unsloth acceleration" width="750"/>
+
+*LLM Fine-Tuner uses Unsloth under the hood — a turbo engine that makes training 2–5× faster and uses dramatically less memory. Even a regular gaming GPU becomes a fine-tuning powerhouse.*
 
 ---
 
 ### 🔓 Heretic Mode
-<img src="Images/heretic.png" alt="LLM Fine-Tuner with Heretic Mode ON" width="750"/>
 
-*Enable **Heretic Mode** to automatically remove post-training restrictions from your model after fine-tuning. Use responsibly.*
+<img src="Images/heretic.png" alt="Heretic Mode" width="750"/>
+
+*Some AI models have built-in restrictions that get in the way. Heretic Mode lets you remove those restrictions with one click. Use it responsibly — with great power comes great responsibility.*
 
 </div>
 
 ---
 
-## 🚀 Quick Start (2 minutes)
+## 🚀 Get Started in 2 Minutes
+
+### The Easy Way (recommended)
 
 ```bash
+# Download the project
 git clone https://github.com/Yog-Sotho/LLM-fine-tuner.git
 cd LLM-fine-tuner
 
-# Install dependencies
-pip install -r requirements.txt
-
-# (Optional but highly recommended) Unsloth — 2-5× faster training
-pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git" --no-deps
-
-# (Optional) Heretic Mode + DPO
-pip install heretic-llm trl
-
-# Launch the Gradio UI
-python LLM_fine_tuner_v3.2.py
-```
-
-### One-command automated install (recommended)
-
-```bash
+# Run the installer — it handles everything for you
 chmod +x install.sh && ./install.sh
-# For fully non-interactive CI/CD installs:
-AUTO_INSTALL=true ./install.sh      # or:  ./install.sh --yes
 ```
 
-The installer auto-detects your CUDA version, creates an isolated virtualenv, installs the correct PyTorch wheel, and builds `llama.cpp` for GGUF export.
-
-### CLI (headless / server mode)
-
-Any argument triggers the CLI instead of the Gradio UI:
+The installer will ask you a few yes/no questions. When it's done, launch with:
 
 ```bash
-# Show global help
-python LLM_fine_tuner_v3.2.py --help
-
-# Supervised fine-tuning
-python LLM_fine_tuner_v3.2.py train \
-    --model mistralai/Mistral-7B-v0.1 \
-    --data train.csv \
-    --epochs 3 \
-    --output ./my_model
-
-# Train a Reward Model
-python LLM_fine_tuner_v3.2.py reward \
-    --model mistralai/Mistral-7B-v0.1 \
-    --data reward_pairs.csv \
-    --output ./reward_model
-
-# ORPO alignment (no reference model needed)
-python LLM_fine_tuner_v3.2.py orpo \
-    --model ./my_model \
-    --data preference_pairs.csv \
-    --output ./orpo_model
-
-# PPO reinforcement learning from human feedback
-python LLM_fine_tuner_v3.2.py ppo \
-    --policy-model ./my_model \
-    --reward-model ./reward_model \
-    --data prompts.csv \
-    --output ./rlhf_model
-
-# Batch evaluation (BLEU, ROUGE, BERTScore)
-python LLM_fine_tuner_v3.2.py evaluate \
-    --model ./my_model \
-    --data eval.csv
+source llm_finetuner_env/bin/activate
+llm-finetune
 ```
 
+Your browser opens automatically. You're ready to train.
+
+### Want to skip all the questions?
+
+```bash
+./install.sh --yes
+```
+
+### Just want to try it quickly?
+
+```bash
+pip install -r requirements.txt
+python main.py
+```
+
+> **Using Google Colab?** You can run this entirely in your browser with a free GPU. See the [full installation guide](docs/01_installation.md).
+
 ---
 
-## 🔍 Features Deep Dive
+## 📋 How it works — step by step
 
-### 📂 Supported Data Formats
+### Step 1 — Prepare your data
 
-| Format | Notes |
+Create a simple spreadsheet (CSV file) with two columns:
+
+| instruction | output |
 |---|---|
-| CSV | Auto-detects `instruction`/`output` or `text` columns; column-mapping UI for custom headers |
-| JSONL | One JSON object per line |
-| JSON | Top-level array of objects |
-| TXT | One training example per line |
-| Excel `.xlsx` | Requires `openpyxl` |
-| PDF | Text extracted with `PyPDF2` |
-| ZIP | Path-traversal-safe extraction; any of the above inside |
+| What are your opening hours? | We're open Monday to Saturday, 9am to 6pm. |
+| Do you offer refunds? | Yes! We offer full refunds within 30 days of purchase. |
+| Where are you located? | We're at 123 Main Street, downtown. |
 
-### 🧠 Training Modes
+That's it. No special formatting, no coding. Just questions and the answers you want the model to give.
 
-| Mode | Description | Dataset columns required |
+> Don't have a CSV? The tool also accepts Word docs, PDFs, Excel files, plain text files, and more.
+
+### Step 2 — Upload and train
+
+1. Open the app (it runs in your browser)
+2. Click **📂 Data** and upload your file
+3. Click **🚀 Training**, pick a preset, and hit **▶ Start Training**
+4. Watch the progress bar — training takes minutes to an hour depending on your hardware
+
+### Step 3 — Test and export
+
+1. Go to **💬 Inference** and type a question
+2. Your model responds using everything it learned from your data
+3. When happy, go to **📤 Share** to download or publish your model
+
+---
+
+## 📂 What data formats does it accept?
+
+| Format | How to create it |
+|---|---|
+| CSV | Save any spreadsheet as CSV from Excel or Google Sheets |
+| Excel (.xlsx) | Drag in your Excel file directly |
+| JSON / JSONL | Export from your database or app |
+| Plain text (.txt) | One example per line |
+| PDF | Any PDF document — text is extracted automatically |
+| ZIP | Put multiple files in a ZIP and upload them all at once |
+
+---
+
+## 🎛️ Training Options (Plain English)
+
+You don't need to understand all of these to get started — the defaults work great. But here's what they mean if you're curious:
+
+| Option | What it does | Beginner recommendation |
 |---|---|---|
-| **SFT** | Supervised Fine-Tuning | `instruction` + `output`, or `text` |
-| **DPO** | Direct Preference Optimization | `prompt`, `chosen`, `rejected` |
-| **Reward Model** | RLHF reward signal training | `chosen`, `rejected` |
-| **PPO** | Proximal Policy Optimization (RLHF) | `prompt` |
-| **ORPO** | Odds-Ratio Preference Optimization | `prompt`, `chosen`, `rejected` |
-
-### ⚙️ PEFT Methods
-
-| Method | Use case |
-|---|---|
-| **LoRA** | General-purpose; works everywhere including Unsloth |
-| **QLoRA Enhanced** | Maximum VRAM savings — NF4 quantisation + double-quant + bfloat16 |
-| **Prefix Tuning** | Parameter-efficient; tunes virtual prefix tokens |
-| **Prompt Tuning** | Minimal parameters; soft prompt learnt during training |
-| **Adapters** | Bottleneck adapter layers (requires `adapter-transformers` fork) |
-| **Full Fine-Tuning** | All weights updated; requires the most VRAM |
-
-### 📊 Evaluation Metrics (v2.7+)
-
-Automatic metrics computed when a reference column is present:
-
-- **BLEU** (corpus-level, via `nltk`)
-- **ROUGE-1 / ROUGE-2 / ROUGE-L** (via `rouge-score`)
-- **BERTScore F1** (semantic similarity, via `bert-score`)
-- Any metric from the HuggingFace `evaluate` hub
-
-### 🔧 Data Augmentation (v2.7+)
-
-Before training, optionally augment your dataset using `nlpaug`:
-- Synonym substitution
-- Random word insertion / deletion / swap
-- Keyboard / OCR spelling augmentation
-
-### 🚢 Export & Deployment
-
-| Method | Details |
-|---|---|
-| **ZIP download** | Full model + tokenizer packaged for offline use |
-| **HF Hub push** | One-click upload with auto-generated model card |
-| **GGUF export** | Quantized (q8_0, q6_k, q5_k_m, q4_k_m) via Unsloth or llama.cpp; ready for Ollama / LM Studio / llama.cpp |
-| **vLLM serving** | Cached engine for high-throughput multi-user inference |
-| **Merge Adapter** | Merge LoRA weights into base for single-model deployment |
-
-### 🖥️ Hardware Auto-Detection
-
-On startup the UI shows:
-- GPU name + VRAM (via PyTorch CUDA)
-- System RAM (via `psutil`)
-- PyTorch version
-- Status of every optional dependency
-
-Model recommendations are automatically selected based on available VRAM:
-`< 4 GB → gpt2` | `< 8 GB → facebook/opt-350m` | `< 16 GB → TinyLlama-1.1B` | `≥ 16 GB → Mistral-7B`
+| **Training Preset** | Quick = fast test, Balanced = good results, Accurate = best quality | Start with **Balanced** |
+| **Base Model** | The starting AI brain you're teaching | Leave on **Auto** — the tool picks the right one for your hardware |
+| **PEFT Method** | How the training is done internally | Leave on **Auto** |
+| **Unsloth** | Turbo mode — makes training much faster | Always turn **ON** if available |
+| **Heretic Mode** | Removes built-in restrictions from the model | Optional — use responsibly |
 
 ---
 
-## 🛠️ v3.2 Release Notes — What's New & Fixed
+## 📊 Supported Training Modes
 
-> **v3.2 is fully production-ready.** All bugs identified in successive analysis and reports have been resolved.
-
-### v3.2 Fixes (this release)
-
-| Severity | Fix | Description |
+| Mode | What it does | When to use it |
 |---|---|---|
-| 🔴 High | Small dataset split guard | All three training paths (`train_model`, `train_reward_model_v27`, `train_orpo_v27`) now safely handle datasets with < 2 examples — no more crash on tiny test sets. If the 10% eval split rounds to 0, the last example is manually reserved as the eval row. `EarlyStoppingCallback` is only added when an eval set exists. |
-| 🟠 Medium | PPO reward float type | `reward_val` was being double-wrapped in `torch.tensor()` after already being a Python float from `.item()`. The 0-D tensor caused type errors in some TRL versions. Now appends the float directly. |
-| 🔴 High | CLI `--help` routing | `python script.py --help` previously launched Gradio because `"--help"` was not in the `cli_commands` set. Fixed by delegating **all** `len(sys.argv) > 1` invocations to Typer. Gradio only launches with zero arguments. |
-| 🟠 Medium | QLoRA checkbox UX | The `use_qlora_enhanced` checkbox was shown as interactive but silently ignored (PEFT method is derived solely from the radio). Checkbox is now `interactive=False` with an explanatory label — eliminates user confusion. |
-| 🟡 Low | CUDA `torch_dtype` | The standard CUDA branch (non-Flash-Attention path) did not set `torch_dtype`. Model loaded in float32 by default, wasting VRAM. Now always sets `bfloat16` (or `float16` if bf16 unsupported) before `from_pretrained`. |
-
-### v3.1 Fixes (preserved)
-
-- **PrefixTuningConfig** corrected to `encoder_hidden_size` + `num_layers` — previous args caused `TypeError`.
-- **PromptTuningConfig** invalid `num_transformer_layers` kwarg removed.
-- **Flash Attention bfloat16** guarded with `is_bf16_supported()` across all 3 model-load branches.
-- Aug/filter handlers return `gr.update(visible=True)` so preview panels actually appear.
-- `column_mapping` filtered to valid keys before `df.rename()` — `KeyError` prevented.
-
-### v3.0 Fixes (preserved)
-
-- `is_dpo` variable defined at top of `train_model()` — was undefined, causing `NameError`.
-- PPO policy model loaded with `AutoModelForCausalLMWithValueHead` + LoRA.
-- QLoRA Enhanced falls back to standard LoRA with clear message when CUDA is unavailable.
-
-### v2.9 Fixes (preserved)
-
-- `train_reward_model_v27` saves `AutoModelForCausalLMWithValueHead` — PPO-compatible.
-- Silent `batch_size` / `grad_accum` override removed — user values always respected.
-- All `progress()` calls guarded against `progress=None` — CLI-safe.
-- Registry reads `adapter_config.json` (PEFT) before `config.json` (full models).
-- `merge_adapter_for_inference()` added; vLLM section shows Merge Adapter tool.
-- ALL Gradio event handlers wired — UI was non-functional in v2.8.
+| **Standard Training (SFT)** | Teaches the model using your question-answer examples | Starting point for almost everyone |
+| **Preference Training (DPO)** | Teaches the model which answers are better vs worse | After standard training, to improve quality |
+| **Reward + PPO** | Advanced alignment with a scoring system | When you want the highest quality alignment |
+| **ORPO** | Modern single-step alignment | Faster alternative to full Reward + PPO |
 
 ---
 
-## 🗺️ Roadmap
+## 📤 Export Options
 
-- [x] GGUF Export (one click, q4–q8)
-- [x] DPO Alignment tab
-- [x] Heretic Mode integration
-- [x] CLI (train / reward / orpo / evaluate / ppo)
-- [x] Reward Model Training (RLHF step 1)
-- [x] PPO Training (RLHF step 2)
-- [x] ORPO alignment
-- [x] vLLM high-throughput inference (cached engine)
-- [x] Evaluation suite (BLEU / ROUGE / BERTScore)
-- [x] Data augmentation (nlpaug)
-- [x] QLoRA Enhanced (NF4 + double-quant)
-- [x] Flash Attention 2 support
-- [x] Column mapping UI for arbitrary CSV headers
-- [x] Small dataset safety guard (v3.2)
-- [ ] Synthetic data generator
-- [ ] Multi-GPU via Accelerate
-- [ ] Docker image
-- [ ] Quantisation-Aware Training (QAT)
-- [ ] Multi-modal fine-tuning (vision + language)
+Once trained, your model can be:
+
+- **Downloaded as a ZIP** — keep a backup on your computer
+- **Published to HuggingFace Hub** — share it with the world (or keep it private)
+- **Exported as GGUF** — run it offline with [Ollama](https://ollama.ai) or [LM Studio](https://lmstudio.ai) on any computer, even without internet
+- **Served with vLLM** — high-speed serving for multiple users at once
+
+---
+
+## 🗺️ What's been built, what's coming
+
+**Already available in v3.2:**
+- ✅ Visual interface — no coding needed
+- ✅ All major training modes (SFT, DPO, RLHF, ORPO)
+- ✅ GGUF export for Ollama & LM Studio
+- ✅ Heretic Mode
+- ✅ Command-line mode for power users
+- ✅ Batch evaluation tools
+- ✅ Data augmentation
+
+**Coming soon:**
+- 🔲 Synthetic data generator — create training data with AI
+- 🔲 Docker image — one-command setup with no dependencies
+- 🔲 Multi-GPU training
+- 🔲 Vision + language models
+
+---
+
+## 📖 Documentation
+
+New to fine-tuning? The docs are written for non-technical users:
+
+| Guide | What you'll learn |
+|---|---|
+| [Installation](docs/01_installation.md) | 4 ways to install, including Google Colab |
+| [Quick Start](docs/02_quick_start.md) | Train your first model in 5 minutes |
+| [Preparing Your Data](docs/03_data_preparation.md) | How to format your CSV, fix column names |
+| [Training Guide](docs/04_training.md) | All settings explained in plain English |
+| [Exporting Your Model](docs/08_export_and_deploy.md) | Download, publish, or deploy |
+| [Troubleshooting](docs/11_troubleshooting.md) | Fix the most common errors |
+| [FAQ](docs/12_faq.md) | Quick answers to common questions |
 
 ---
 
 ## 🤝 Contributing
 
-Pull requests welcome!
+Contributions welcome! Fork the repo, make your changes, and open a pull request with a clear description of what you did and why.
 
-Fork → create feature branch → open PR with clear description.
-
-For bug reports, please include: OS, Python version, GPU model + VRAM, and the full traceback.
+Found a bug? [Open an issue](https://github.com/Yog-Sotho/LLM-fine-tuner/issues) with your OS, GPU model, and the full error message.
 
 ---
 
 ## 📜 License
 
-GPL-3.0 — feel free to use, modify, and share. Attribution appreciated ❤️
+GPL-3.0 — free to use, modify, and share. Attribution appreciated ❤️
 
 ---
 
+<div align="center">
+
 **Made with ❤️ for the open-source community**
 
-Star the repo if it helps you build something cool! ⭐
+*If this tool helped you build something cool, a ⭐ on GitHub means the world.*
+Yog-Sotho
+</div>
