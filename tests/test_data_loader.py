@@ -110,7 +110,7 @@ def test_load_csv_with_column_mapping():
         rows = [{"q": "What?", "a": "Answer"}, {"q": "How?", "a": "Fine"}]
         path = _write_csv(d, rows)
         col_map = {"q": COL_INSTRUCTION, "a": COL_OUTPUT}
-        ds = load_dataset_from_file(DummyFile(path), "csv", col_map=col_map)
+        ds = load_dataset_from_file(DummyFile(path), "csv", column_mapping=col_map)
         assert COL_INSTRUCTION in ds.column_names
         assert COL_OUTPUT in ds.column_names
 
