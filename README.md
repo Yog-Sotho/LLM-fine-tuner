@@ -18,6 +18,9 @@
   <a href="https://huggingface.co/spaces?sort=trending">
     <img src="https://img.shields.io/badge/🤗-Try_on_HF_Spaces-8b5cf6?style=for-the-badge" alt="HF Spaces">
   </a>
+  <a href="https://github.com/sponsors/Yog-Sotho" target="_blank" rel="noopener">
+    <img src="https://img.shields.io/badge/Sponsor❤️-30363D.svg?logo=githubsponsors&logoColor=EA4AAA" alt="Sponsor on GitHub">
+  </a>
 </div>
 
 ---
