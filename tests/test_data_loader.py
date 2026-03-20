@@ -143,15 +143,33 @@ def test_safe_extract_zip_normal():
         assert os.path.isfile(os.path.join(extract_dir, "adapter_config.json"))
 
 
-def test_safe_extract_zip_path_traversal_blocked():
-    """Ensure safe_extract_zip raises on path-traversal entries."""
+def test_safe_extract_zip_relative_path_traversal_blocked():
+    """Ensure safe_extract_zip raises on relative path-traversal (../…) entries."""
     with tempfile.TemporaryDirectory() as d:
-        zip_path = os.path.join(d, "evil.zip")
+        zip_path = os.path.join(d, "evil_relative.zip")
         extract_dir = os.path.join(d, "out")
         os.makedirs(extract_dir)
-        # Manually craft a ZIP with a path-traversal entry name
         with zipfile.ZipFile(zip_path, "w") as zf:
             info = zipfile.ZipInfo("../../../etc/passwd")
             zf.writestr(info, "root:x:0:0:root:/root:/bin/bash")
         with pytest.raises(Exception):
+            safe_extract_zip(zip_path, extract_dir)
+
+
+def test_safe_extract_zip_absolute_path_blocked():
+    """L8 FIX: safe_extract_zip must block absolute paths like /etc/passwd.
+
+    The original implementation only checked for '../' prefix, leaving
+    absolute paths entirely unblocked (proven exploitable in audit C2).
+    The realpath-based containment check blocks both vectors.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        zip_path = os.path.join(d, "evil_absolute.zip")
+        extract_dir = os.path.join(d, "out")
+        os.makedirs(extract_dir)
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            # Absolute path entry — would land at /tmp/evil on extraction
+            info = zipfile.ZipInfo("/tmp/evil_payload.txt")
+            zf.writestr(info, "pwned")
+        with pytest.raises(Exception, match="Path traversal"):
             safe_extract_zip(zip_path, extract_dir)
