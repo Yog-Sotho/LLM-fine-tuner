@@ -1,0 +1,115 @@
+# =============================================================================
+# 🧠 LLM Fine-Tuner v3.2 — Docker Compose
+# =============================================================================
+#
+# Services:
+#   llm-fine-tuner-gpu   — GPU-accelerated UI (default)
+#   llm-fine-tuner-cpu   — CPU-only UI (no NVIDIA required)
+#
+# Quick start:
+#   GPU:  docker compose up llm-fine-tuner-gpu
+#   CPU:  docker compose up llm-fine-tuner-cpu
+#
+# With HuggingFace token:
+#   HF_TOKEN=hf_xxx docker compose up llm-fine-tuner-gpu
+#
+# CLI (headless training via compose):
+#   docker compose run --rm llm-fine-tuner-gpu \
+#       train --model gpt2 --data /app/data/train.csv --output /app/models/run1
+#
+# Volumes (persistent across container restarts):
+#   ./cache     → HuggingFace model cache   (saves re-downloading models)
+#   ./data      → Your training datasets
+#   ./models    → Trained model outputs
+#   ./outputs   → Evaluation results, exports, ZIPs
+#
+# =============================================================================
+
+services:
+
+  # ── GPU service (recommended) ───────────────────────────────────────────────
+  llm-fine-tuner-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: llm-fine-tuner:gpu
+    container_name: llm-fine-tuner-gpu
+
+    ports:
+      - "7860:7860"         # Gradio UI
+
+    volumes:
+      - ./cache:/app/cache/huggingface   # Model cache — survives container restarts
+      - ./data:/app/data                 # Mount your datasets here
+      - ./models:/app/models             # Trained models saved here
+      - ./outputs:/app/outputs           # Eval results, GGUF exports, ZIPs
+
+    environment:
+      # Optional: set your HuggingFace token for Hub push / gated models
+      - HF_TOKEN=${HF_TOKEN:-}
+      # Set SHARE=true to get a public Gradio URL (useful for remote machines)
+      - SHARE=${SHARE:-false}
+      # Disable tokenizer parallelism warning inside Docker
+      - TOKENIZERS_PARALLELISM=false
+      # Point HF cache to the mounted volume
+      - HF_HOME=/app/cache/huggingface
+      - TRANSFORMERS_CACHE=/app/cache/huggingface
+      # Speed up HF downloads
+      - HF_HUB_ENABLE_HF_TRANSFER=1
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all             # Use all available GPUs
+              capabilities: [gpu]
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s             # Give the UI time to start
+
+    stdin_open: true
+    tty: true
+
+  # ── CPU service (no NVIDIA required) ────────────────────────────────────────
+  llm-fine-tuner-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+    image: llm-fine-tuner:cpu
+    container_name: llm-fine-tuner-cpu
+
+    ports:
+      - "7860:7860"
+
+    volumes:
+      - ./cache:/app/cache/huggingface
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./outputs:/app/outputs
+
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+      - SHARE=${SHARE:-false}
+      - TOKENIZERS_PARALLELISM=false
+      - HF_HOME=/app/cache/huggingface
+      - TRANSFORMERS_CACHE=/app/cache/huggingface
+      - HF_HUB_ENABLE_HF_TRANSFER=1
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s             # CPU cold-start takes longer
+
+    stdin_open: true
+    tty: true
