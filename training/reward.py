@@ -3,6 +3,13 @@ training/reward.py
 ===================
 Layer 3 — Reward Model training via trl.RewardTrainer.
 Imports: config, core, data.
+
+Fix log
+-------
+  H3 (High): `app_state` was imported but never referenced anywhere in this
+     module. The StopCallback (imported from core.callbacks) correctly reads
+     app_state internally. Removed the dead import to eliminate misleading
+     code that implied this module directly interacts with the stop mechanism.
 """
 
 import gc
@@ -19,7 +26,6 @@ from config.constants import (
     HAS_REWARD_TRAINER,
 )
 from core.callbacks import LoggingCallback, StopCallback
-from core.state import app_state
 from data.loader import detect_file_type, load_dataset_from_file
 
 
