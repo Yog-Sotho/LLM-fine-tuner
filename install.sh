@@ -257,14 +257,17 @@ fi
 
 # ----------------------------------------------------------------------------
 # Launcher (absolute paths + HF transfer)
+# L5 FIX: Point to main.py (the modular entry point), not the legacy monolith.
+#         The old SCRIPT_PATH "LLM_fine_tuner_v3.2.py" no longer exists in the
+#         modular repository. main.py dispatches to CLI (Typer) or Gradio UI
+#         depending on whether arguments are passed.
 # ----------------------------------------------------------------------------
 print_step "Creating launcher"
-SCRIPT_PATH="$PROJECT_ROOT/LLM_fine_tuner_v3.2.py"
+SCRIPT_PATH="$PROJECT_ROOT/main.py"
 LAUNCHER="$VENV_DIR/bin/llm-finetune"
 
 
 if [ -f "$SCRIPT_PATH" ]; then
-    chmod +x "$SCRIPT_PATH"
     cat > "$LAUNCHER" <<EOF
 #!/bin/bash
 source "$VENV_DIR/bin/activate"
@@ -276,6 +279,7 @@ EOF
     print_success "Launcher created → $LAUNCHER"
 else
     print_warning "Main script not found at $SCRIPT_PATH"
+    print_warning "Ensure main.py is present in the project root: $PROJECT_ROOT"
 fi
 
 
@@ -292,4 +296,4 @@ echo "   Run UI:     llm-finetune"
 echo "   CLI help:   llm-finetune --help"
 echo ""
 echo "Next time use: ./install.sh --yes   or   AUTO_INSTALL=true ./install.sh"
-echo "Happy training – may your loss curves always go down! 🧠"
+echo "Happy training – may your loss curves always go down! 🧠 Yog-Sotho"
