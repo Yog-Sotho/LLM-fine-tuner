@@ -9,6 +9,15 @@ Functions
 validate_and_clean_dataset — filter empty/long rows; return issues list
 preview_dataset            — return first N rows as a pandas DataFrame
 preprocess_function        — tokenise examples; apply chat template if available
+
+Fix log
+-------
+  M4 (Medium): Duplicate detection previously counted duplicates and warned
+     the user but never removed them. The training loop then saw repeated
+     examples, leading to overfitting and inflated epoch counts. Fixed by
+     using an ordered seen-set to select unique indices via
+     `Dataset.select()`, preserving original order while removing duplicates.
+     The issues message now says "removed" instead of "detected".
 """
 
 import pandas as pd
@@ -30,7 +39,7 @@ def validate_and_clean_dataset(
 ) -> tuple:
     """Validate and clean a Dataset in-place.
 
-    Removes empty examples and reports long ones (> 2048 chars).
+    Removes empty examples, deduplicates, and reports long ones (> 2048 chars).
 
     Returns
     -------
@@ -83,23 +92,58 @@ def validate_and_clean_dataset(
             )
         )
 
-    # ── Duplicate detection (BUG 4 FIX) ────────────────────────────────────
+    # ── Duplicate detection AND removal (M4 FIX) ──────────────────────────
+    # Previously only warned — now actually removes duplicates using an
+    # ordered seen-set so original row order is preserved.
     if COL_TEXT in dataset.column_names:
         texts = [str(t) for t in dataset[COL_TEXT]]
-        if len(texts) != len(set(texts)):
-            n_dups = len(texts) - len(set(texts))
-            issues.append(f"⚠️ {n_dups} duplicate examples detected. ")
+        seen: set[str] = set()
+        unique_indices: list[int] = []
+        for idx, text in enumerate(texts):
+            if text not in seen:
+                seen.add(text)
+                unique_indices.append(idx)
+        n_dups = len(texts) - len(unique_indices)
+        if n_dups > 0:
+            issues.append(f"⚠️ {n_dups} duplicate examples removed. ")
+            dataset = dataset.select(unique_indices)
+
     elif COL_INSTRUCTION in dataset.column_names and COL_OUTPUT in dataset.column_names:
         pairs = list(zip(
             [str(i) for i in dataset[COL_INSTRUCTION]],
             [str(o) for o in dataset[COL_OUTPUT]],
         ))
-        if len(pairs) != len(set(pairs)):
-            n_dups = len(pairs) - len(set(pairs))
-            issues.append(f"⚠️ {n_dups} duplicate examples detected. ")
+        seen_pairs: set[tuple] = set()
+        unique_pair_indices: list[int] = []
+        for idx, pair in enumerate(pairs):
+            if pair not in seen_pairs:
+                seen_pairs.add(pair)
+                unique_pair_indices.append(idx)
+        n_dups = len(pairs) - len(unique_pair_indices)
+        if n_dups > 0:
+            issues.append(f"⚠️ {n_dups} duplicate examples removed. ")
+            dataset = dataset.select(unique_pair_indices)
 
     # ── Report long examples (will be truncated by tokeniser) ─────────────
-    long_ = sum(1 for ln in lengths if ln > 2048)
+    # Recompute lengths from the current (post-filter) dataset for accuracy.
+    if is_dpo:
+        current_lengths = [
+            len(str(p).strip()) + len(str(c).strip()) + len(str(r).strip())
+            for p, c, r in zip(
+                dataset[COL_PROMPT],
+                dataset[COL_CHOSEN],
+                dataset[COL_REJECTED],
+            )
+        ]
+    elif COL_TEXT in dataset.column_names:
+        current_lengths = [len(str(t).strip()) for t in dataset[COL_TEXT]]
+    else:
+        current_lengths = [
+            len(str(i).strip()) + len(str(o).strip())
+            for i, o in zip(dataset[COL_INSTRUCTION], dataset[COL_OUTPUT])
+        ]
+
+    long_ = sum(1 for ln in current_lengths if ln > 2048)
     if long_:
         issues.append(f"⚠️ {long_} examples exceed 2048 chars — they will be truncated. ")
 
