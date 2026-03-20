@@ -1,0 +1,82 @@
+# =============================================================================
+# .dockerignore — LLM Fine-Tuner v3.2
+# Keeps the Docker build context lean and fast.
+# =============================================================================
+
+# ── Git ───────────────────────────────────────────────────────────────────────
+.git
+.gitignore
+.gitattributes
+
+# ── Python caches ─────────────────────────────────────────────────────────────
+__pycache__
+*.py[cod]
+*$py.class
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+llm_finetuner_env/
+venv/
+.venv/
+env/
+.env/
+
+# ── Heavy build artifacts already built inside Docker ────────────────────────
+llama.cpp/
+*.gguf
+
+# ── Model caches — these are mounted as volumes, not baked into the image ─────
+cache/
+*.safetensors
+*.bin
+*.pt
+*.ckpt
+*.pth
+
+# ── Dataset and output directories — mounted as volumes ───────────────────────
+data/
+models/
+outputs/
+
+# ── Development & CI ──────────────────────────────────────────────────────────
+.github/
+.vscode/
+.idea/
+*.code-workspace
+
+# ── Documentation (not needed at runtime) ─────────────────────────────────────
+docs/
+*.md
+!requirements.txt
+
+# ── Test files (not needed in production image) ───────────────────────────────
+tests/
+
+# ── Log files ─────────────────────────────────────────────────────────────────
+*.log
+logs/
+wandb/
+
+# ── OS files ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Large media (already in Images/ but not needed in container) ─────────────
+*.png
+*.jpg
+*.jpeg
+Images/
+
+# ── Jupyter notebooks ─────────────────────────────────────────────────────────
+*.ipynb
+.ipynb_checkpoints/
+
+# ── Temporary files ───────────────────────────────────────────────────────────
+tmp/
+temp/
+*.tmp
+*.bak
