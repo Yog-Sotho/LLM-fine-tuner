@@ -1,0 +1,95 @@
+# =============================================================================
+# 🧠 LLM Fine-Tuner v3.2 — CPU-only Dockerfile
+# =============================================================================
+#
+# Use this when you have NO NVIDIA GPU, or just want to test quickly.
+# Training will be slow but fully functional for small models (gpt2, opt-125m).
+#
+# Build:
+#   docker build -f Dockerfile.cpu -t llm-fine-tuner:cpu .
+#
+# Run:
+#   docker run -p 7860:7860 llm-fine-tuner:cpu
+#
+# =============================================================================
+
+FROM python:3.11-slim
+
+LABEL maintainer="Yog-Sotho"
+LABEL description="LLM Fine-Tuner v3.2 — CPU-only"
+LABEL version="3.2"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    HF_HOME=/app/cache/huggingface \
+    TRANSFORMERS_CACHE=/app/cache/huggingface \
+    HF_HUB_ENABLE_HF_TRANSFER=1 \
+    GRADIO_SERVER_NAME=0.0.0.0 \
+    GRADIO_SERVER_PORT=7860
+
+# ── System packages ───────────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
+        curl \
+        build-essential \
+        cmake \
+        ninja-build \
+        libopenblas-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── pip upgrade ───────────────────────────────────────────────────────────────
+RUN pip install --upgrade pip setuptools wheel
+
+# ── PyTorch CPU ───────────────────────────────────────────────────────────────
+RUN pip install \
+        torch==2.5.1 \
+        torchvision==0.20.1 \
+        torchaudio==2.5.1 \
+        --index-url https://download.pytorch.org/whl/cpu
+
+# ── Core dependencies (skip GPU-only packages) ────────────────────────────────
+COPY requirements.txt /tmp/requirements.txt
+RUN grep -vE "^(flash-attn|vllm|auto-gptq|exllamav2|unsloth|bitsandbytes|#)" \
+        /tmp/requirements.txt | pip install -r /dev/stdin
+
+# bitsandbytes CPU-only build (for 8-bit quantisation on CPU — optional)
+RUN pip install bitsandbytes --prefer-binary || \
+    echo "⚠️  bitsandbytes CPU not available — skipping"
+
+# ── llama.cpp (CPU build — for GGUF export) ───────────────────────────────────
+RUN git clone --depth 1 https://github.com/ggerganov/llama.cpp /opt/llama.cpp && \
+    cmake /opt/llama.cpp -B /opt/llama.cpp/build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DLLAMA_BLAS=ON \
+        -DLLAMA_BLAS_VENDOR=OpenBLAS \
+        -G Ninja && \
+    cmake --build /opt/llama.cpp/build --config Release -j$(nproc) && \
+    echo "✅ llama.cpp built (CPU / OpenBLAS)"
+
+ENV PATH="/opt/llama.cpp/build/bin:${PATH}"
+
+# ── NLTK data ─────────────────────────────────────────────────────────────────
+RUN python3 -c "import nltk; nltk.download('punkt', quiet=True); nltk.download('averaged_perceptron_tagger', quiet=True)"
+
+# ── Application code ──────────────────────────────────────────────────────────
+WORKDIR /app
+COPY . /app/
+
+RUN mkdir -p \
+        /app/cache/huggingface \
+        /app/data \
+        /app/models \
+        /app/outputs
+
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+EXPOSE 7860
+
+VOLUME ["/app/cache/huggingface", "/app/data", "/app/models", "/app/outputs"]
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD []
