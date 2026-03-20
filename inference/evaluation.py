@@ -10,6 +10,15 @@ compute_bleu_rouge         — compute BLEU-1 and ROUGE-1/2/L scores
 compute_bertscore_metric   — compute BERTScore precision / recall / F1
 llm_judge_evaluate         — score responses with a local LLM judge
 on_evaluate_click          — Gradio UI handler for the Evaluation tab Run button
+
+Fix log
+-------
+  H5 (High): llm_judge_evaluate previously caught any exception and appended
+     a dict with `"prompt": "ERROR"` to the results list. A completely broken
+     judge (wrong path, OOM, CUDA error) silently contaminated the output
+     DataFrame with a phantom row indistinguishable from real results.
+     The function now raises RuntimeError on failure so on_evaluate_click
+     can surface a clear error message to the user.
 """
 
 import pandas as pd
@@ -130,43 +139,46 @@ def llm_judge_evaluate(
 
     Constructs a structured eval prompt and asks the judge model for a
     1-10 score with brief reasoning. Returns a list of result dicts.
+
+    H5 FIX: Previously swallowed all exceptions and appended a phantom row
+    with `"prompt": "ERROR"` — a broken judge silently contaminated the
+    output DataFrame. Now raises RuntimeError so the caller can report
+    the failure cleanly instead of mixing error rows with real results.
+
+    Raises
+    ------
+    RuntimeError — if the judge model cannot be loaded or inference fails.
     """
+    # H5 FIX: load the model outside the per-example loop so a load failure
+    # raises immediately rather than producing a partial + error result.
+    model, tokenizer = _load_for_inference(judge_model_name, judge_lora_path)
+
     results = []
-    try:
-        model, tokenizer = _load_for_inference(judge_model_name, judge_lora_path)
-
-        for prompt, response in zip(prompts, responses):
-            eval_prompt = (
-                f"Evaluate the following response based on: {criteria}\n"
-                f"Prompt: {prompt}\nResponse: {response}\n"
-                f"Score (1-10) and brief reasoning:"
+    for prompt, response in zip(prompts, responses):
+        eval_prompt = (
+            f"Evaluate the following response based on: {criteria}\n"
+            f"Prompt: {prompt}\nResponse: {response}\n"
+            f"Score (1-10) and brief reasoning:"
+        )
+        inputs = tokenizer(
+            eval_prompt,
+            return_tensors="pt",
+            truncation=True,
+            max_length=1024,
+        )
+        if torch.cuda.is_available():
+            inputs = {k: v.cuda() for k, v in inputs.items()}
+        with torch.no_grad():
+            out = model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                pad_token_id=tokenizer.eos_token_id,
             )
-            inputs = tokenizer(
-                eval_prompt,
-                return_tensors="pt",
-                truncation=True,
-                max_length=1024,
-            )
-            if torch.cuda.is_available():
-                inputs = {k: v.cuda() for k, v in inputs.items()}
-            with torch.no_grad():
-                out = model.generate(
-                    **inputs,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    pad_token_id=tokenizer.eos_token_id,
-                )
-            judgment = tokenizer.decode(
-                out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
-            ).strip()
-            results.append({"prompt": prompt, "response": response, "judgment": judgment})
-
-    except Exception as e:
-        results.append({
-            "prompt": "ERROR",
-            "response": str(e),
-            "judgment": f"Judge failed: {e}",
-        })
+        judgment = tokenizer.decode(
+            out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
+        ).strip()
+        results.append({"prompt": prompt, "response": response, "judgment": judgment})
 
     return results
 
@@ -273,12 +285,18 @@ def on_evaluate_click(
                 progress(0.65, desc="Computing BERTScore…")
                 metrics.update(compute_bertscore_metric(predictions, references))
 
+        # ── LLM-as-Judge ───────────────────────────────────────────────────
         judge_results = []
         if eval_use_judge and judge_model_name:
             progress(0.75, desc="Running LLM-as-Judge…")
-            judge_results = llm_judge_evaluate(
-                prompts, predictions, judge_criteria, judge_model_name
-            )
+            try:
+                judge_results = llm_judge_evaluate(
+                    prompts, predictions, judge_criteria, judge_model_name
+                )
+            except RuntimeError as judge_err:
+                # H5 FIX: surface the judge failure as a clear warning in the
+                # metrics string rather than silently polluting the result DataFrame.
+                metrics["LLM-Judge-Error"] = str(judge_err)
 
         progress(1.0, desc="Done!")
 
