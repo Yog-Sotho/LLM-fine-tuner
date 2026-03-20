@@ -14,8 +14,19 @@ on_push               — push model to HF Hub
 on_file_upload        — load/validate dataset on file upload
 on_refresh_preview    — re-preview dataset after column mapping change
 build_loss_chart      — turn log records into a display DataFrame
+
+Fix log
+-------
+  H6 (High): on_refresh_preview created a NamedTemporaryFile and immediately
+     wrote to it by passing its .name path to pandas, while the file handle
+     was still open. On Windows this raises PermissionError because
+     NamedTemporaryFile holds an exclusive lock. On Linux it works but
+     leaks the file handle if an exception fires before unlink. Fixed by
+     using the context manager to close the handle first, then writing to
+     the path, then cleaning up in a finally block.
 """
 
+import os
 import tempfile
 
 import numpy as np
@@ -256,6 +267,11 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
     """Re-build dataset preview after the user changes column mapping dropdowns.
 
     FIX 2e: Refresh preview button.
+
+    H6 FIX: The previous implementation passed `tmp.name` to pandas while
+    the NamedTemporaryFile handle was still open, causing PermissionError
+    on Windows. Now uses the context manager to close the handle before
+    writing to the path, and guarantees cleanup in a finally block.
     """
     if file is None or raw_df_state is None or file_type_state is None:
         return pd.DataFrame(), "⚠️ No dataset loaded."
@@ -277,20 +293,25 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
             col_map[col_text] = COL_TEXT
 
     try:
-        import tempfile as _tmp, os as _os
-
         if file_type_state in ("csv", "excel"):
-            tmp = _tmp.NamedTemporaryFile(delete=False, suffix=f".{file_type_state}")
+            # H6 FIX: Use context manager so the file handle is closed before
+            # pandas writes to the path. This is required on Windows and is
+            # cleaner on all platforms — the finally block guarantees cleanup.
+            with tempfile.NamedTemporaryFile(
+                delete=False,
+                suffix=f".{file_type_state}",
+            ) as tmp:
+                tmp_path = tmp.name
+            # Handle is now closed; safe to write on all platforms.
             try:
                 if file_type_state == "csv":
-                    raw_df_state.to_csv(tmp.name, index=False)
+                    raw_df_state.to_csv(tmp_path, index=False)
                 else:
-                    raw_df_state.to_excel(tmp.name, index=False)
-                # Create a minimal file-like proxy so load_dataset_from_file works
-                dummy = type("_F", (), {"name": tmp.name})()
+                    raw_df_state.to_excel(tmp_path, index=False)
+                dummy = type("_F", (), {"name": tmp_path})()
                 ds = load_dataset_from_file(dummy, file_type_state, col_map, is_dpo=is_dpo)
             finally:
-                _os.unlink(tmp.name)
+                os.unlink(tmp_path)
         else:
             ds = load_dataset_from_file(file, file_type_state, col_map, is_dpo=is_dpo)
 
@@ -307,11 +328,24 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
 # ── Loss chart ─────────────────────────────────────────────────────────────
 
 def build_loss_chart(log_records: list) -> pd.DataFrame:
-    """Convert a list of LoggingCallback records into a display DataFrame."""
+    """Convert a list of LoggingCallback records into a display DataFrame.
+
+    Replaces NaN eval_loss values (produced when eval_strategy='no') with
+    the string 'N/A' so the Gradio table shows a meaningful label instead
+    of a raw NaN to non-technical users.
+    """
     if not log_records:
         return pd.DataFrame(columns=["Step", "Train Loss", "Eval Loss"])
+
+    import math
+
+    def _fmt_eval(v):
+        if isinstance(v, float) and math.isnan(v):
+            return "N/A"
+        return v
+
     return pd.DataFrame({
-        "Step":       [r["step"]       for r in log_records],
-        "Train Loss": [r["train_loss"] for r in log_records],
-        "Eval Loss":  [r["eval_loss"]  for r in log_records],
+        "Step":       [r["step"]            for r in log_records],
+        "Train Loss": [r["train_loss"]       for r in log_records],
+        "Eval Loss":  [_fmt_eval(r["eval_loss"]) for r in log_records],
     })
