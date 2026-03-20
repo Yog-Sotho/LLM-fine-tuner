@@ -8,6 +8,21 @@ Functions
 ---------
 export_to_gguf   — export a trained model to GGUF with optional quantisation
 on_export_gguf   — Gradio UI handler for the GGUF Export button
+
+Fix log
+-------
+  H7 (High): model_path and quantization were passed directly to subprocess
+     without validation. A user-controlled quantization string could
+     theoretically contain an unexpected value causing cryptic llama.cpp
+     errors. model_path was never verified to be a real directory before
+     being passed as a subprocess argument. Added:
+       1. `ALLOWED_QUANTIZATIONS` whitelist — only known-safe presets accepted.
+       2. `model_path` realpath validation — must be an existing directory.
+     Both checks return a clear human-readable error before any subprocess
+     call is made.
+  L6 (Low): file-size reporting changed from `/ 1e9` (decimal GB) to
+     `/ (1024 ** 3)` (binary GiB) which matches how GPUs and storage
+     report capacity. Display label updated from "GB" to "GiB" accordingly.
 """
 
 import glob
@@ -17,6 +32,12 @@ import subprocess
 import tempfile
 
 from config.constants import HAS_UNSLOTH
+
+# H7 FIX: Whitelist of allowed quantization values.
+# Only these strings are passed to the llama.cpp quantize binary.
+ALLOWED_QUANTIZATIONS: frozenset[str] = frozenset({
+    "q8_0", "q6_k", "q5_k_m", "q4_k_m", "q3_k_m", "q2_k", "f16", "f32",
+})
 
 
 def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k") -> str:
@@ -35,6 +56,21 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
 
     Returns a status string for display in the UI.
     """
+    # H7 FIX: validate model_path is a real existing directory.
+    model_path_real = os.path.realpath(model_path)
+    if not os.path.isdir(model_path_real):
+        return (
+            f"❌ model_path is not a valid directory: {model_path!r}\n"
+            f"Please train a model first or provide a correct path."
+        )
+
+    # H7 FIX: validate quantization against the known-safe whitelist.
+    if quantization not in ALLOWED_QUANTIZATIONS:
+        return (
+            f"❌ Invalid quantization preset: {quantization!r}\n"
+            f"Allowed values: {sorted(ALLOWED_QUANTIZATIONS)}"
+        )
+
     try:
         os.makedirs(output_dir, exist_ok=True)
 
@@ -44,7 +80,7 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
                 from unsloth import FastLanguageModel  # lazy
 
                 model, tokenizer = FastLanguageModel.from_pretrained(
-                    model_name=model_path,
+                    model_name=model_path_real,
                     max_seq_length=2048,
                     dtype=None,
                     load_in_4bit=False,
@@ -52,10 +88,11 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
                 model.save_pretrained_gguf(output_dir, tokenizer, quantization_method=quantization)
                 gguf_files = glob.glob(os.path.join(output_dir, "*.gguf"))
                 if gguf_files:
-                    size_gb = os.path.getsize(gguf_files[0]) / 1e9
+                    # L6 FIX: use binary GiB (1024**3), not decimal GB (1e9).
+                    size_gib = os.path.getsize(gguf_files[0]) / (1024 ** 3)
                     return (
                         f"✅ GGUF exported via Unsloth ({quantization.upper()}).\n"
-                        f"📦 Size: {size_gb:.2f} GB\n"
+                        f"📦 Size: {size_gib:.2f} GiB\n"
                         f"📁 Path: {gguf_files[0]}"
                     )
             except Exception:
@@ -80,8 +117,9 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
             )
 
         fp16_path = os.path.join(output_dir, "model_fp16.gguf")
+        # H7 FIX: use validated model_path_real (realpath-resolved).
         result = subprocess.run(
-            ["python", convert_script, model_path, "--outtype", "f16", "--outfile", fp16_path],
+            ["python", convert_script, model_path_real, "--outtype", "f16", "--outfile", fp16_path],
             capture_output=True, text=True, timeout=900,
         )
         if result.returncode != 0:
@@ -94,25 +132,28 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
         if quantize_bin:
             gguf_out = os.path.join(output_dir, f"model_{quantization}.gguf")
             # v2.9 Minor Fix #6: Pass quantisation string in its original case.
+            # H7 FIX: quantization is already whitelist-validated above.
             result2 = subprocess.run(
                 [quantize_bin, fp16_path, gguf_out, quantization],
                 capture_output=True, text=True, timeout=900,
             )
             if result2.returncode == 0:
                 os.remove(fp16_path)
-                size_gb = os.path.getsize(gguf_out) / 1e9
+                # L6 FIX: binary GiB.
+                size_gib = os.path.getsize(gguf_out) / (1024 ** 3)
                 return (
                     f"✅ GGUF exported & quantized ({quantization}).\n"
-                    f"📦 Size: {size_gb:.2f} GB\n"
+                    f"📦 Size: {size_gib:.2f} GiB\n"
                     f"📁 Path: {gguf_out}"
                 )
             else:
                 return f"⚠️ Quantization failed. Using FP16 version.\n{result2.stderr}"
 
-        size_gb = os.path.getsize(fp16_path) / 1e9
+        # L6 FIX: binary GiB.
+        size_gib = os.path.getsize(fp16_path) / (1024 ** 3)
         return (
             f"✅ GGUF exported (FP16 only).\n"
-            f"📦 Size: {size_gb:.2f} GB\n"
+            f"📦 Size: {size_gib:.2f} GiB\n"
             f"📁 Path: {fp16_path}\n"
             f"⚠️ Install llama.cpp quantize tool for quantization"
         )
