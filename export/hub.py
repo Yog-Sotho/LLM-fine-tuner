@@ -7,11 +7,24 @@ Imports: config.constants, stdlib.
 Functions
 ---------
 push_to_hub — upload an entire model directory to a HF Hub repo
+
+Fix log
+-------
+  M6 (Medium): Token validation checked `len(token) < 8` — a 9-character
+     garbage string passed validation and produced a confusing HuggingFace
+     API error with no indication the token itself was malformed. HF write
+     tokens are always prefixed with `hf_` and are at least 36 characters
+     long. The guard now checks both the prefix and minimum length, giving
+     users a clear diagnostic message before any network call is made.
 """
 
 import os
 
 from config.constants import HAS_HUB
+
+# HuggingFace write tokens always start with this prefix and are >= 36 chars.
+_HF_TOKEN_PREFIX: str = "hf_"
+_HF_TOKEN_MIN_LEN: int = 36
 
 
 def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
@@ -21,7 +34,7 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
     ----------
     model_path : local directory containing the saved model
     repo_id    : target HF repo in 'username/model-name' format
-    token      : HuggingFace write token
+    token      : HuggingFace write token (must start with 'hf_', >= 36 chars)
 
     Returns a status string for display in the UI.
     """
@@ -29,8 +42,17 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
         return "❌ No model found. Please train a model first."
     if not repo_id or "/" not in repo_id:
         return "❌ Invalid Repo ID. Format: `username/model-name`"
-    if not token or len(token) < 8:
-        return "❌ Please provide a valid Hugging Face write token."
+    # M6 FIX: validate the token format properly — HF tokens are `hf_` + 33 chars.
+    if (
+        not token
+        or not token.startswith(_HF_TOKEN_PREFIX)
+        or len(token) < _HF_TOKEN_MIN_LEN
+    ):
+        return (
+            "❌ Invalid Hugging Face write token.\n"
+            "Tokens start with 'hf_' and are at least 36 characters long.\n"
+            "Get yours at: https://huggingface.co/settings/tokens"
+        )
     if not HAS_HUB:
         return "❌ huggingface_hub not installed. Run: pip install huggingface-hub"
 
