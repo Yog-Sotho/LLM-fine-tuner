@@ -3,9 +3,18 @@ training/ppo.py
 ================
 Layer 3 — PPO fine-tuning via trl.PPOTrainer.
 Imports: config, core, data.
+
+Fix log
+-------
+  H4 / M2 (High/Medium): `os` was used via `__import__("os").path.isdir(...)`
+     inside the function body — a fragile anti-pattern that bypasses module
+     imports, confuses static analysers, and fails linters. Added `import os`
+     at module level and replaced all inline `__import__` calls with the
+     standard reference.
 """
 
 import gc
+import os
 import time
 
 import gradio as gr
@@ -49,7 +58,8 @@ def run_ppo_v27(
         return "❌ PPOTrainer not available. Install: pip install trl>=0.7.0"
     if ppo_file is None:
         return "❌ Please upload a dataset with a 'prompt' column."
-    if not reward_model_path or not __import__("os").path.isdir(reward_model_path):
+    # H4 FIX: use module-level `os`, not inline __import__("os")
+    if not reward_model_path or not os.path.isdir(reward_model_path):
         return "❌ Reward model path is invalid or does not exist. Train a reward model first."
 
     try:
@@ -118,7 +128,7 @@ def run_ppo_v27(
             raise RuntimeError(
                 f"Failed to load Reward Model. Ensure it was saved with a ValueHead "
                 f"(train_reward_model_v27). Error: {e}"
-            )
+            ) from e
 
         # v2.9 Fix F: Reference model loaded silently (no debug prints).
         ref_model = AutoModelForCausalLM.from_pretrained(
