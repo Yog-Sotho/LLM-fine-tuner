@@ -1,0 +1,92 @@
+LLM-fine-tuner/
+├── archive/
+│   └── LLM_fine_tuner_v3.2.py
+├── cli/
+│   ├── __init__.py
+│   └── commands.py
+├── config/
+│   ├── __init__.py
+│   └── constants.py
+├── core/
+│   ├── __init__.py
+│   ├── callbacks.py
+│   ├── hardware.py
+│   └── state.py
+├── data/
+│   ├── __init__.py
+│   ├── augmentation.py
+│   ├── loader.py
+│   └── preprocessing.py
+├── docs/
+│   ├── 01_installation.md
+│   ├── 02_quick_start.md
+│   ├── 03_data_preparation.md
+│   ├── 04_training.md
+│   ├── 05_rlhf_pipeline.md
+│   ├── 06_inference.md
+│   ├── 07_evaluation.md
+│   ├── 08_export_and_deploy.md
+│   ├── 09_cli_reference.md
+│   ├── 10_advanced.md
+│   ├── 11_troubleshooting.md
+│   ├── 12_faq.md
+│   ├── 13_docker.md
+│   └── index.md
+├── export/
+│   ├── __init__.py
+│   ├── gguf.py
+│   ├── hub.py
+│   ├── registry.py
+│   └── utils.py
+├── Images/
+│   ├── heretic.png
+│   ├── heretic_geek.png
+│   ├── LLM1.png
+│   ├── logo.jpg
+│   ├── llm_synapsis.png
+│   ├── llm_terminal.png
+│   └── unsloth.png
+├── inference/
+│   ├── __init__.py
+│   ├── evaluation.py
+│   ├── generate.py
+│   └── vllm_runner.py
+├── tests/
+│   ├── __init__.py
+│   ├── test_cli.py
+│   ├── test_data_loader.py
+│   ├── test_preprocessing.py
+│   ├── test_ppo_reward_type.py
+│   └── test_training_guards.py
+├── training/
+│   ├── __init__.py
+│   ├── orpo.py
+│   ├── ppo.py
+│   ├── reward.py
+│   └── sft.py
+├── ui/
+│   ├── __init__.py
+│   ├── app.py
+│   ├── css.py
+│   ├── handlers.py
+│   └── tabs/
+│       ├── __init__.py
+│       ├── data_tab.py
+│       ├── evaluation_tab.py
+│       ├── gguf_tab.py
+│       ├── inference_tab.py
+│       ├── rlhf_tab.py
+│       ├── share_tab.py
+│       └── train_tab.py
+├── .dockerignore
+├── .gitignore
+├── docker-compose.yml
+├── docker-entrypoint.sh
+├── Dockerfile
+├── Dockerfile.cpu
+├── install.sh
+├── LICENSE
+├── main.py
+├── pyproject.toml
+├── README.md
+└── README_for_geeks.md
