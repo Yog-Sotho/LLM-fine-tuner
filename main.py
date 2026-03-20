@@ -9,6 +9,13 @@ Usage
   python main.py                        # Launch Gradio UI on :7860
   python main.py --help                 # Show CLI help
   python main.py train --model gpt2 …  # Headless training
+
+Fix log
+-------
+  C1 (Critical): Removed broken `from llm_fine_tuner.cli.commands` and
+     `from llm_fine_tuner.ui.app` imports that referenced a non-existent
+     package namespace. Replaced with flat-structure imports that match the
+     actual file layout of this repository.
 """
 
 import sys
@@ -20,7 +27,9 @@ def main() -> None:
         # This includes --help, train --help, train --model …, reward …, etc.
         # v3.2 Fix #3: ALL non-zero-argument invocations go to Typer so that
         # `python main.py --help` shows CLI usage instead of launching Gradio.
-        from llm_fine_tuner.cli.commands import app as cli_app
+        # C1 FIX: import from flat module `commands`, not `llm_fine_tuner.cli.commands`
+        from commands import app as cli_app  # noqa: PLC0415
+
         print("\n🧠 LLM Fine-Tuner v3.2 CLI")
         print("=" * 60)
         try:
@@ -33,7 +42,8 @@ def main() -> None:
     else:
         # ── Gradio UI mode ───────────────────────────────────────────────────
         import torch
-        from llm_fine_tuner.ui.app import build_demo
+        # C1 FIX: import from flat module `app`, not `llm_fine_tuner.ui.app`
+        from app import build_demo  # noqa: PLC0415
 
         print("\n🧠 LLM Fine-Tuner v3.2 — Launching Gradio UI")
         print("=" * 60)
