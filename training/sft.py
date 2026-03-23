@@ -22,7 +22,11 @@ from pathlib import Path
 import gradio as gr
 import torch
 from peft import (
-    AdapterConfig,
+    # C-2 FIX: AdapterConfig removed from unconditional top-level import.
+    # It is an experimental feature absent from many peft releases. If this import
+    # failed, the ENTIRE training module crashed before a single job could start.
+    # AdapterConfig is now imported lazily and guarded by HAS_ADAPTER_CONFIG inside
+    # the Adapters branch of train_model() below.
     LoraConfig,
     PeftModel,
     PrefixTuningConfig,
@@ -317,8 +321,15 @@ def train_model(
                 model = get_peft_model(model, prompt_cfg)
 
             elif peft_method == "Adapters":
+                # C-2 FIX: AdapterConfig is now imported lazily here, guarded by
+                # HAS_ADAPTER_CONFIG. Previously this was an unconditional top-level
+                # import that crashed the entire module on peft versions without it.
                 if not HAS_ADAPTER_CONFIG:
-                    raise ImportError("AdapterConfig requires the adapter-transformers fork of peft.")
+                    raise ImportError(
+                        "AdapterConfig requires the adapter-transformers fork of peft. "
+                        "Install with: pip install adapter-transformers"
+                    )
+                from peft import AdapterConfig  # lazy, guarded  # noqa: PLC0415
                 adapter_cfg = AdapterConfig(
                     non_linearity="relu",
                     reduction_factor=adapter_reduction_factor,
