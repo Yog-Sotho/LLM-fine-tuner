@@ -11,34 +11,26 @@ Contains:
   • Lazy-imported objects exposed only when their package is present
 
 Rule: nothing in this file may import from any other llm_fine_tuner module.
-
-Fix log
--------
-  L1 (Low): `warnings.filterwarnings("ignore")` was a global, unconditional
-     suppression of ALL Python warnings for the entire process lifetime.
-     This hid legitimate warnings from user code and made debugging very
-     hard. Replaced with specific filters targeting only the known-noisy
-     libraries (transformers, peft, torch, datasets). All other warnings
-     remain visible.
-  M9 (Medium): `import torch` at module level added ~2 seconds to startup
-     time even for `python main.py --help`, because importing torch triggers
-     full CUDA initialisation. Removed. The only torch reference here was
-     `torch.bfloat16` stored in QLORA_ENHANCED_BNB_KWARGS — this is now
-     `None` with a clear comment that callers must resolve the dtype using
-     `torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16`.
-     All callers (sft.py, load_qlora_model_v27) already had this resolution
-     logic; they now always set the dtype explicitly instead of relying on
-     the dict default.
 """
 
 import warnings
+import torch
 
-# L1 FIX: scope warning suppression to known-noisy libraries only.
-# Never use filterwarnings("ignore") globally — it hides important signals.
-warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
-warnings.filterwarnings("ignore", category=FutureWarning, module="peft")
-warnings.filterwarnings("ignore", category=UserWarning,   module="torch")
-warnings.filterwarnings("ignore", category=FutureWarning, module="datasets")
+# H-2 FIX: Removed the previous global `warnings.filterwarnings("ignore")` call.
+# That line silenced ALL Python warnings for the entire process, hiding critical
+# deprecation notices from transformers/peft/trl that help users diagnose failures.
+# We now apply only narrowly-scoped suppressions for known-noisy but harmless warnings.
+warnings.filterwarnings(
+    "ignore",
+    message=".*resume_download.*",
+    category=FutureWarning,
+    module="huggingface_hub",
+)
+warnings.filterwarnings(
+    "ignore",
+    message=".*use_reentrant.*",
+    category=UserWarning,
+)
 
 # ── Column name constants ──────────────────────────────────────────────────
 COL_INSTRUCTION = "instruction"
@@ -58,10 +50,10 @@ FILE_EXT_PDF  = ".pdf"
 
 # ── GGUF quantisation presets ──────────────────────────────────────────────
 GGUF_QUANT_PRESETS: dict[str, dict[str, str]] = {
-    "q8_0":  {"desc": "Near-lossless (99% quality)",       "size": "~7 GiB (7B)"},
-    "q6_k":  {"desc": "Best balance — recommended default", "size": "~5.5 GiB (7B)"},
-    "q5_k_m":{"desc": "Good quality, smaller",             "size": "~4.7 GiB (7B)"},
-    "q4_k_m":{"desc": "Max compression",                   "size": "~4 GiB (7B)"},
+    "q8_0":  {"desc": "Near-lossless (99% quality)",       "size": "~7 GB (7B)"},
+    "q6_k":  {"desc": "Best balance — recommended default", "size": "~5.5 GB (7B)"},
+    "q5_k_m":{"desc": "Good quality, smaller",             "size": "~4.7 GB (7B)"},
+    "q4_k_m":{"desc": "Max compression",                   "size": "~4 GB (7B)"},
 }
 
 # ── QLoRA Enhanced configuration ──────────────────────────────────────────
@@ -77,19 +69,12 @@ QLORA_ENHANCED_LORA_CONFIG: dict = {
     "bias": "none",
 }
 
-# M9 FIX: `bnb_4bit_compute_dtype` is set to None here instead of
-# `torch.bfloat16` to avoid importing torch at module load time (which
-# triggers full CUDA init and adds ~2 s to startup, including `--help`).
-#
-# CALLERS MUST explicitly resolve this value before passing to BitsAndBytesConfig:
-#   bnb_kwargs = dict(QLORA_ENHANCED_BNB_KWARGS)
-#   bnb_kwargs["bnb_4bit_compute_dtype"] = (
-#       torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-#   )
+# NOTE: bnb_4bit_compute_dtype uses torch.bfloat16 as default; callers must
+# override to torch.float16 when torch.cuda.is_bf16_supported() returns False.
 QLORA_ENHANCED_BNB_KWARGS: dict = {
     "load_in_4bit": True,
     "bnb_4bit_quant_type": "nf4",
-    "bnb_4bit_compute_dtype": None,   # M9 FIX: resolved lazily by callers — see note above
+    "bnb_4bit_compute_dtype": torch.bfloat16,
     "bnb_4bit_use_double_quant": True,
 }
 
@@ -251,3 +236,14 @@ try:
     HAS_VLLM = True
 except ImportError:
     HAS_VLLM = False
+
+# ── heretic-llm (post-training restriction removal) ───────────────────────
+# H-11 FIX: This is an optional dependency — not present on all installs.
+# HAS_HERETIC guards subprocess calls to the `heretic` binary.
+try:
+    import subprocess as _sp
+    _result = _sp.run(["heretic", "--version"], capture_output=True, timeout=5)
+    HAS_HERETIC = _result.returncode == 0
+    del _sp, _result
+except Exception:
+    HAS_HERETIC = False
