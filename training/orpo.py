@@ -21,6 +21,9 @@ from config.constants import (
 )
 from core.callbacks import LoggingCallback, StopCallback
 from core.hardware import get_lora_targets
+# H-3 FIX: app_state is now actively used — stop_event.clear() at start,
+# StopCallback checks it every step.
+from core.state import app_state
 from data.loader import detect_file_type, load_dataset_from_file
 from data.preprocessing import validate_and_clean_dataset
 
@@ -47,6 +50,11 @@ def train_orpo_v27(
         return "❌ ORPOTrainer not available. Install: pip install trl>=0.8.0"
     if orpo_file is None:
         return "❌ Please upload a preference dataset (prompt, chosen, rejected)."
+
+    # H-3 FIX: Clear the stop event at the start of every ORPO training run.
+    # Previously the stop button did not work for ORPO jobs — the stop event
+    # was never cleared and StopCallback was not wired to the trainer.
+    app_state.stop_event.clear()
 
     try:
         from trl import ORPOConfig, ORPOTrainer  # lazy
@@ -141,6 +149,7 @@ def train_orpo_v27(
 
         orpo_config = ORPOConfig(**orpo_config_kwargs)
         log_cb = LoggingCallback()
+        # H-3 FIX: StopCallback now wired in so the UI stop button works for ORPO jobs.
         orpo_trainer = ORPOTrainer(
             model=model,
             args=orpo_config,
@@ -156,6 +165,9 @@ def train_orpo_v27(
         orpo_trainer.train()
         elapsed = time.time() - t0
 
+        # H-3 FIX: Check stop event to report correct status in summary.
+        status = "stopped by user" if app_state.stop_event.is_set() else "complete"
+
         if progress is not None:
             progress(0.9, desc="Saving ORPO model…")
         model.save_pretrained(output_dir)
@@ -167,7 +179,7 @@ def train_orpo_v27(
 
         final_loss = log_cb.records[-1]["train_loss"] if log_cb.records else "N/A"
         return (
-            f"✅ ORPO training complete!\n"
+            f"✅ ORPO training {status}!\n"
             f"⏱ Elapsed: {elapsed/60:.1f} min\n"
             f"📉 Final train loss: {final_loss}\n"
             f"📁 Saved to: {output_dir}"
