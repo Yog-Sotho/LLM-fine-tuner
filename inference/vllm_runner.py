@@ -10,13 +10,6 @@ merge_adapter_for_inference  — merge LoRA adapter into base model (required be
 on_merge_adapter_click       — Gradio UI handler for the Merge Adapter button
 vllm_generate_v27            — batched vLLM generation with engine caching
 on_vllm_generate             — Gradio UI handler for the vLLM Generate button
-
-Fix log
--------
-  H5 (High): vllm_cache suffered the same TOCTOU race as inference_cache —
-     two concurrent Gradio threads could each construct an LLM engine for
-     the same model, wasting ~30 s of startup time and doubling VRAM usage.
-     The check-then-set sequence is now wrapped in `app_state._vllm_lock`.
 """
 
 import gc
@@ -123,9 +116,10 @@ def vllm_generate_v27(
 
     FIX 3e (v3.x): Cache avoids the ~30s engine startup cost on every call.
 
-    H5 FIX: The check-then-set on vllm_cache is now wrapped in
-    `app_state._vllm_lock` to prevent two concurrent Gradio threads from
-    each constructing a vLLM engine for the same model.
+    H-9 FIX: Cache is now bounded by app_state.max_vllm_engines (default 1,
+    configurable via MAX_VLLM_ENGINES env var). Previously unbounded — loading
+    many different models in the same session would exhaust GPU VRAM and crash.
+    Eviction uses FIFO (oldest entry removed first).
 
     Raises ImportError when vLLM is not installed.
     """
@@ -135,19 +129,25 @@ def vllm_generate_v27(
     from vllm import LLM, SamplingParams  # lazy — only when vLLM is available
 
     cache_key = (model_path, vllm_quantization, tensor_parallel_size)
-
-    # H5 FIX: serialize cache access with the dedicated vllm lock.
-    with app_state._vllm_lock:
-        if cache_key not in app_state.vllm_cache:
-            quant = None if vllm_quantization == "none" else vllm_quantization
-            llm = LLM(
-                model=model_path,
-                quantization=quant,
-                tensor_parallel_size=tensor_parallel_size,
-                trust_remote_code=True,
-            )
-            app_state.vllm_cache[cache_key] = llm
+    if cache_key in app_state.vllm_cache:
         llm = app_state.vllm_cache[cache_key]
+    else:
+        # H-9 FIX: Evict oldest engine before adding a new one when at capacity.
+        if len(app_state.vllm_cache) >= app_state.max_vllm_engines:
+            oldest_key = next(iter(app_state.vllm_cache))
+            del app_state.vllm_cache[oldest_key]
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        quant = None if vllm_quantization == "none" else vllm_quantization
+        llm = LLM(
+            model=model_path,
+            quantization=quant,
+            tensor_parallel_size=tensor_parallel_size,
+            trust_remote_code=True,
+        )
+        app_state.vllm_cache[cache_key] = llm
 
     sampling_params = SamplingParams(
         temperature=temperature,
