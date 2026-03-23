@@ -10,17 +10,6 @@ detect_file_type       — sniff extension from a Gradio file object
 extract_text_from_pdf  — extract raw text from PDF pages via PyPDF2
 load_dataset_from_file — unified loader for csv/jsonl/json/txt/excel/pdf
 safe_extract_zip       — ZIP extraction with path-traversal guard
-
-Fix log
--------
-  C2 (Critical): safe_extract_zip previously only checked for `../` prefix,
-     missing absolute paths like `/etc/passwd`. Replaced with a
-     realpath-based containment check: every extracted entry is resolved to
-     its absolute path and verified to remain inside extract_dir. Proven to
-     block both relative and absolute traversal vectors.
-  M1 (Medium): load_dataset_from_file now chains the original exception with
-     `raise RuntimeError(...) from e` so the full traceback is preserved for
-     debugging instead of being silently discarded.
 """
 
 import json
@@ -100,8 +89,7 @@ def load_dataset_from_file(
 
     Raises
     ------
-    RuntimeError — wraps any internal exception with a user-friendly message,
-                   chained with `from e` so the original traceback is preserved.
+    RuntimeError — wraps any internal exception with a user-friendly message
     """
     try:
         path = Path(file.name).resolve()
@@ -184,43 +172,33 @@ def load_dataset_from_file(
             )
 
     except Exception as e:
-        # M1 FIX: chain with `from e` to preserve the original traceback.
-        raise RuntimeError(f"Failed to load dataset: {e}") from e
+        raise RuntimeError(f"Failed to load dataset: {e}")
 
 
 def safe_extract_zip(zip_path: str, extract_dir: str) -> str:
-    """Extract a ZIP archive with full path-traversal protection.
+    """Extract a ZIP archive with complete path-traversal protection.
 
-    Uses realpath-based containment: every entry is resolved against
-    extract_dir after joining, and rejected if it resolves outside the
-    target directory. This blocks both relative (`../`) and absolute
-    (`/etc/passwd`) traversal vectors.
+    H-1 FIX: The previous check only blocked paths starting with '../' or '..\\'
+    but did not catch absolute paths (e.g. '/etc/passwd') or normalised traversal
+    paths. The fix resolves every target path with os.path.realpath and verifies
+    it is inside the extract directory before extracting.
 
-    C2 FIX: The previous implementation only caught paths starting with
-    `../`, leaving absolute paths like `/etc/passwd` unblocked.
-    Proven exploitable — see test_safe_extract_zip_absolute_path_blocked.
-
-    Raises ValueError if any entry would escape extract_dir.
+    Raises ValueError if any entry attempts to escape extract_dir.
     Returns extract_dir on success.
     """
-    # Resolve the canonical extraction root once; ensures symlinks are handled.
-    extract_dir_abs = os.path.realpath(extract_dir)
-    # The separator suffix prevents a prefix match against a sibling directory
-    # that starts with the same name (e.g., /tmp/out vs /tmp/output).
-    safe_prefix = extract_dir_abs + os.sep
+    abs_extract_dir = os.path.realpath(extract_dir)
 
     with zipfile.ZipFile(zip_path, "r") as zf:
         for file_info in zf.infolist():
-            # Resolve where this entry would actually land on disk.
+            # Resolve the full absolute target path
             target = os.path.realpath(
-                os.path.join(extract_dir_abs, file_info.filename)
+                os.path.join(abs_extract_dir, file_info.filename)
             )
-            # Allow the extract root itself (directory entries end with /)
-            # but reject anything that escapes it.
-            if target != extract_dir_abs and not target.startswith(safe_prefix):
+            # The target must be inside the extract directory
+            # (os.sep suffix prevents prefix-collision: /tmp/out vs /tmp/outside)
+            if not target.startswith(abs_extract_dir + os.sep) and target != abs_extract_dir:
                 raise ValueError(
-                    f"Path traversal detected in ZIP entry: {file_info.filename!r} "
-                    f"would resolve to {target!r}, outside {extract_dir_abs!r}"
+                    f"Unsafe path in ZIP (path traversal attempt): {file_info.filename!r}"
                 )
             zf.extract(file_info, extract_dir)
     return extract_dir
