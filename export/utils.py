@@ -30,6 +30,11 @@ def create_zip_from_folder(folder_path: str) -> str:
     Returns the path to the temporary ZIP archive.
     The archive uses ZIP_DEFLATED compression and preserves relative paths
     rooted at the parent of folder_path.
+
+    M-6 FIX: The caller (ui/handlers.py → on_train_click) now stores the
+    returned zip_path in app_state._last_zip_path and deletes the previous
+    zip on the next training run, preventing indefinite accumulation of
+    large ZIP files in the OS temp directory.
     """
     with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
         zip_path = tmp.name
