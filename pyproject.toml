@@ -1,6 +1,7 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+# C-1 FIX: "setuptools.backends.legacy:build" does not exist — correct value is "setuptools.build_meta"
+build-backend = "setuptools.build_meta"
 
 
 [project]
@@ -24,7 +25,7 @@ classifiers = [
 
 
 # Core runtime dependencies — mirrors requirements.txt.
-# Heavy optional deps (vllm, auto-gptq, bert-score, unsloth) are listed
+# Heavy optional deps (vllm, auto-gptq, bert-score, unsloth, heretic-llm) are listed
 # under [project.optional-dependencies] and installed on demand.
 dependencies = [
     "gradio>=5.0.0",
@@ -48,7 +49,9 @@ dependencies = [
     "PyPDF2>=3.0.0",
     "openpyxl>=3.1.0",
     "psutil>=6.0.0",
-    "heretic-llm>=1.2.0",
+    # H-11 FIX: heretic-llm removed from core deps — if unavailable on PyPI it broke every install.
+    # Install separately:  pip install heretic-llm>=1.2.0
+    # or:  pip install "llm-fine-tuner[heretic]"
 ]
 
 
@@ -67,13 +70,18 @@ quant = [
 vllm = [
     "vllm>=0.2.0",
 ]
+# H-11 FIX: heretic-llm isolated in its own optional group so a missing package
+# never breaks a standard install.
+heretic = [
+    "heretic-llm>=1.2.0",
+]
 dev = [
     "black>=24.0.0",
     "pytest>=8.0.0",
     "ruff>=0.4.0",
 ]
 all = [
-    "llm-fine-tuner[eval,quant,vllm,dev]",
+    "llm-fine-tuner[eval,quant,vllm,heretic,dev]",
 ]
 
 
@@ -94,7 +102,9 @@ where = ["."]
 
 
 [tool.pytest.ini_options]
-testpaths   = ["."]
+# M-8 FIX: was "." which caused pytest to scan the entire repo including archive/.
+# Setting to "tests" scopes discovery to the dedicated test directory only.
+testpaths   = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
