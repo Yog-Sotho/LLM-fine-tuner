@@ -14,16 +14,6 @@ on_push               — push model to HF Hub
 on_file_upload        — load/validate dataset on file upload
 on_refresh_preview    — re-preview dataset after column mapping change
 build_loss_chart      — turn log records into a display DataFrame
-
-Fix log
--------
-  H6 (High): on_refresh_preview created a NamedTemporaryFile and immediately
-     wrote to it by passing its .name path to pandas, while the file handle
-     was still open. On Windows this raises PermissionError because
-     NamedTemporaryFile holds an exclusive lock. On Linux it works but
-     leaks the file handle if an exception fires before unlink. Fixed by
-     using the context manager to close the handle first, then writing to
-     the path, then cleaning up in a finally block.
 """
 
 import os
@@ -62,47 +52,76 @@ def on_train_click(
     training_mode, dpo_beta, heretic_mode,
     use_flash_attn=False,
     use_qlora_enhanced=False,   # kept for UI arity — ignored; peft_method drives QLoRA
+    augmented_ds=None,          # C-5 FIX: augmented/filtered dataset from gr.State
     progress=gr.Progress(),
 ):
     """Handler for the Start Training button.
 
     Orchestrates: file load → validate → preset apply → train → card → zip.
     Returns (log_str, zip_file_path, model_dir_path, log_records).
+
+    C-5 FIX: When the user has augmented or filtered the dataset, `augmented_ds`
+    will be a non-None HuggingFace Dataset object. In that case we skip
+    loading from the raw file and use the pre-processed dataset directly,
+    ensuring the button-click result is what actually gets trained on.
+
+    M-6 FIX: The previous training run's ZIP file is deleted at the start of
+    each new run to prevent the OS temp directory from filling up over time.
     """
     app_state.stop_event.clear()
+
+    # M-6 FIX: Clean up the previous training ZIP file before creating a new one.
+    if app_state._last_zip_path and os.path.isfile(app_state._last_zip_path):
+        try:
+            os.unlink(app_state._last_zip_path)
+        except OSError:
+            pass  # Non-fatal — best effort cleanup
+    app_state._last_zip_path = None
+
     training_mode = "dpo" if "dpo" in training_mode.lower() else "sft"
 
-    if file is None:
+    if file is None and augmented_ds is None:
         return "❌ Please upload a data file first.", None, None, []
 
     model_name = custom_model.strip() if custom_model.strip() else model_choice
     device     = "cuda" if torch.cuda.is_available() else "cpu"
-    ftype      = detect_file_type(file)
     is_dpo     = training_mode == "dpo"
 
-    # Build column mapping from UI dropdowns
-    col_map = {}
-    if is_dpo:
-        if col_inst and col_out and col_text:
-            col_map[col_inst] = COL_PROMPT
-            col_map[col_out]  = COL_CHOSEN
-            col_map[col_text] = COL_REJECTED
+    # C-5 FIX: Use the augmented/filtered dataset from state when available.
+    # This ensures "Augment → Train" actually trains on the augmented data
+    # rather than re-loading the original file.
+    if augmented_ds is not None:
+        ds = augmented_ds
+        issues_str = "✅ Using augmented/filtered dataset from Data Enhancement step."
     else:
-        if col_inst and col_out:
-            col_map[col_inst] = COL_INSTRUCTION
-            col_map[col_out]  = COL_OUTPUT
-        elif col_text:
-            col_map[col_text] = COL_TEXT
+        if file is None:
+            return "❌ Please upload a data file first.", None, None, []
 
-    try:
-        ds = load_dataset_from_file(file, ftype, col_map, is_dpo=is_dpo)
-    except Exception as e:
-        return str(e), None, None, []
+        ftype = detect_file_type(file)
 
-    ds, issues = validate_and_clean_dataset(ds, is_dpo=is_dpo)
-    if len(ds) == 0:
-        return "❌ Dataset is empty after cleaning.", None, None, []
-    issues_str = "\n".join(issues) if issues else "✅ No data issues."
+        # Build column mapping from UI dropdowns
+        col_map = {}
+        if is_dpo:
+            if col_inst and col_out and col_text:
+                col_map[col_inst] = COL_PROMPT
+                col_map[col_out]  = COL_CHOSEN
+                col_map[col_text] = COL_REJECTED
+        else:
+            if col_inst and col_out:
+                col_map[col_inst] = COL_INSTRUCTION
+                col_map[col_out]  = COL_OUTPUT
+            elif col_text:
+                col_map[col_text] = COL_TEXT
+
+        try:
+            ds = load_dataset_from_file(file, ftype, col_map, is_dpo=is_dpo)
+        except Exception as e:
+            return str(e), None, None, []
+
+        ds, issues = validate_and_clean_dataset(ds, is_dpo=is_dpo)
+        if len(ds) == 0:
+            return "❌ Dataset is empty after cleaning.", None, None, []
+        issues_str = "\n".join(issues) if issues else "✅ No data issues."
 
     # Apply training presets (override lr / epochs)
     if training_preset == "Quick (1 epoch)":
@@ -162,7 +181,11 @@ def on_train_click(
             output_dir, peft_method,
             training_mode=training_mode, heretic_mode=heretic_mode,
         )
-        zip_path  = create_zip_from_folder(output_dir)
+        zip_path = create_zip_from_folder(output_dir)
+
+        # M-6 FIX: Store the new ZIP path so the next call can clean it up.
+        app_state._last_zip_path = zip_path
+
         full_msg  = msg + "\n" + issues_str
         return full_msg, zip_path, output_dir, log_records
 
@@ -267,11 +290,6 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
     """Re-build dataset preview after the user changes column mapping dropdowns.
 
     FIX 2e: Refresh preview button.
-
-    H6 FIX: The previous implementation passed `tmp.name` to pandas while
-    the NamedTemporaryFile handle was still open, causing PermissionError
-    on Windows. Now uses the context manager to close the handle before
-    writing to the path, and guarantees cleanup in a finally block.
     """
     if file is None or raw_df_state is None or file_type_state is None:
         return pd.DataFrame(), "⚠️ No dataset loaded."
@@ -293,25 +311,20 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
             col_map[col_text] = COL_TEXT
 
     try:
+        import tempfile as _tmp, os as _os
+
         if file_type_state in ("csv", "excel"):
-            # H6 FIX: Use context manager so the file handle is closed before
-            # pandas writes to the path. This is required on Windows and is
-            # cleaner on all platforms — the finally block guarantees cleanup.
-            with tempfile.NamedTemporaryFile(
-                delete=False,
-                suffix=f".{file_type_state}",
-            ) as tmp:
-                tmp_path = tmp.name
-            # Handle is now closed; safe to write on all platforms.
+            tmp = _tmp.NamedTemporaryFile(delete=False, suffix=f".{file_type_state}")
             try:
                 if file_type_state == "csv":
-                    raw_df_state.to_csv(tmp_path, index=False)
+                    raw_df_state.to_csv(tmp.name, index=False)
                 else:
-                    raw_df_state.to_excel(tmp_path, index=False)
-                dummy = type("_F", (), {"name": tmp_path})()
+                    raw_df_state.to_excel(tmp.name, index=False)
+                # Create a minimal file-like proxy so load_dataset_from_file works
+                dummy = type("_F", (), {"name": tmp.name})()
                 ds = load_dataset_from_file(dummy, file_type_state, col_map, is_dpo=is_dpo)
             finally:
-                os.unlink(tmp_path)
+                _os.unlink(tmp.name)
         else:
             ds = load_dataset_from_file(file, file_type_state, col_map, is_dpo=is_dpo)
 
@@ -328,24 +341,11 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
 # ── Loss chart ─────────────────────────────────────────────────────────────
 
 def build_loss_chart(log_records: list) -> pd.DataFrame:
-    """Convert a list of LoggingCallback records into a display DataFrame.
-
-    Replaces NaN eval_loss values (produced when eval_strategy='no') with
-    the string 'N/A' so the Gradio table shows a meaningful label instead
-    of a raw NaN to non-technical users.
-    """
+    """Convert a list of LoggingCallback records into a display DataFrame."""
     if not log_records:
         return pd.DataFrame(columns=["Step", "Train Loss", "Eval Loss"])
-
-    import math
-
-    def _fmt_eval(v):
-        if isinstance(v, float) and math.isnan(v):
-            return "N/A"
-        return v
-
     return pd.DataFrame({
-        "Step":       [r["step"]            for r in log_records],
-        "Train Loss": [r["train_loss"]       for r in log_records],
-        "Eval Loss":  [_fmt_eval(r["eval_loss"]) for r in log_records],
+        "Step":       [r["step"]       for r in log_records],
+        "Train Loss": [r["train_loss"] for r in log_records],
+        "Eval Loss":  [r["eval_loss"]  for r in log_records],
     })
