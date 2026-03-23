@@ -28,8 +28,21 @@ def build_data_tab() -> dict:
         raw_df_state    = gr.State(None)
         file_type_state = gr.State(None)
 
+        # C-5 FIX: New gr.State that holds the augmented/filtered Dataset object.
+        # When the user clicks "Augment" or "Quality Filter", the resulting Dataset
+        # is stored here. on_train_click in handlers.py reads this state and uses it
+        # instead of re-loading from the raw file, so training actually uses the
+        # augmented/filtered data rather than the original.
+        # Reset to None whenever a new file is uploaded (see app.py event wiring).
+        augmented_ds_state = gr.State(None)
+
         gr.Markdown("---")
         gr.Markdown("### 🔧 v2.7 Dataset Enhancement")
+        # C-5 FIX: Added info banner so non-technical users understand the workflow.
+        gr.Markdown(
+            "_💡 After augmenting or filtering, click **▶ Start Training** — "
+            "the enhanced dataset will be used automatically._"
+        )
         with gr.Row():
             with gr.Column():
                 gr.Markdown("#### 📈 Data Augmentation")
@@ -57,6 +70,8 @@ def build_data_tab() -> dict:
         refresh_preview_btn=refresh_preview_btn,
         preview_box=preview_box, stats_box=stats_box,
         raw_df_state=raw_df_state, file_type_state=file_type_state,
+        # C-5 FIX: New state component exposed to app.py and handlers.py
+        augmented_ds_state=augmented_ds_state,
         aug_factor=aug_factor, aug_type=aug_type,
         aug_btn=aug_btn, aug_status=aug_status,
         qf_min_len=qf_min_len, qf_max_len=qf_max_len,
