@@ -160,12 +160,21 @@ def quality_filter_v27(
 # ── Gradio UI handlers ─────────────────────────────────────────────────────
 
 def on_augment_click(file, training_mode, aug_factor, aug_type, progress=gr.Progress()):
-    """Handler for the Augment button in the Data tab."""
+    """Handler for the Augment button in the Data tab.
+
+    C-5 FIX: Now returns the augmented Dataset object as the FOURTH return value
+    so it can be stored in augmented_ds_state (a gr.State component added to
+    data_tab.py). on_train_click in handlers.py then prefers this state when
+    available, so training actually uses the augmented data.
+
+    Returns (status_str, preview_df, stats_md, augmented_dataset_or_None)
+    """
     if file is None:
         return (
             "❌ Upload a dataset first.",
             gr.update(visible=False),
             gr.update(visible=False),
+            None,  # C-5 FIX: augmented_ds_state stays None
         )
 
     is_dpo = "dpo" in str(training_mode).lower()
@@ -181,30 +190,43 @@ def on_augment_click(file, training_mode, aug_factor, aug_type, progress=gr.Prog
             aug_type=aug_type,
         )
 
+        progress(0.9, desc="Building preview…")
         preview = preview_dataset(aug_ds, is_dpo=is_dpo)
         stats = f"**Original:** {len(ds)} examples → **Augmented:** {len(aug_ds)} examples"
 
-        # v3.1 Fix #3: Wrap in gr.update(visible=True) so the hidden
-        # components actually appear after the click.
-        return msg, gr.update(value=preview, visible=True), gr.update(value=stats, visible=True)
+        # M-4 FIX: Complete the progress bar (was previously stuck at 0.9 / 90%).
+        progress(1.0, desc="Done!")
+
+        # C-5 FIX: Return aug_ds as fourth value for gr.State storage.
+        return msg, gr.update(value=preview, visible=True), gr.update(value=stats, visible=True), aug_ds
 
     except Exception as e:
-        return f"❌ {e}", gr.update(visible=False), gr.update(visible=False)
+        return f"❌ {e}", gr.update(visible=False), gr.update(visible=False), None
 
 
 def on_quality_filter_click(file, training_mode, min_len, max_len, progress=gr.Progress()):
-    """Handler for the Quality Filter button in the Data tab."""
+    """Handler for the Quality Filter button in the Data tab.
+
+    C-5 FIX: Now returns the filtered Dataset object as the FOURTH return value
+    so it can be stored in augmented_ds_state. on_train_click then uses the
+    filtered dataset for training instead of the original.
+
+    Returns (status_str, preview_df, stats_md, filtered_dataset_or_None)
+    """
     if file is None:
         return (
             "❌ Upload a dataset first.",
             gr.update(visible=False),
             gr.update(visible=False),
+            None,  # C-5 FIX: augmented_ds_state stays None
         )
 
     is_dpo = "dpo" in str(training_mode).lower()
     try:
         ftype = detect_file_type(file)
         ds = load_dataset_from_file(file, ftype, is_dpo=is_dpo)
+
+        progress(0.3, desc="Applying quality filter…")
         filtered_ds, msg = quality_filter_v27(
             ds,
             min_length=int(min_len),
@@ -212,11 +234,15 @@ def on_quality_filter_click(file, training_mode, min_len, max_len, progress=gr.P
             is_dpo=is_dpo,
         )
 
+        progress(0.9, desc="Building preview…")
         preview = preview_dataset(filtered_ds, is_dpo=is_dpo)
         stats = f"**After filter:** {len(filtered_ds)} examples"
 
-        # v3.1 Fix #3
-        return msg, gr.update(value=preview, visible=True), gr.update(value=stats, visible=True)
+        # M-4 FIX: Complete the progress bar.
+        progress(1.0, desc="Done!")
+
+        # C-5 FIX: Return filtered_ds as fourth value for gr.State storage.
+        return msg, gr.update(value=preview, visible=True), gr.update(value=stats, visible=True), filtered_ds
 
     except Exception as e:
-        return f"❌ {e}", gr.update(visible=False), gr.update(visible=False)
+        return f"❌ {e}", gr.update(visible=False), gr.update(visible=False), None
