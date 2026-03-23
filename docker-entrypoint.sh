@@ -34,10 +34,18 @@ echo -e "${GREEN}╚════════════════════
 echo ""
 
 # ── HuggingFace token ─────────────────────────────────────────────────────────
+# C-3 FIX: Token is no longer passed as a -c argument (which exposed it in `ps aux`
+# and /proc/<pid>/cmdline). It is now read from the environment inside the heredoc,
+# keeping it out of the process command line entirely.
 if [[ -n "${HF_TOKEN:-}" ]]; then
     ok "HuggingFace token detected — logging in"
-    python3 -c "from huggingface_hub import login; login(token='${HF_TOKEN}')" 2>/dev/null || \
-        warn "HuggingFace login failed — token may be invalid"
+    python3 - <<'PYEOF' 2>/dev/null || warn "HuggingFace login failed — token may be invalid"
+import os
+from huggingface_hub import login
+token = os.environ.get("HF_TOKEN", "")
+if token:
+    login(token=token)
+PYEOF
 else
     warn "HF_TOKEN not set. Hub push and gated models (Llama, Mistral) will require a token."
     warn "Set it with:  docker run -e HF_TOKEN=hf_xxx ..."
@@ -87,10 +95,20 @@ if [[ $# -eq 0 ]]; then
         ok "Share mode enabled — a public URL will be printed below"
     fi
 
+    # L-8 FIX: EXTRA_ARGS is now split into a proper array to handle spaces in
+    # argument values correctly (e.g. EXTRA_ARGS="--auth user:pass").
+    # The previous unquoted ${EXTRA_ARGS:-} relied on word-splitting which is
+    # fragile and can cause unexpected argument splitting.
+    EXTRA_ARGS_ARRAY=()
+    if [[ -n "${EXTRA_ARGS:-}" ]]; then
+        # shellcheck disable=SC2206
+        EXTRA_ARGS_ARRAY=(${EXTRA_ARGS})
+    fi
+
     ok "UI will be available at:  http://localhost:7860"
     echo ""
 
-    exec python3 main.py ${SHARE_FLAG} ${EXTRA_ARGS:-}
+    exec python3 main.py ${SHARE_FLAG} "${EXTRA_ARGS_ARRAY[@]+"${EXTRA_ARGS_ARRAY[@]}"}"
 else
     # ── CLI mode ──────────────────────────────────────────────────────────────
     log "Arguments detected — running CLI: $*"
