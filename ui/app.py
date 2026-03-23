@@ -11,7 +11,7 @@ Tab files define layout; handlers.py defines logic; this file connects them.
 import gradio as gr
 
 from config.constants import HAS_VLLM
-from core.hardware import get_hardware_summary
+from core.hardware import get_hardware_summary, get_model_info  # H-10 FIX: explicit import
 from data.augmentation import on_augment_click, on_quality_filter_click
 from export.gguf import on_export_gguf
 from export.registry import on_registry_upload, on_registry_list
@@ -82,6 +82,14 @@ def build_demo() -> gr.Blocks:
                 dt["preview_box"], dt["stats_box"], dt["raw_df_state"], dt["file_type_state"],
             ],
         )
+        # C-5 FIX: Reset augmented_ds_state to None whenever a new file is uploaded
+        # so old augmented data doesn't accidentally persist into a new training job.
+        dt["file_input"].change(
+            fn=lambda _: None,
+            inputs=[dt["file_input"]],
+            outputs=[dt["augmented_ds_state"]],
+        )
+
         dt["refresh_preview_btn"].click(
             fn=on_refresh_preview,
             inputs=[
@@ -91,20 +99,30 @@ def build_demo() -> gr.Blocks:
             ],
             outputs=[dt["preview_box"], dt["stats_box"]],
         )
+
+        # C-5 FIX: Augment button now has 4 outputs — the fourth is augmented_ds_state.
+        # Previously the augmented Dataset was returned to the UI but never stored in
+        # state, so training always used the original file.
         dt["aug_btn"].click(
             fn=on_augment_click,
             inputs=[dt["file_input"], tt["training_mode"], dt["aug_factor"], dt["aug_type"]],
-            outputs=[dt["aug_status"], dt["aug_preview"], dt["aug_stats"]],
+            outputs=[dt["aug_status"], dt["aug_preview"], dt["aug_stats"], dt["augmented_ds_state"]],
         )
+
+        # C-5 FIX: Quality filter button also stores its result in augmented_ds_state.
         dt["qf_btn"].click(
             fn=on_quality_filter_click,
             inputs=[dt["file_input"], tt["training_mode"], dt["qf_min_len"], dt["qf_max_len"]],
-            outputs=[dt["qf_status"], dt["aug_preview"], dt["aug_stats"]],
+            outputs=[dt["qf_status"], dt["aug_preview"], dt["aug_stats"], dt["augmented_ds_state"]],
         )
 
         # ── Training Tab ───────────────────────────────────────────────────
+        # H-10 FIX: get_model_info is now a direct import at the top of this file.
+        # Previously called via __import__("core.hardware", fromlist=["get_model_info"])
+        # inside a lambda, which was confusing and unnecessary since the module is
+        # already imported for get_hardware_summary().
         tt["model_choice"].change(
-            fn=lambda m: __import__("core.hardware", fromlist=["get_model_info"]).get_model_info(m),
+            fn=get_model_info,
             inputs=[tt["model_choice"]],
             outputs=[tt["model_info_md"]],
         )
@@ -122,6 +140,7 @@ def build_demo() -> gr.Blocks:
             use_unsloth, use_chat_template, system_prompt,
             training_mode, dpo_beta, heretic_mode,
             use_flash_attn, use_qlora_enhanced,
+            augmented_ds,   # C-5 FIX: augmented dataset state injected here
             progress=gr.Progress(),
         ):
             msg, zip_path, model_path, log_records = on_train_click(
@@ -135,6 +154,7 @@ def build_demo() -> gr.Blocks:
                 use_unsloth, use_chat_template, system_prompt,
                 training_mode, dpo_beta, heretic_mode,
                 use_flash_attn, use_qlora_enhanced,
+                augmented_ds=augmented_ds,  # C-5 FIX
                 progress=progress,
             )
             return msg, zip_path, model_path, log_records, build_loss_chart(log_records)
@@ -155,6 +175,7 @@ def build_demo() -> gr.Blocks:
                 tt["use_unsloth"], tt["use_chat_template"], tt["system_prompt"],
                 tt["training_mode"], tt["dpo_beta"], tt["heretic_mode"],
                 tt["use_flash_attn"], tt["use_qlora_enhanced"],
+                dt["augmented_ds_state"],  # C-5 FIX: new input
             ],
             outputs=[
                 tt["log_output"], st["download_btn"],
