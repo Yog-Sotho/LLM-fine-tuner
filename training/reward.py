@@ -3,13 +3,6 @@ training/reward.py
 ===================
 Layer 3 — Reward Model training via trl.RewardTrainer.
 Imports: config, core, data.
-
-Fix log
--------
-  H3 (High): `app_state` was imported but never referenced anywhere in this
-     module. The StopCallback (imported from core.callbacks) correctly reads
-     app_state internally. Removed the dead import to eliminate misleading
-     code that implied this module directly interacts with the stop mechanism.
 """
 
 import gc
@@ -26,6 +19,9 @@ from config.constants import (
     HAS_REWARD_TRAINER,
 )
 from core.callbacks import LoggingCallback, StopCallback
+# M-3 FIX: app_state is now actively used — stop_event.clear() called at start,
+# and StopCallback (which checks stop_event) is added to trainer callbacks.
+from core.state import app_state
 from data.loader import detect_file_type, load_dataset_from_file
 
 
@@ -51,6 +47,11 @@ def train_reward_model_v27(
         return "❌ RewardTrainer not available. Install: pip install trl>=0.7.0"
     if reward_file is None:
         return "❌ Please upload a reward dataset (CSV/JSONL with 'chosen' & 'rejected' columns)."
+
+    # H-3 FIX: Clear the stop event at the start of every reward training run.
+    # Previously app_state was imported but stop_event was never cleared or checked,
+    # making the UI stop button ineffective for reward training jobs.
+    app_state.stop_event.clear()
 
     try:
         from trl import RewardConfig, RewardTrainer  # lazy
@@ -138,6 +139,7 @@ def train_reward_model_v27(
         )
 
         log_cb = LoggingCallback()
+        # H-3 FIX: StopCallback is now wired in so the UI stop button works.
         trainer = RewardTrainer(
             model=base_model,
             args=reward_config,
@@ -153,6 +155,9 @@ def train_reward_model_v27(
         trainer.train()
         elapsed = time.time() - t0
 
+        # H-3 FIX: Check stop event to report correct status in summary.
+        status = "stopped by user" if app_state.stop_event.is_set() else "complete"
+
         base_model.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
         del base_model
@@ -162,7 +167,7 @@ def train_reward_model_v27(
 
         final_loss = log_cb.records[-1]["train_loss"] if log_cb.records else "N/A"
         return (
-            f"✅ Reward model training complete!\n"
+            f"✅ Reward model training {status}!\n"
             f"⏱ Elapsed: {elapsed/60:.1f} min\n"
             f"📉 Final train loss: {final_loss}\n"
             f"📁 Saved to: {output_dir}"
