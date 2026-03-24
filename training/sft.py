@@ -50,6 +50,7 @@ from config.constants import (
     COL_OUTPUT,
     COL_TEXT,
     HAS_ADAPTER_CONFIG,
+    HAS_HERETIC,    # N-5 FIX: imported so the Heretic Mode branch can guard the subprocess call
     HAS_TRL,
     HAS_UNSLOTH,
     QLORA_ENHANCED_BNB_KWARGS,
@@ -463,24 +464,37 @@ def train_model(
         if heretic_mode:
             if progress is not None:
                 progress(0.95, desc="🔓 Applying Heretic… ")
-            try:
-                subprocess.run(
-                    ["heretic", output_dir],
-                    capture_output=True, text=True, timeout=600,
-                )
+
+            # N-5 FIX: Guard the subprocess call with HAS_HERETIC so users get a
+            # clear diagnostic instead of a FileNotFoundError crash when the heretic
+            # binary is not installed (it is now an optional dependency).
+            if not HAS_HERETIC:
                 summary = (
                     f"✅ Training {status}!\n"
-                    f"🔓 Heretic Mode applied!\n"
+                    f"⚠️ Heretic Mode skipped — binary not found.\n"
+                    f"   Install with: pip install heretic-llm\n"
                     f"⏱ Elapsed: {elapsed/60:.1f} min\n"
                     f"📁 Model saved to: {output_dir}\n"
                 )
-            except Exception as e:
-                summary = (
-                    f"✅ Training {status}!\n"
-                    f"⚠️ Heretic failed: {e}\n"
-                    f"⏱ Elapsed: {elapsed/60:.1f} min\n"
-                    f"📁 Model saved to: {output_dir}\n"
-                )
+            else:
+                try:
+                    subprocess.run(
+                        ["heretic", output_dir],
+                        capture_output=True, text=True, timeout=600,
+                    )
+                    summary = (
+                        f"✅ Training {status}!\n"
+                        f"🔓 Heretic Mode applied!\n"
+                        f"⏱ Elapsed: {elapsed/60:.1f} min\n"
+                        f"📁 Model saved to: {output_dir}\n"
+                    )
+                except Exception as e:
+                    summary = (
+                        f"✅ Training {status}!\n"
+                        f"⚠️ Heretic failed: {e}\n"
+                        f"⏱ Elapsed: {elapsed/60:.1f} min\n"
+                        f"📁 Model saved to: {output_dir}\n"
+                    )
         else:
             summary = (
                 f"✅ Training {status}!\n"
