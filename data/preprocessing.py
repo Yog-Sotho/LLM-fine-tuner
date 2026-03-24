@@ -18,6 +18,11 @@ Fix log
      using an ordered seen-set to select unique indices via
      `Dataset.select()`, preserving original order while removing duplicates.
      The issues message now says "removed" instead of "detected".
+
+  N-7 (Medium): `preview_dataset` called `dataset.get(col, [])` which mimics
+     dict semantics and is not part of the stable HuggingFace Dataset API across
+     all versions. Fixed by checking `col in dataset.column_names` before
+     accessing the column, which is the documented and version-stable approach.
 """
 
 import pandas as pd
@@ -154,7 +159,14 @@ def validate_and_clean_dataset(
 
 
 def preview_dataset(dataset: Dataset, is_dpo: bool = False) -> pd.DataFrame:
-    """Return a small preview of the dataset as a pandas DataFrame for the UI."""
+    """Return a small preview of the dataset as a pandas DataFrame for the UI.
+
+    N-7 FIX: The previous implementation called `dataset.get(col, [])` which
+    mimics dict.get() semantics.  That method is not part of the stable public
+    HuggingFace Dataset API and behaves differently across library versions.
+    Replaced with explicit `col in dataset.column_names` guards, which is the
+    documented, version-stable way to check column existence before access.
+    """
     if len(dataset) == 0:
         return pd.DataFrame({"Status": ["⚠️ Dataset is empty after cleaning."]})
 
@@ -167,9 +179,12 @@ def preview_dataset(dataset: Dataset, is_dpo: bool = False) -> pd.DataFrame:
     elif COL_TEXT in dataset.column_names:
         return pd.DataFrame({COL_TEXT: dataset[COL_TEXT][:10]})
     else:
+        # N-7 FIX: use explicit column_names check instead of dataset.get()
+        inst_data = dataset[COL_INSTRUCTION][:5] if COL_INSTRUCTION in dataset.column_names else []
+        out_data  = dataset[COL_OUTPUT][:5]      if COL_OUTPUT      in dataset.column_names else []
         return pd.DataFrame({
-            COL_INSTRUCTION: dataset.get(COL_INSTRUCTION, [])[:5],
-            COL_OUTPUT:      dataset.get(COL_OUTPUT, [])[:5],
+            COL_INSTRUCTION: inst_data,
+            COL_OUTPUT:      out_data,
         })
 
 
