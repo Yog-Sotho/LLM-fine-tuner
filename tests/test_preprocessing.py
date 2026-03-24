@@ -6,7 +6,7 @@ Unit tests for data/preprocessing.py.
 Covers:
   - validate_and_clean_dataset removes empty rows and reports issues
   - validate_and_clean_dataset works for DPO datasets
-  - Duplicate rows are flagged but not hard-removed (soft warning)
+  - Duplicate rows are REMOVED and the issue is reported  ← N-6 FIX
   - preview_dataset returns a DataFrame with at most 10 rows
   - preprocess_function builds expected token keys
 """
@@ -62,15 +62,43 @@ def test_validate_all_valid_no_issues():
     assert len(clean) == 2
 
 
-def test_validate_reports_duplicate_warning():
+def test_validate_removes_duplicates_and_reports():
+    """
+    N-6 FIX: The previous test docstring said 'soft warning, rows kept' and
+    only asserted that a warning appeared in issues.  Since preprocessing.py
+    was updated to REMOVE duplicates via Dataset.select(unique_indices),
+    that comment and the missing length assertion were both wrong.
+
+    This test now asserts:
+      1. A warning containing 'duplicate' appears in the issues list.
+      2. The duplicate row is actually removed (2 unique + 1 dup → 2 rows).
+    """
     ds = _make_sft_ds([
         {COL_TEXT: "same text"},
-        {COL_TEXT: "same text"},
+        {COL_TEXT: "same text"},   # duplicate — must be removed
         {COL_TEXT: "unique"},
     ])
-    _, issues = validate_and_clean_dataset(ds)
-    # Duplicates should generate a warning in issues (soft warning, rows kept)
+    clean, issues = validate_and_clean_dataset(ds)
+
+    # Issue reported
+    assert any("duplicate" in i.lower() for i in issues), \
+        f"Expected a 'duplicate' warning in issues, got: {issues}"
+
+    # Duplicate actually removed — 3 rows in, 2 unique rows out
+    assert len(clean) == 2, \
+        f"Expected 2 rows after deduplication (1 duplicate removed), got {len(clean)}"
+
+
+def test_validate_instruction_pair_deduplication():
+    """Duplicate (instruction, output) pairs should also be removed."""
+    ds = _make_sft_ds([
+        {COL_INSTRUCTION: "Q", COL_OUTPUT: "A"},
+        {COL_INSTRUCTION: "Q", COL_OUTPUT: "A"},   # exact duplicate
+        {COL_INSTRUCTION: "Q2", COL_OUTPUT: "A2"},
+    ])
+    clean, issues = validate_and_clean_dataset(ds)
     assert any("duplicate" in i.lower() for i in issues)
+    assert len(clean) == 2
 
 
 # ── validate_and_clean_dataset — DPO ──────────────────────────────────────
