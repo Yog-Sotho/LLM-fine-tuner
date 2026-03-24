@@ -20,6 +20,10 @@ Fix history preserved inline:
   v2.9 Minor #7 : ORPO --alpha option present
   FIX 2b        : Batched generation in evaluate (attention-mask strip)
   FIX 2c        : reward --max-length exposed
+  N-4 FIX       : reward, orpo, and ppo now guard ftype=None before calling
+                  load_dataset_from_file — previously only train did this,
+                  the others passed None directly causing a confusing
+                  RuntimeError: "Unsupported file type: None" deep in the stack.
 """
 
 import os
@@ -161,7 +165,19 @@ def reward(
         typer.echo("❌ Install: pip install trl>=0.7.0", err=True)
         raise typer.Exit(code=1)
 
+    # N-4 FIX: Added ftype guard (was missing for reward/orpo/ppo — only train had it).
+    # Without this, an unsupported extension silently passes ftype=None into
+    # load_dataset_from_file, which crashes deep in the stack with
+    # "Unsupported file type: None" — confusing for non-technical users.
+    if not os.path.exists(data):
+        typer.echo(f"❌ Dataset not found: {data}", err=True)
+        raise typer.Exit(code=1)
+
     ftype = _infer_ftype(data)
+    if ftype is None:
+        typer.echo("❌ Unsupported format. Use .csv or .jsonl", err=True)
+        raise typer.Exit(code=1)
+
     try:
         ds = load_dataset_from_file(DummyFile(data), ftype, is_dpo=True)
         if not (COL_CHOSEN in ds.column_names and COL_REJECTED in ds.column_names):
@@ -216,7 +232,16 @@ def orpo(
         typer.echo("❌ Install: pip install trl>=0.8.0", err=True)
         raise typer.Exit(code=1)
 
+    # N-4 FIX: Added ftype guard (was missing for reward/orpo/ppo — only train had it).
+    if not os.path.exists(data):
+        typer.echo(f"❌ Dataset not found: {data}", err=True)
+        raise typer.Exit(code=1)
+
     ftype = _infer_ftype(data)
+    if ftype is None:
+        typer.echo("❌ Unsupported format. Use .csv or .jsonl", err=True)
+        raise typer.Exit(code=1)
+
     try:
         ds = load_dataset_from_file(DummyFile(data), ftype, is_dpo=True)
         required = [COL_PROMPT, COL_CHOSEN, COL_REJECTED]
@@ -271,7 +296,16 @@ def ppo(
         typer.echo(f"❌ Reward model path invalid: {reward_model}", err=True)
         raise typer.Exit(code=1)
 
+    # N-4 FIX: Added ftype guard (was missing for reward/orpo/ppo — only train had it).
+    if not os.path.exists(data):
+        typer.echo(f"❌ Dataset not found: {data}", err=True)
+        raise typer.Exit(code=1)
+
     ftype = _infer_ftype(data)
+    if ftype is None:
+        typer.echo("❌ Unsupported format. Use .csv or .jsonl", err=True)
+        raise typer.Exit(code=1)
+
     try:
         ds = load_dataset_from_file(DummyFile(data), ftype)
         # Normalise column name to COL_PROMPT
