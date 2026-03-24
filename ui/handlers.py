@@ -67,6 +67,14 @@ def on_train_click(
 
     M-6 FIX: The previous training run's ZIP file is deleted at the start of
     each new run to prevent the OS temp directory from filling up over time.
+
+    N-3 FIX: Computing `_lengths` for the model card previously trusted `is_dpo`
+    (derived from the current UI training mode selector) while `augmented_ds` may
+    have been produced under a different mode. If a DPO-structured dataset was
+    augmented then the user switched to SFT mode before training, the `else` branch
+    tried ds[COL_INSTRUCTION] on a dataset that only has prompt/chosen/rejected
+    columns — raising a KeyError.  The fix inspects the *actual* dataset columns
+    instead of relying on the UI mode flag.
     """
     app_state.stop_event.clear()
 
@@ -145,16 +153,33 @@ def on_train_click(
     )
     output_dir = tempfile.mkdtemp()
 
-    # Compute dataset stats for model card
-    if is_dpo:
-        _lengths = [
-            len(str(p)) + len(str(c)) + len(str(r))
-            for p, c, r in zip(ds[COL_PROMPT], ds[COL_CHOSEN], ds[COL_REJECTED])
-        ]
-    elif COL_TEXT in ds.column_names:
-        _lengths = [len(str(t)) for t in ds[COL_TEXT]]
-    else:
-        _lengths = [len(str(i)) + len(str(o)) for i, o in zip(ds[COL_INSTRUCTION], ds[COL_OUTPUT])]
+    # N-3 FIX: Compute dataset stats by inspecting ACTUAL column names on `ds`,
+    # not by trusting the UI `is_dpo` flag.  When `augmented_ds` comes from a
+    # previous augmentation run under a different mode the columns may not match
+    # what the current training_mode flag implies, causing a KeyError on the old
+    # conditional branches.
+    try:
+        if COL_PROMPT in ds.column_names and COL_CHOSEN in ds.column_names:
+            # DPO-structured dataset (regardless of current UI mode)
+            _lengths = [
+                len(str(p)) + len(str(c)) + len(str(r))
+                for p, c, r in zip(ds[COL_PROMPT], ds[COL_CHOSEN], ds[COL_REJECTED])
+            ]
+        elif COL_TEXT in ds.column_names:
+            _lengths = [len(str(t)) for t in ds[COL_TEXT]]
+        elif COL_INSTRUCTION in ds.column_names and COL_OUTPUT in ds.column_names:
+            _lengths = [
+                len(str(i)) + len(str(o))
+                for i, o in zip(ds[COL_INSTRUCTION], ds[COL_OUTPUT])
+            ]
+        else:
+            # Fallback: estimate from the first available column so model card
+            # generation never crashes even on unexpected column structures.
+            first_col = ds.column_names[0] if ds.column_names else None
+            _lengths = [len(str(v)) for v in ds[first_col]] if first_col else []
+    except Exception:
+        # Ultimate safety net — wrong column types, Arrow errors, etc.
+        _lengths = [100] * len(ds)
 
     dataset_info = {
         "num_examples": len(ds),
