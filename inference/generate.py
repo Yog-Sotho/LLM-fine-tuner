@@ -11,6 +11,7 @@ generate_text        — single-prompt greedy / sampling generation
 batch_generate       — batch generation from CSV / txt file; returns CSV path
 """
 
+import os
 import tempfile
 import threading
 
@@ -40,6 +41,12 @@ def _load_for_inference(model_name: str, lora_path: str | None):
 
     H-8 FIX: Access to the cache dict is guarded by _cache_lock to prevent
     race conditions in Gradio's multi-threaded request handling.
+
+    N-1 FIX: Eliminated the TOCTOU race where the cached entry could be evicted
+    by another thread between the write-back lock release and the final
+    `return app_state.inference_cache[key]` read, causing a KeyError crash.
+    The fix returns the locally-held (model, tokenizer) tuple directly instead
+    of re-reading from the shared dict after releasing the lock.
     """
     key = (model_name, lora_path)
 
@@ -68,15 +75,18 @@ def _load_for_inference(model_name: str, lora_path: str | None):
         device_map="auto" if torch.cuda.is_available() else None,
         trust_remote_code=True,
     )
-    import os as _os  # noqa: PLC0415
     model = (
         PeftModel.from_pretrained(base, lora_path)
-        if (lora_path and _os.path.isdir(lora_path))
+        if (lora_path and os.path.isdir(lora_path))
         else base
     )
     model.eval()
 
-    # Write back under lock, evicting any stale entry
+    # N-1 FIX: Write back under lock, then return the LOCAL (model, tokenizer)
+    # tuple — NOT app_state.inference_cache[key].
+    # The previous code returned `app_state.inference_cache[key]` after releasing
+    # the lock, creating a TOCTOU window: a concurrent thread could evict the
+    # entry between the lock release and the dict read, raising a KeyError.
     with _cache_lock:
         if key not in app_state.inference_cache:
             # Evict before adding to keep at most one model resident
@@ -84,7 +94,7 @@ def _load_for_inference(model_name: str, lora_path: str | None):
                 app_state.inference_cache.clear()
             app_state.inference_cache[key] = (model, tokenizer)
 
-    return app_state.inference_cache[key]
+    return model, tokenizer
 
 
 def generate_text(
@@ -136,16 +146,26 @@ def batch_generate(
     response. Every CSV row contained the prompt repeated verbatim before the actual
     generated text. Fixed by applying the same attention-mask-based prompt stripping
     that is already used in generate_text() and the evaluation module.
+
+    N-2 FIX: When prompts_file is empty (empty CSV or blank text file), len(prompts)
+    is 0, causing `min(8, 0) = 0` which makes `range(0, 0, 0)` raise ValueError.
+    Added an early-exit guard that returns a clear user-facing error message.
     """
     try:
         if prompts_file.name.endswith(FILE_EXT_CSV):
             df = pd.read_csv(prompts_file.name)
             if "prompt" not in df.columns:
-                return "CSV must have a 'prompt' column."
+                return "❌ CSV must have a 'prompt' column."
             prompts = df["prompt"].tolist()
         else:
             with open(prompts_file.name, "r", encoding="utf-8") as f:
                 prompts = [ln.strip() for ln in f if ln.strip()]
+
+        # N-2 FIX: Guard against empty input before computing batch_size.
+        # Previously `min(8, len(prompts))` returned 0 for an empty file, and
+        # `range(0, 0, 0)` raised ValueError with no user-friendly context.
+        if not prompts:
+            return "❌ No prompts found in the file. Please check that the file is not empty and contains a 'prompt' column."
 
         batch_size = min(8, len(prompts))
         all_responses: list[str] = []
