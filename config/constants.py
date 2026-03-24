@@ -13,6 +13,7 @@ Contains:
 Rule: nothing in this file may import from any other llm_fine_tuner module.
 """
 
+import shutil
 import warnings
 import torch
 
@@ -238,12 +239,18 @@ except ImportError:
     HAS_VLLM = False
 
 # ── heretic-llm (post-training restriction removal) ───────────────────────
-# H-11 FIX: This is an optional dependency — not present on all installs.
-# HAS_HERETIC guards subprocess calls to the `heretic` binary.
-try:
-    import subprocess as _sp
-    _result = _sp.run(["heretic", "--version"], capture_output=True, timeout=5)
-    HAS_HERETIC = _result.returncode == 0
-    del _sp, _result
-except Exception:
-    HAS_HERETIC = False
+# N-5 FIX: The previous implementation spawned a live subprocess
+# (`_sp.run(["heretic", "--version"], ...)`) at every application startup
+# to set this flag.  This had three problems:
+#   1. Added ~5s latency on every cold start when heretic is missing.
+#   2. If `_sp.run` itself raised (e.g. FileNotFoundError), the bare
+#      `except Exception` swallowed it but `_sp` was already bound in the
+#      module namespace — `del _sp` in the success branch never ran, leaving
+#      a dangling `subprocess` reference exported as `_sp`.
+#   3. The flag was never actually used anywhere in the codebase.
+#
+# Fix: use `shutil.which` — a pure-Python PATH scan, zero subprocesses,
+# zero latency, zero leak risk.  HAS_HERETIC is now used in training/sft.py
+# to guard the subprocess call and emit a clear message when the binary is
+# absent rather than silently skipping Heretic Mode.
+HAS_HERETIC: bool = shutil.which("heretic") is not None
