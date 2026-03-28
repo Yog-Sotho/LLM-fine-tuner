@@ -3,6 +3,15 @@ training/reward.py
 ===================
 Layer 3 — Reward Model training via trl.RewardTrainer.
 Imports: config, core, data.
+
+Patch log
+---------
+  H-4  : ``if not HAS_PPO`` guard moved to the very top of the function,
+         before any tokenizer or dataset loading. Previously it fired only
+         after the tokenizer was already loaded (~2s), giving users a
+         confusing delayed error message.
+  F-2  : ETAProgressCallback added to the RewardTrainer callback list so the
+         Gradio progress bar shows per-step ETA during reward model training.
 """
 
 import gc
@@ -18,9 +27,7 @@ from config.constants import (
     HAS_PPO,
     HAS_REWARD_TRAINER,
 )
-from core.callbacks import LoggingCallback, StopCallback
-# M-3 FIX: app_state is now actively used — stop_event.clear() called at start,
-# and StopCallback (which checks stop_event) is added to trainer callbacks.
+from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
 from core.state import app_state
 from data.loader import detect_file_type, load_dataset_from_file
 
@@ -43,14 +50,18 @@ def train_reward_model_v27(
 
     Returns a status string for display in the UI.
     """
+    # H-4 FIX: Both HAS_REWARD_TRAINER and HAS_PPO are checked at the very top,
+    # before any tokenizer or model loading. Previously HAS_PPO was checked only
+    # after the tokenizer was already loaded, causing a ~2s delay before the user
+    # saw the error message. Fast-fail at the earliest possible point.
     if not HAS_REWARD_TRAINER:
         return "❌ RewardTrainer not available. Install: pip install trl>=0.7.0"
+    if not HAS_PPO:
+        return "❌ AutoModelForCausalLMWithValueHead not available. Install: pip install trl>=0.7.0"
     if reward_file is None:
         return "❌ Please upload a reward dataset (CSV/JSONL with 'chosen' & 'rejected' columns)."
 
-    # H-3 FIX: Clear the stop event at the start of every reward training run.
-    # Previously app_state was imported but stop_event was never cleared or checked,
-    # making the UI stop button ineffective for reward training jobs.
+    # Clear the stop event at the start of every reward training run.
     app_state.stop_event.clear()
 
     try:
@@ -72,8 +83,6 @@ def train_reward_model_v27(
 
         if progress is not None:
             progress(0.1, desc="Loading base model for reward training…")
-        if not HAS_PPO:
-            return "❌ AutoModelForCausalLMWithValueHead not available. Install: pip install trl>=0.7.0"
 
         from trl import AutoModelForCausalLMWithValueHead  # lazy
 
@@ -139,23 +148,30 @@ def train_reward_model_v27(
         )
 
         log_cb = LoggingCallback()
-        # H-3 FIX: StopCallback is now wired in so the UI stop button works.
+        # Build callback list: stop button, logging, and ETA progress bar
+        rm_callbacks = [StopCallback(), log_cb]
+        # F-2: ETAProgressCallback wired in so the UI stop button and ETA
+        # both work for reward training (previously neither did).
+        if progress is not None:
+            rm_callbacks.append(
+                ETAProgressCallback(gradio_progress=progress, progress_start=0.3, progress_end=0.9)
+            )
+
         trainer = RewardTrainer(
             model=base_model,
             args=reward_config,
             train_dataset=rm_train_ds,
             eval_dataset=rm_eval_ds,
             tokenizer=tokenizer,
-            callbacks=[StopCallback(), log_cb],
+            callbacks=rm_callbacks,
         )
 
         if progress is not None:
-            progress(0.3, desc="Reward model training started…")
+            progress(0.3, desc="Reward model training started… calculating ETA…")
         t0 = time.time()
         trainer.train()
         elapsed = time.time() - t0
 
-        # H-3 FIX: Check stop event to report correct status in summary.
         status = "stopped by user" if app_state.stop_event.is_set() else "complete"
 
         base_model.save_pretrained(output_dir)
