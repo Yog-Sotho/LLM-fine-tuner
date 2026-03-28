@@ -6,12 +6,24 @@ Assembles all tabs, wires every event, and returns the gr.Blocks demo object.
 
 Rule: ALL .click() / .change() event wiring lives HERE and ONLY here.
 Tab files define layout; handlers.py defines logic; this file connects them.
+
+Patch log
+---------
+  F-6  : ``eval_btn.click`` outputs now include ``et["eval_preview_html"]``
+         as a third output.  ``on_evaluate_click()`` returns 3 values:
+         (metrics_str, result_dataframe, preview_html).  The HTML preview
+         is rendered by the ``eval_preview_html`` gr.HTML component added
+         to evaluation_tab.py.
+  F-2  : ``build_loss_chart`` now produces a DataFrame with an ETA column
+         (when timing data is present in log_records).  The loss_df
+         Dataframe headers in train_tab.py are unchanged — the ETA column
+         appears as an extra column which Gradio renders automatically.
 """
 
 import gradio as gr
 
 from config.constants import HAS_VLLM
-from core.hardware import get_hardware_summary, get_model_info  # H-10 FIX: explicit import
+from core.hardware import get_hardware_summary, get_model_info
 from data.augmentation import on_augment_click, on_quality_filter_click
 from export.gguf import on_export_gguf
 from export.registry import on_registry_upload, on_registry_list
@@ -117,10 +129,6 @@ def build_demo() -> gr.Blocks:
         )
 
         # ── Training Tab ───────────────────────────────────────────────────
-        # H-10 FIX: get_model_info is now a direct import at the top of this file.
-        # Previously called via __import__("core.hardware", fromlist=["get_model_info"])
-        # inside a lambda, which was confusing and unnecessary since the module is
-        # already imported for get_hardware_summary().
         tt["model_choice"].change(
             fn=get_model_info,
             inputs=[tt["model_choice"]],
@@ -265,15 +273,21 @@ def build_demo() -> gr.Blocks:
         )
 
         # ── Evaluation Tab ─────────────────────────────────────────────────
+        # F-6: on_evaluate_click now returns 3 values.  The third value is the
+        # HTML prediction preview which populates eval_preview_html.
         et["eval_btn"].click(
             fn=on_evaluate_click,
             inputs=[
                 et["eval_model_choice"], et["eval_custom_model"], et["eval_lora_path_in"],
                 et["eval_file"], et["eval_run_bertscore"], et["eval_use_judge"],
                 et["judge_model_name"], et["judge_criteria"],
-                et["eval_max_new_tokens_slider"],   # Minor Fix 6
+                et["eval_max_new_tokens_slider"],
             ],
-            outputs=[et["eval_metrics_out"], et["eval_results_df"]],
+            outputs=[
+                et["eval_metrics_out"],
+                et["eval_results_df"],
+                et["eval_preview_html"],   # F-6: new third output
+            ],
         )
 
         # ── Share Tab ──────────────────────────────────────────────────────
