@@ -10,6 +10,14 @@ create_zip_from_folder — zip an entire model directory into a temp file
 create_model_card      — generate and write a README.md model card
 on_peft_zip_upload     — Gradio UI handler: extract a PEFT adapter ZIP
 clear_gpu_cache        — free CUDA memory and report reserved VRAM
+
+Patch log
+---------
+  M-2  : ``create_model_card()`` produced an invalid YAML front-matter entry
+         ``- `` (empty string tag) when ``heretic_mode=False``.
+         HuggingFace Hub rejects model cards with empty YAML list items.
+         Fix: build the tags list programmatically and only include the
+         "heretic" tag when heretic_mode is True.
 """
 
 import gc
@@ -31,10 +39,10 @@ def create_zip_from_folder(folder_path: str) -> str:
     The archive uses ZIP_DEFLATED compression and preserves relative paths
     rooted at the parent of folder_path.
 
-    M-6 FIX: The caller (ui/handlers.py → on_train_click) now stores the
-    returned zip_path in app_state._last_zip_path and deletes the previous
-    zip on the next training run, preventing indefinite accumulation of
-    large ZIP files in the OS temp directory.
+    M-6 FIX: The caller (ui/handlers.py → on_train_click) stores the returned
+    zip_path in app_state._last_zip_path and deletes the previous zip on the
+    next training run, preventing indefinite accumulation of large ZIP files in
+    the OS temp directory.
     """
     with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
         zip_path = tmp.name
@@ -67,27 +75,36 @@ def create_model_card(
     peft_method  : PEFT method string (e.g. 'LoRA', 'Full Fine-tuning')
     training_mode: 'sft' or 'dpo'
     heretic_mode : whether Heretic Mode was applied
+
+    M-2 FIX: ``tag_heretic = "" if not heretic_mode`` produced an empty YAML
+    list entry ``- `` (literal empty string) which HuggingFace Hub rejects with
+    a 400 error when pushing.  Tags are now built as a Python list and rendered
+    cleanly — the "heretic" tag is only included when heretic_mode is True.
     """
     mode          = peft_method if peft_method != "Full Fine-tuning" else "full fine-tune"
     training_type = "DPO Alignment" if training_mode == "dpo" else "Supervised Fine-Tuning"
 
     tag_peft = (
-        "lora"         if peft_method in ["LoRA", "QLoRA Enhanced"]
-        else "peft"    if peft_method != "Full Fine-tuning"
+        "lora"           if peft_method in ["LoRA", "QLoRA Enhanced"]
+        else "peft"      if peft_method != "Full Fine-tuning"
         else "full-finetune"
     )
-    tag_train  = "dpo" if training_mode == "dpo" else "sft"
-    tag_heretic = "heretic" if heretic_mode else ""
+    tag_train = "dpo" if training_mode == "dpo" else "sft"
+
+    # M-2 FIX: Build the tags list conditionally so no empty string is ever
+    # serialised as a YAML list item.  The previous code always included an
+    # empty-string tag entry when heretic_mode was False.
+    tags: list[str] = ["fine-tuned", tag_peft, "causal-lm", tag_train, "gguf-ready"]
+    if heretic_mode:
+        tags.append("heretic")
+
+    # Render as YAML list: "- tag\n- tag\n..."
+    tags_yaml = "\n".join(f"- {t}" for t in tags)
 
     card = f"""---
 language: en
 tags:
-- fine-tuned
-- {tag_peft}
-- causal-lm
-- {tag_train}
-- {tag_heretic}
-- gguf-ready
+{tags_yaml}
 datasets:
 - custom
 ---
