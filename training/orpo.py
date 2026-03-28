@@ -3,6 +3,11 @@ training/orpo.py
 =================
 Layer 3 — ORPO (Odds Ratio Preference Optimisation) training.
 Imports: config, core, data.
+
+Patch log
+---------
+  F-2  : ETAProgressCallback added to the ORPOTrainer callback list so the
+         Gradio progress bar shows per-step ETA during ORPO training.
 """
 
 import gc
@@ -19,10 +24,8 @@ from config.constants import (
     COL_REJECTED,
     HAS_ORPO,
 )
-from core.callbacks import LoggingCallback, StopCallback
+from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
 from core.hardware import get_lora_targets
-# H-3 FIX: app_state is now actively used — stop_event.clear() at start,
-# StopCallback checks it every step.
 from core.state import app_state
 from data.loader import detect_file_type, load_dataset_from_file
 from data.preprocessing import validate_and_clean_dataset
@@ -51,9 +54,7 @@ def train_orpo_v27(
     if orpo_file is None:
         return "❌ Please upload a preference dataset (prompt, chosen, rejected)."
 
-    # H-3 FIX: Clear the stop event at the start of every ORPO training run.
-    # Previously the stop button did not work for ORPO jobs — the stop event
-    # was never cleared and StopCallback was not wired to the trainer.
+    # Clear the stop event at the start of every ORPO training run.
     app_state.stop_event.clear()
 
     try:
@@ -149,23 +150,30 @@ def train_orpo_v27(
 
         orpo_config = ORPOConfig(**orpo_config_kwargs)
         log_cb = LoggingCallback()
-        # H-3 FIX: StopCallback now wired in so the UI stop button works for ORPO jobs.
+
+        # Build callback list: stop button, logging, and ETA progress bar
+        orpo_callbacks = [StopCallback(), log_cb]
+        # F-2: ETAProgressCallback wired in so users see per-step ETA.
+        if progress is not None:
+            orpo_callbacks.append(
+                ETAProgressCallback(gradio_progress=progress, progress_start=0.3, progress_end=0.9)
+            )
+
         orpo_trainer = ORPOTrainer(
             model=model,
             args=orpo_config,
             train_dataset=orpo_train_ds,
             eval_dataset=orpo_eval_ds,
             tokenizer=tokenizer,
-            callbacks=[StopCallback(), log_cb],
+            callbacks=orpo_callbacks,
         )
 
         if progress is not None:
-            progress(0.3, desc="ORPO training started…")
+            progress(0.3, desc="ORPO training started… calculating ETA…")
         t0 = time.time()
         orpo_trainer.train()
         elapsed = time.time() - t0
 
-        # H-3 FIX: Check stop event to report correct status in summary.
         status = "stopped by user" if app_state.stop_event.is_set() else "complete"
 
         if progress is not None:
