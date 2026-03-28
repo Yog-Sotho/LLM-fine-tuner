@@ -14,6 +14,17 @@ on_push               — push model to HF Hub
 on_file_upload        — load/validate dataset on file upload
 on_refresh_preview    — re-preview dataset after column mapping change
 build_loss_chart      — turn log records into a display DataFrame
+
+Patch log
+---------
+  F-2  : ``build_loss_chart()`` now includes an "ETA" column whenever the
+         log records contain ``eta_s`` data (populated by the updated
+         ``LoggingCallback`` in core/callbacks.py).  Old records that
+         predate this field (e.g. from CLI runs or pre-patch log replay)
+         are handled gracefully — the ETA column is simply omitted.
+         The ETA value is formatted as a human-readable string
+         ("2m 30s", "45s", etc.) so non-technical users can read it
+         directly in the Loss Curve table without conversion.
 """
 
 import os
@@ -59,22 +70,6 @@ def on_train_click(
 
     Orchestrates: file load → validate → preset apply → train → card → zip.
     Returns (log_str, zip_file_path, model_dir_path, log_records).
-
-    C-5 FIX: When the user has augmented or filtered the dataset, `augmented_ds`
-    will be a non-None HuggingFace Dataset object. In that case we skip
-    loading from the raw file and use the pre-processed dataset directly,
-    ensuring the button-click result is what actually gets trained on.
-
-    M-6 FIX: The previous training run's ZIP file is deleted at the start of
-    each new run to prevent the OS temp directory from filling up over time.
-
-    N-3 FIX: Computing `_lengths` for the model card previously trusted `is_dpo`
-    (derived from the current UI training mode selector) while `augmented_ds` may
-    have been produced under a different mode. If a DPO-structured dataset was
-    augmented then the user switched to SFT mode before training, the `else` branch
-    tried ds[COL_INSTRUCTION] on a dataset that only has prompt/chosen/rejected
-    columns — raising a KeyError.  The fix inspects the *actual* dataset columns
-    instead of relying on the UI mode flag.
     """
     app_state.stop_event.clear()
 
@@ -96,8 +91,6 @@ def on_train_click(
     is_dpo     = training_mode == "dpo"
 
     # C-5 FIX: Use the augmented/filtered dataset from state when available.
-    # This ensures "Augment → Train" actually trains on the augmented data
-    # rather than re-loading the original file.
     if augmented_ds is not None:
         ds = augmented_ds
         issues_str = "✅ Using augmented/filtered dataset from Data Enhancement step."
@@ -107,7 +100,6 @@ def on_train_click(
 
         ftype = detect_file_type(file)
 
-        # Build column mapping from UI dropdowns
         col_map = {}
         if is_dpo:
             if col_inst and col_out and col_text:
@@ -153,14 +145,9 @@ def on_train_click(
     )
     output_dir = tempfile.mkdtemp()
 
-    # N-3 FIX: Compute dataset stats by inspecting ACTUAL column names on `ds`,
-    # not by trusting the UI `is_dpo` flag.  When `augmented_ds` comes from a
-    # previous augmentation run under a different mode the columns may not match
-    # what the current training_mode flag implies, causing a KeyError on the old
-    # conditional branches.
+    # N-3 FIX: Compute dataset stats by inspecting ACTUAL column names on `ds`.
     try:
         if COL_PROMPT in ds.column_names and COL_CHOSEN in ds.column_names:
-            # DPO-structured dataset (regardless of current UI mode)
             _lengths = [
                 len(str(p)) + len(str(c)) + len(str(r))
                 for p, c, r in zip(ds[COL_PROMPT], ds[COL_CHOSEN], ds[COL_REJECTED])
@@ -173,12 +160,9 @@ def on_train_click(
                 for i, o in zip(ds[COL_INSTRUCTION], ds[COL_OUTPUT])
             ]
         else:
-            # Fallback: estimate from the first available column so model card
-            # generation never crashes even on unexpected column structures.
             first_col = ds.column_names[0] if ds.column_names else None
             _lengths = [len(str(v)) for v in ds[first_col]] if first_col else []
     except Exception:
-        # Ultimate safety net — wrong column types, Arrow errors, etc.
         _lengths = [100] * len(ds)
 
     dataset_info = {
@@ -187,8 +171,6 @@ def on_train_click(
     }
 
     try:
-        # CRITICAL FIX #1: use_qlora_enhanced is NOT passed to train_model;
-        # peft_method already encodes that choice.
         msg, log_records = train_model(
             model_name, ds, output_dir, hyperparams,
             device, peft_method, use_lora, lora_rank, lora_alpha,
@@ -312,10 +294,7 @@ def on_file_upload(file, training_mode="sft"):
 
 
 def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_state, file_type_state):
-    """Re-build dataset preview after the user changes column mapping dropdowns.
-
-    FIX 2e: Refresh preview button.
-    """
+    """Re-build dataset preview after the user changes column mapping dropdowns."""
     if file is None or raw_df_state is None or file_type_state is None:
         return pd.DataFrame(), "⚠️ No dataset loaded."
 
@@ -345,7 +324,6 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
                     raw_df_state.to_csv(tmp.name, index=False)
                 else:
                     raw_df_state.to_excel(tmp.name, index=False)
-                # Create a minimal file-like proxy so load_dataset_from_file works
                 dummy = type("_F", (), {"name": tmp.name})()
                 ds = load_dataset_from_file(dummy, file_type_state, col_map, is_dpo=is_dpo)
             finally:
@@ -365,12 +343,47 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
 
 # ── Loss chart ─────────────────────────────────────────────────────────────
 
+def _fmt_eta(eta_s: float) -> str:
+    """Format ETA seconds into a human-readable string.
+
+    Examples: 0 → "—", 45.0 → "45s", 125.0 → "2m 05s", 3720.0 → "1h 02m"
+    """
+    eta_s = max(0.0, eta_s)
+    if eta_s < 1:
+        return "—"
+    if eta_s < 60:
+        return f"{int(eta_s)}s"
+    if eta_s < 3600:
+        m, s = divmod(int(eta_s), 60)
+        return f"{m}m {s:02d}s"
+    h, rem = divmod(int(eta_s), 3600)
+    m = rem // 60
+    return f"{h}h {m:02d}m"
+
+
 def build_loss_chart(log_records: list) -> pd.DataFrame:
-    """Convert a list of LoggingCallback records into a display DataFrame."""
+    """Convert a list of LoggingCallback records into a display DataFrame.
+
+    F-2 FIX: When records contain ``eta_s`` data (added by the updated
+    LoggingCallback in core/callbacks.py), an "ETA" column with human-readable
+    strings is included.  Old records that lack ``eta_s`` (CLI runs, pre-patch
+    replays) produce a DataFrame without the ETA column — fully backwards
+    compatible with callers that only look at "Step", "Train Loss", "Eval Loss".
+    """
     if not log_records:
         return pd.DataFrame(columns=["Step", "Train Loss", "Eval Loss"])
-    return pd.DataFrame({
+
+    data: dict = {
         "Step":       [r["step"]       for r in log_records],
         "Train Loss": [r["train_loss"] for r in log_records],
         "Eval Loss":  [r["eval_loss"]  for r in log_records],
-    })
+    }
+
+    # F-2: Include ETA column only when timing data is actually present.
+    # Using .get() with a sentinel avoids KeyError on old-format records.
+    _MISSING = object()
+    first_eta = log_records[0].get("eta_s", _MISSING)
+    if first_eta is not _MISSING:
+        data["ETA"] = [_fmt_eta(r.get("eta_s", 0.0)) for r in log_records]
+
+    return pd.DataFrame(data)
