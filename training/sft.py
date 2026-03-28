@@ -9,6 +9,18 @@ Functions
 train_model          — unified SFT/DPO training entry point
 create_model_card    — generate a markdown model card string
 load_qlora_model_v27 — standalone QLoRA model loader (retained, currently dead code)
+
+Patch log
+---------
+  F-2 : ETAProgressCallback imported from core.callbacks and added to all
+        trainer callback lists (SFT and DPO). The callback updates the Gradio
+        progress bar with per-step ETA while training runs.
+  M-4 : prompt_tuning_init_text was hardcoded to "Classify the sentiment of
+        this review:" which is meaningless for non-sentiment tasks. It now
+        uses the ``system_prompt`` parameter the user already configures in
+        the UI ("You are a helpful, respectful and honest assistant." by
+        default). This gives a sensible, task-neutral initialisation for
+        Prompt Tuning in any domain.
 """
 
 import gc
@@ -56,7 +68,7 @@ from config.constants import (
     QLORA_ENHANCED_BNB_KWARGS,
     QLORA_ENHANCED_LORA_CONFIG,
 )
-from core.callbacks import LoggingCallback, StopCallback
+from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
 from core.hardware import get_lora_targets, is_unsloth_supported
 from core.state import app_state
 from data.preprocessing import preprocess_function
@@ -167,7 +179,8 @@ def train_model(
         # ── Path A: QLoRA Enhanced (CUDA only) ────────────────────────────
         if use_qlora_enhanced and device != "cuda":
             log_callback.records.append({
-                "step": 0, "train_loss": 0.0,
+                "step": 0, "train_loss": 0.0, "eval_loss": float("nan"),
+                "elapsed_s": 0.0, "eta_s": 0.0,
                 "note": "⚠️ QLoRA Enhanced requested but CUDA unavailable — loading float32.",
             })
             if progress is not None:
@@ -312,11 +325,17 @@ def train_model(
             elif peft_method == "Prompt Tuning":
                 # v3.1 Fix #1 (Critical): PromptTuningConfig does NOT accept
                 # num_transformer_layers — removed to prevent TypeError.
+                #
+                # M-4 FIX: prompt_tuning_init_text was hardcoded to
+                # "Classify the sentiment of this review:" which is wrong for
+                # non-sentiment tasks. It now uses the ``system_prompt``
+                # parameter that the user already customises in the UI,
+                # giving a task-neutral initialisation for any domain.
                 prompt_cfg = PromptTuningConfig(
                     task_type=TaskType.CAUSAL_LM,
                     num_virtual_tokens=prompt_tuning_num_virtual_tokens,
                     prompt_tuning_init=PromptTuningInit.TEXT,
-                    prompt_tuning_init_text="Classify the sentiment of this review:",
+                    prompt_tuning_init_text=system_prompt,  # M-4 FIX
                     tokenizer_name_or_path=model_name,
                 )
                 model = get_peft_model(model, prompt_cfg)
@@ -391,6 +410,9 @@ def train_model(
             dpo_callbacks = [StopCallback(), log_callback]
             if early_stop > 0 and eval_ds is not None:
                 dpo_callbacks.append(EarlyStoppingCallback(early_stopping_patience=int(early_stop)))
+            # F-2: Add ETA progress callback for DPO training
+            if progress is not None:
+                dpo_callbacks.append(ETAProgressCallback(gradio_progress=progress))
 
             # v2.9: Use DPOConfig for beta — passing beta to DPOTrainer directly
             # is deprecated in TRL >= 0.9.
@@ -422,6 +444,9 @@ def train_model(
             sft_callbacks = [StopCallback(), log_callback]
             if early_stop > 0 and eval_ds is not None:
                 sft_callbacks.append(EarlyStoppingCallback(early_stopping_patience=int(early_stop)))
+            # F-2: Add ETA progress callback for SFT training
+            if progress is not None:
+                sft_callbacks.append(ETAProgressCallback(gradio_progress=progress))
             trainer = Trainer(
                 model=model,
                 args=training_args,
@@ -444,7 +469,7 @@ def train_model(
 
         # ── Train ──────────────────────────────────────────────────────────
         if progress is not None:
-            progress(0.3, desc="Training started… ")
+            progress(0.3, desc="Training started… calculating ETA…")
         t0 = time.time()
         trainer.train(resume_from_checkpoint=resume_path)
         elapsed = time.time() - t0
