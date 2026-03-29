@@ -1,4 +1,20 @@
-"""ui/tabs/train_tab.py — Model selection, PEFT, hyperparams, training controls."""
+"""ui/tabs/train_tab.py — Model selection, PEFT, hyperparams, training controls.
+
+Patch log
+---------
+  Fix-1 (High) : ``loss_df`` gr.Dataframe previously declared
+                 ``headers=["Step", "Train Loss", "Eval Loss"]`` and
+                 ``datatype=["number", "number", "number"]``.  When
+                 ``build_loss_chart()`` returns a 4-column DataFrame that
+                 includes the new "ETA" string column, Gradio 5 tries to
+                 coerce the 4th column to ``number``, producing a column
+                 of NaN values — making the ETA feature invisible to users.
+                 Fix: remove both constraints so Gradio infers column names
+                 and types directly from the DataFrame at render time.
+                 This is the correct Gradio 5 pattern for dynamically-shaped
+                 DataFrames and is fully backwards-compatible with the 3-column
+                 output produced by old-format log records.
+"""
 import gradio as gr
 
 from config.constants import HAS_UNSLOTH, HAS_VLLM
@@ -132,9 +148,14 @@ def build_train_tab() -> dict:
                 )
                 with gr.Column(elem_id="loss-chart-wrap"):
                     gr.Markdown("### 📉 Loss Curve")
+                    # Fix-1: headers and datatype constraints removed.
+                    # build_loss_chart() returns either 3 columns (Step, Train Loss,
+                    # Eval Loss) or 4 columns (+ ETA string) depending on whether
+                    # timing data is present.  Declaring a fixed 3-column schema with
+                    # datatype=["number","number","number"] caused Gradio 5 to coerce
+                    # the ETA string column to NaN, making it invisible.
+                    # Gradio infers the correct schema from the DataFrame at render time.
                     loss_df = gr.Dataframe(
-                        headers=["Step", "Train Loss", "Eval Loss"],
-                        datatype=["number", "number", "number"],
                         label=" ", interactive=False,
                     )
                 clear_gpu_btn = gr.Button("🧹 Clear GPU Cache", variant="secondary")
