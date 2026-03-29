@@ -179,7 +179,7 @@ def train_reward_model_v27(
         del base_model
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-            gc.collect()
+        gc.collect()  # M-16 FIX: always run GC, not only when CUDA is available
 
         final_loss = log_cb.records[-1]["train_loss"] if log_cb.records else "N/A"
         return (

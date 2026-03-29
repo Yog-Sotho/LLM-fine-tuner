@@ -11,6 +11,7 @@ generate_text        — single-prompt greedy / sampling generation
 batch_generate       — batch generation from CSV / txt file; returns CSV path
 """
 
+import atexit
 import os
 import tempfile
 import threading
@@ -202,8 +203,11 @@ def batch_generate(
 
         result_df = pd.DataFrame({"prompt": prompts, "response": all_responses})
         with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as tmp:
-            result_df.to_csv(tmp.name, index=False)
-        return tmp.name
+            tmp_path = tmp.name
+            result_df.to_csv(tmp_path, index=False)
+        # M-6 FIX: Register cleanup so the temp CSV is deleted on process exit.
+        atexit.register(lambda p=tmp_path: os.unlink(p) if os.path.exists(p) else None)
+        return tmp_path
 
     except Exception as e:
         return str(e)

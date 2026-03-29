@@ -20,20 +20,21 @@
 #   v3.2.1 (audit fixes) — heretic-llm moved to optional; pyproject.toml backend corrected.
 
 # ── Core dependencies ─────────────────────────────────────────────────
-gradio>=5.0.0
-transformers>=4.48.0
-datasets>=3.0.0
-peft>=0.14.0
-accelerate>=1.3.0
-bitsandbytes>=0.45.0
-trl>=0.8.0                  # Required for DPO, SFTTrainer, RewardTrainer, PPOTrainer, ORPO
-torch>=2.5.0
-torchvision>=0.20.0
-torchaudio>=2.5.0
-numpy>=2.0.0
-pandas>=2.2.0
-safetensors>=0.4.3          # v3.2: Required for safe model save/load (was implicit via transformers)
-tqdm>=4.66.0                # v3.2: Progress bars for tokenisation & dataset ops (was implicit)
+gradio>=5.0.0,<6.0
+transformers>=4.48.0,<5.0   # L-13: upper bound to avoid breaking API changes
+datasets>=3.0.0,<4.0
+peft>=0.14.0,<1.0
+accelerate>=1.3.0,<2.0
+# M-19: bitsandbytes requires CUDA; CPU-only users should omit or install with --prefer-binary.
+bitsandbytes>=0.45.0,<0.46
+trl>=0.8.0,<0.13            # L-13: upper bound; trl API changes rapidly
+torch>=2.5.0,<3.0
+torchvision>=0.20.0,<1.0
+torchaudio>=2.5.0,<3.0
+numpy>=2.0.0,<3.0
+pandas>=2.2.0,<3.0
+safetensors>=0.4.3,<1.0     # v3.2: Required for safe model save/load (was implicit via transformers)
+tqdm>=4.66.0,<5.0           # v3.2: Progress bars for tokenisation & dataset ops (was implicit)
 
 # ── File-format support ───────────────────────────────────────────────
 PyPDF2>=3.0.0               # PDF ingestion (optional at runtime, guarded by HAS_PDF)

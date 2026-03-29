@@ -100,8 +100,8 @@ def test_qlora_enhanced_override_message(monkeypatch):
             "--peft", "LoRA",
             "--qlora-enhanced",
         ])
-        # The override warning must appear before any error
-        assert "overrides" in result.output or "QLoRA Enhanced" in result.output
+        # L-18 FIX: Use 'and' — 'or' could pass falsely if only one half matches.
+        assert "overrides" in result.output and "QLoRA Enhanced" in result.output
     finally:
         os.unlink(path)
 

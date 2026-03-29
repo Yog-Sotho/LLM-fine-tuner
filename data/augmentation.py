@@ -123,11 +123,12 @@ def quality_filter_v27(
     original_len = len(dataset)
     try:
         if is_dpo:
+            # H-1 FIX: HuggingFace Dataset rows don't support .get(); use direct key access.
             dataset = dataset.filter(
                 lambda x: (
-                    min_length <= len(str(x.get(COL_PROMPT,   ""))) <= max_length
-                    and min_length <= len(str(x.get(COL_CHOSEN,  ""))) <= max_length
-                    and min_length <= len(str(x.get(COL_REJECTED,""))) <= max_length
+                    min_length <= len(str(x[COL_PROMPT])) <= max_length
+                    and min_length <= len(str(x[COL_CHOSEN])) <= max_length
+                    and min_length <= len(str(x[COL_REJECTED])) <= max_length
                 )
             )
         elif COL_TEXT in dataset.column_names:
@@ -137,10 +138,11 @@ def quality_filter_v27(
         elif COL_INSTRUCTION in dataset.column_names:
             # v3.1 Fix #6: Combined instruction+output length checked against
             # max_length * 2 because both fields are concatenated during tokenisation.
+            # H-1 FIX: Use direct key access instead of .get() for Dataset rows.
             dataset = dataset.filter(
                 lambda x: (
                     min_length
-                    <= len(str(x.get(COL_INSTRUCTION, ""))) + len(str(x.get(COL_OUTPUT, "")))
+                    <= len(str(x[COL_INSTRUCTION])) + len(str(x[COL_OUTPUT]))
                     <= max_length * 2
                 )
             )

@@ -208,9 +208,10 @@ def llm_judge_evaluate(
                 do_sample=False,
                 pad_token_id=tokenizer.eos_token_id,
             )
-        judgment = tokenizer.decode(
-            out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
-        ).strip()
+        # M-5 FIX: Use attention_mask sum to find actual input length instead of
+        # shape[1], which over-counts when padding is added on the left.
+        input_len = int(inputs["attention_mask"].sum().item())
+        judgment = tokenizer.decode(out[0][input_len:], skip_special_tokens=True).strip()
         results.append({"prompt": prompt, "response": response, "judgment": judgment})
 
     return results
@@ -513,9 +514,14 @@ def on_evaluate_click(
             "prompt": prompts[:len(predictions)],
             "prediction": predictions,
         }
-        if references:
+        # M-4 FIX: Only include optional columns when lengths match to avoid DataFrame errors.
+        if references and len(references) == len(predictions):
+            result_data["reference"] = references
+        elif references:
             result_data["reference"] = references[:len(predictions)]
-        if judge_results:
+        if judge_results and len(judge_results) == len(predictions):
+            result_data["judgment"] = [r["judgment"] for r in judge_results]
+        elif judge_results:
             result_data["judgment"] = [r["judgment"] for r in judge_results[:len(predictions)]]
 
         # F-6: Build the per-example HTML preview (safe — never raises)

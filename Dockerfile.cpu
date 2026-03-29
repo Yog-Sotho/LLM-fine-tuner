@@ -91,5 +91,11 @@ EXPOSE 7860
 
 VOLUME ["/app/cache/huggingface", "/app/data", "/app/models", "/app/outputs"]
 
+# H-3 FIX: Run as non-root user to match GPU Dockerfile security posture.
+RUN groupadd -r llmuser && useradd -r -g llmuser -d /app llmuser \
+    && chown -R llmuser:llmuser /app \
+    && mkdir -p /home/llmuser && chown -R llmuser:llmuser /home/llmuser
+USER llmuser
+
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD []

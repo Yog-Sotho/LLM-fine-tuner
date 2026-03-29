@@ -259,8 +259,8 @@ def on_file_upload(file, training_mode="sft"):
         raw_df      = None
 
         if ftype in ("csv", "excel"):
-            import pandas as _pd
-            raw_df = _pd.read_csv(file.name) if ftype == "csv" else _pd.read_excel(file.name)
+            # L-4 FIX: Use top-level pd import instead of re-importing as _pd.
+            raw_df = pd.read_csv(file.name) if ftype == "csv" else pd.read_excel(file.name)
             cols   = list(raw_df.columns)
 
             if is_dpo:
@@ -315,7 +315,8 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
             col_map[col_text] = COL_TEXT
 
     try:
-        import tempfile as _tmp, os as _os
+        import tempfile as _tmp
+        import os as _os
 
         if file_type_state in ("csv", "excel"):
             tmp = _tmp.NamedTemporaryFile(delete=False, suffix=f".{file_type_state}")
@@ -327,7 +328,9 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
                 dummy = type("_F", (), {"name": tmp.name})()
                 ds = load_dataset_from_file(dummy, file_type_state, col_map, is_dpo=is_dpo)
             finally:
-                _os.unlink(tmp.name)
+                # M-14 FIX: Guard against FileNotFoundError if write failed before file was created.
+                if _os.path.exists(tmp.name):
+                    _os.unlink(tmp.name)
         else:
             ds = load_dataset_from_file(file, file_type_state, col_map, is_dpo=is_dpo)
 

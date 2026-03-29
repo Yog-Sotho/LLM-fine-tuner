@@ -14,6 +14,7 @@ on_vllm_generate             — Gradio UI handler for the vLLM Generate button
 
 import gc
 import os
+import threading
 
 import gradio as gr
 import torch
@@ -22,6 +23,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from config.constants import HAS_VLLM
 from core.state import app_state
+
+# M-2 FIX: Protect vLLM cache eviction from race conditions under concurrent requests.
+_vllm_cache_lock = threading.Lock()
 
 
 def merge_adapter_for_inference(
@@ -129,25 +133,27 @@ def vllm_generate_v27(
     from vllm import LLM, SamplingParams  # lazy — only when vLLM is available
 
     cache_key = (model_path, vllm_quantization, tensor_parallel_size)
-    if cache_key in app_state.vllm_cache:
-        llm = app_state.vllm_cache[cache_key]
-    else:
-        # H-9 FIX: Evict oldest engine before adding a new one when at capacity.
-        if len(app_state.vllm_cache) >= app_state.max_vllm_engines:
-            oldest_key = next(iter(app_state.vllm_cache))
-            del app_state.vllm_cache[oldest_key]
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+    # M-2 FIX: Hold lock for entire cache check/evict/insert to prevent race conditions.
+    with _vllm_cache_lock:
+        if cache_key in app_state.vllm_cache:
+            llm = app_state.vllm_cache[cache_key]
+        else:
+            # H-9 FIX: Evict oldest engine before adding a new one when at capacity.
+            if len(app_state.vllm_cache) >= app_state.max_vllm_engines:
+                oldest_key = next(iter(app_state.vllm_cache))
+                del app_state.vllm_cache[oldest_key]
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
 
-        quant = None if vllm_quantization == "none" else vllm_quantization
-        llm = LLM(
-            model=model_path,
-            quantization=quant,
-            tensor_parallel_size=tensor_parallel_size,
-            trust_remote_code=True,
-        )
-        app_state.vllm_cache[cache_key] = llm
+            quant = None if vllm_quantization == "none" else vllm_quantization
+            llm = LLM(
+                model=model_path,
+                quantization=quant,
+                tensor_parallel_size=tensor_parallel_size,
+                trust_remote_code=True,
+            )
+            app_state.vllm_cache[cache_key] = llm
 
     sampling_params = SamplingParams(
         temperature=temperature,

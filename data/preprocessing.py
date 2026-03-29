@@ -35,6 +35,7 @@ from config.constants import (
     COL_PROMPT,
     COL_CHOSEN,
     COL_REJECTED,
+    PREVIEW_ROWS,  # L-5: centralised row count for preview tables
 )
 
 
@@ -171,17 +172,22 @@ def preview_dataset(dataset: Dataset, is_dpo: bool = False) -> pd.DataFrame:
         return pd.DataFrame({"Status": ["⚠️ Dataset is empty after cleaning."]})
 
     if is_dpo:
+        # M-10 FIX: Guard against missing DPO columns to avoid KeyError.
+        missing = [c for c in [COL_PROMPT, COL_CHOSEN, COL_REJECTED]
+                   if c not in dataset.column_names]
+        if missing:
+            return pd.DataFrame({"Error": [f"DPO dataset missing columns: {missing}"]})
         return pd.DataFrame({
-            COL_PROMPT:   dataset[COL_PROMPT][:5],
-            COL_CHOSEN:   dataset[COL_CHOSEN][:5],
-            COL_REJECTED: dataset[COL_REJECTED][:5],
+            COL_PROMPT:   dataset[COL_PROMPT][:PREVIEW_ROWS],
+            COL_CHOSEN:   dataset[COL_CHOSEN][:PREVIEW_ROWS],
+            COL_REJECTED: dataset[COL_REJECTED][:PREVIEW_ROWS],
         })
     elif COL_TEXT in dataset.column_names:
-        return pd.DataFrame({COL_TEXT: dataset[COL_TEXT][:10]})
+        return pd.DataFrame({COL_TEXT: dataset[COL_TEXT][:PREVIEW_ROWS]})
     else:
         # N-7 FIX: use explicit column_names check instead of dataset.get()
-        inst_data = dataset[COL_INSTRUCTION][:5] if COL_INSTRUCTION in dataset.column_names else []
-        out_data  = dataset[COL_OUTPUT][:5]      if COL_OUTPUT      in dataset.column_names else []
+        inst_data = dataset[COL_INSTRUCTION][:PREVIEW_ROWS] if COL_INSTRUCTION in dataset.column_names else []
+        out_data  = dataset[COL_OUTPUT][:PREVIEW_ROWS]      if COL_OUTPUT      in dataset.column_names else []
         return pd.DataFrame({
             COL_INSTRUCTION: inst_data,
             COL_OUTPUT:      out_data,
@@ -204,6 +210,12 @@ def preprocess_function(
 
     Returns a dict with input_ids, attention_mask, and labels.
     """
+    # M-13 FIX: Catch None tokenizer early with a clear error rather than an
+    # AttributeError deep inside the function.
+    if tokenizer is None:
+        raise ValueError(
+            "tokenizer must not be None — pass a loaded AutoTokenizer instance."
+        )
     if use_chat_template and tokenizer.chat_template is not None:
         texts = []
         if task_type == COL_INSTRUCTION:

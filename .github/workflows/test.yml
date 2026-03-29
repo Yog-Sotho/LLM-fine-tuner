@@ -1,0 +1,40 @@
+# L-15: CI/CD pipeline — runs linting and tests on every push and pull request.
+name: Tests & Linting
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          # Install CPU-only torch to keep CI fast (no GPU required)
+          pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+          # Install remaining deps, skipping GPU-only packages
+          grep -vE "^(flash-attn|vllm|auto-gptq|exllamav2|unsloth|bitsandbytes|#)" requirements.txt \
+            | pip install -r /dev/stdin
+          pip install bitsandbytes --prefer-binary || echo "bitsandbytes CPU optional — skipping"
+          pip install ruff pytest
+
+      - name: Lint with ruff
+        run: ruff check .
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short

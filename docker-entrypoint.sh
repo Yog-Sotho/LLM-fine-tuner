@@ -54,24 +54,28 @@ fi
 # ── CUDA / hardware check ─────────────────────────────────────────────────────
 log "Checking hardware..."
 python3 - <<'PYCHECK'
-import torch, psutil, os
+# M-17 FIX: Wrap hardware check in try/except so a bad install doesn't crash the container.
+try:
+    import torch, psutil, os
 
-gpu = "No GPU detected"
-vram = ""
-if torch.cuda.is_available():
-    gpu = torch.cuda.get_device_name(0)
-    vram = f"  VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB"
+    gpu = "No GPU detected"
+    vram = ""
+    if torch.cuda.is_available():
+        gpu = torch.cuda.get_device_name(0)
+        vram = f"  VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB"
 
-ram = psutil.virtual_memory().total / 1e9
-print(f"  GPU:  {gpu}{vram}")
-print(f"  RAM:  {ram:.1f} GB")
-print(f"  PyTorch: {torch.__version__}")
+    ram = psutil.virtual_memory().total / 1e9
+    print(f"  GPU:  {gpu}{vram}")
+    print(f"  RAM:  {ram:.1f} GB")
+    print(f"  PyTorch: {torch.__version__}")
 
-# Warn if no GPU
-if not torch.cuda.is_available():
-    print("\n  ⚠️  No NVIDIA GPU found — running in CPU mode.")
-    print("  ⚠️  Training large models will be very slow.")
-    print("  ⚠️  Recommended: stick to gpt2 or distilgpt2 in CPU mode.")
+    # Warn if no GPU
+    if not torch.cuda.is_available():
+        print("\n  ⚠️  No NVIDIA GPU found — running in CPU mode.")
+        print("  ⚠️  Training large models will be very slow.")
+        print("  ⚠️  Recommended: stick to gpt2 or distilgpt2 in CPU mode.")
+except ImportError as _e:
+    print(f"  ⚠️  Hardware check skipped: {_e}")
 PYCHECK
 
 echo ""
@@ -101,8 +105,9 @@ if [[ $# -eq 0 ]]; then
     # fragile and can cause unexpected argument splitting.
     EXTRA_ARGS_ARRAY=()
     if [[ -n "${EXTRA_ARGS:-}" ]]; then
-        # shellcheck disable=SC2206
-        EXTRA_ARGS_ARRAY=(${EXTRA_ARGS})
+        # M-18 FIX: Use read -ra for proper shell word splitting instead of
+        # unquoted variable expansion which breaks on arguments with spaces.
+        read -ra EXTRA_ARGS_ARRAY <<<"${EXTRA_ARGS}"
     fi
 
     ok "UI will be available at:  http://localhost:7860"

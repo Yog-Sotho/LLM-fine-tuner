@@ -60,12 +60,20 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
         from huggingface_hub import HfApi  # lazy
 
         api = HfApi()
+        # L-6 FIX: Distinguish between creating a new repo vs pushing to an existing one.
+        repo_existed = True
+        try:
+            api.repo_info(repo_id=repo_id, token=token, repo_type="model")
+        except Exception:
+            repo_existed = False
+
         api.upload_folder(
             folder_path=model_path,
             repo_id=repo_id,
             repo_type="model",
             token=token,
         )
-        return f"✅ Pushed to https://huggingface.co/{repo_id}"
+        action = "Pushed to" if repo_existed else "Created and pushed to"
+        return f"✅ {action} https://huggingface.co/{repo_id}"
     except Exception as e:
         return f"❌ Push failed: {e}"

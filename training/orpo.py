@@ -76,14 +76,21 @@ def train_orpo_v27(
         if progress is not None:
             progress(0.05, desc="Loading tokenizer & model…")
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+        # M-1 FIX: eos_token could also be None; use robust fallback chain (mirrors sft.py).
         if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
+            if tokenizer.eos_token is not None:
+                tokenizer.pad_token = tokenizer.eos_token
+            else:
+                tokenizer.add_special_tokens({"eos_token": "</s>"})
+                tokenizer.eos_token = "</s>"
+                tokenizer.pad_token = tokenizer.eos_token
 
         if torch.cuda.is_available():
             bnb = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.bfloat16,
+                # H-2 FIX: bfloat16 requires hardware support; fall back to float16.
+                bnb_4bit_compute_dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16,
                 bnb_4bit_use_double_quant=True,
             )
             model = AutoModelForCausalLM.from_pretrained(
@@ -183,7 +190,7 @@ def train_orpo_v27(
         del model
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-            gc.collect()
+        gc.collect()  # M-16 FIX: always run GC, not only when CUDA is available
 
         final_loss = log_cb.records[-1]["train_loss"] if log_cb.records else "N/A"
         return (

@@ -27,8 +27,8 @@ def main() -> None:
         # This includes --help, train --help, train --model …, reward …, etc.
         # v3.2 Fix #3: ALL non-zero-argument invocations go to Typer so that
         # `python main.py --help` shows CLI usage instead of launching Gradio.
-        # C1 FIX: import from flat module `commands`, not `llm_fine_tuner.cli.commands`
-        from commands import app as cli_app  # noqa: PLC0415
+        # C-2 FIX: import from correct package path `cli.commands`
+        from cli.commands import app as cli_app  # noqa: PLC0415
 
         print("\n🧠 LLM Fine-Tuner v3.2 CLI")
         print("=" * 60)
@@ -42,8 +42,8 @@ def main() -> None:
     else:
         # ── Gradio UI mode ───────────────────────────────────────────────────
         import torch
-        # C1 FIX: import from flat module `app`, not `llm_fine_tuner.ui.app`
-        from app import build_demo  # noqa: PLC0415
+        # C-2 FIX: import from correct package path `ui.app`
+        from ui.app import build_demo  # noqa: PLC0415
 
         print("\n🧠 LLM Fine-Tuner v3.2 — Launching Gradio UI")
         print("=" * 60)

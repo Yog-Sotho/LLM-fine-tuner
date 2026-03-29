@@ -140,8 +140,15 @@ class ModelRegistry:
                     notes = meta.get("notes", "")
                     notes = (notes[:50] + "...") if len(notes) > 50 else notes
                     versions_info.append(f"• v{ver}: {base} | {notes}")
-                except Exception:
-                    versions_info.append(f"• {meta_file}")
+                except json.JSONDecodeError as je:
+                    # L-7 FIX: Report exact parse error location for corrupted metadata.
+                    versions_info.append(
+                        f"• {meta_file} (corrupted JSON at char {je.pos}: {je.msg})"
+                    )
+                except Exception as exc:
+                    versions_info.append(
+                        f"• {meta_file} (error reading: {type(exc).__name__}: {exc})"
+                    )
 
             return "Versions found:\n" + "\n".join(versions_info)
 
@@ -161,8 +168,13 @@ def on_registry_upload(
     """Handler for the Registry Upload button in the Share tab."""
     if not registry_repo_id or "/" not in registry_repo_id:
         return "❌ Invalid Repo ID. Format: username/model-name"
-    if not registry_token or len(registry_token) < 8:
-        return "❌ Please provide a valid Hugging Face write token."
+    # M-9 FIX: Enforce proper HF token format (must start with 'hf_', ≥36 chars).
+    if (
+        not registry_token
+        or not registry_token.startswith("hf_")
+        or len(registry_token) < 36
+    ):
+        return "❌ Invalid Hugging Face write token (must start with 'hf_', ≥36 chars)."
     if not registry_version.strip():
         return "❌ Please enter a version tag (e.g. 1.0, 1.0.1)."
     if not model_path_state or not os.path.isdir(model_path_state):
@@ -183,8 +195,13 @@ def on_registry_list(registry_repo_id: str, registry_token: str) -> str:
     """Handler for the List Versions button in the Share tab."""
     if not registry_repo_id or "/" not in registry_repo_id:
         return "❌ Invalid Repo ID."
-    if not registry_token or len(registry_token) < 8:
-        return "❌ Please provide a valid HF token."
+    # M-9 FIX: Same token validation as on_registry_upload.
+    if (
+        not registry_token
+        or not registry_token.startswith("hf_")
+        or len(registry_token) < 36
+    ):
+        return "❌ Invalid Hugging Face token (must start with 'hf_', ≥36 chars)."
 
     try:
         reg = ModelRegistry(registry_repo_id.strip(), registry_token.strip())

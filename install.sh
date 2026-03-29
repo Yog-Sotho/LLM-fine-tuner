@@ -110,17 +110,20 @@ if command -v nvidia-smi >/dev/null; then
 
     # [FIX-7]: Guard against unparseable CUDA version (e.g. driver reports N/A)
     if [[ -z "$CUDA_VERSION_FULL" || "$CUDA_VERSION_FULL" == "0" ]]; then
-        print_warning "Could not parse CUDA version from nvidia-smi — defaulting to cu117 PyTorch index"
-        TORCH_INDEX="https://download.pytorch.org/whl/cu117"
+        print_warning "Could not parse CUDA version from nvidia-smi — defaulting to cu118 PyTorch index"
+        # L-22 FIX: cu117 is EOL; fall back to cu118 which has broader support.
+        TORCH_INDEX="https://download.pytorch.org/whl/cu118"
     else
         print_success "GPU detected: $GPU_NAME (CUDA $CUDA_VERSION_FULL)"
 
+        # L-25 FIX: CUDA ≥13 should also use cu126 (no cu130 index exists yet).
         if [[ "$CUDA_MAJOR" -ge 12 ]]; then
             TORCH_INDEX="https://download.pytorch.org/whl/cu126"
         elif [[ "$CUDA_MAJOR" -eq 11 ]]; then
             TORCH_INDEX="https://download.pytorch.org/whl/cu118"
         else
-            TORCH_INDEX="https://download.pytorch.org/whl/cu117"
+            # L-22 FIX: cu117 is EOL; use cu118 as minimum supported index.
+            TORCH_INDEX="https://download.pytorch.org/whl/cu118"
         fi
     fi
     CUDA_AVAILABLE=1
@@ -174,7 +177,9 @@ print_success "PyTorch installed (${TORCH_INDEX##*/})"
 CORE_DEPS=(
     transformers datasets accelerate peft bitsandbytes trl
     gradio typer pandas numpy matplotlib tqdm huggingface-hub
-    safetensors einops hf_transfer heretic-llm
+    safetensors einops hf_transfer
+    # H-4 FIX: heretic-llm removed from CORE_DEPS — it is an optional dependency
+    # (checked via shutil.which("heretic"), not pip import). Install it manually if needed.
 )
 
 
@@ -234,21 +239,20 @@ ask "Install psutil (RAM monitoring) and wandb (experiment tracking)?" && {
 print_step "llama.cpp (GGUF export)"
 if ask "Clone & build llama.cpp with CUDA support?"; then
     if [ ! -d "llama.cpp" ]; then
-        git clone https://github.com/ggerganov/llama.cpp.git
-        cd llama.cpp
+        git clone --depth 1 https://github.com/ggerganov/llama.cpp.git
+        # L-12 FIX: llama.cpp dropped Makefile support; use CMake (matches Dockerfiles).
         if [ "$CUDA_AVAILABLE" -eq 1 ]; then
-            # [FIX-6]: llama.cpp renamed LLAMA_CUDA → GGML_CUDA after build b3000.
-            # Detect which flag the checked-out version actually uses.
-            if grep -q "GGML_CUDA" Makefile 2>/dev/null; then
-                make GGML_CUDA=1 -j"$(nproc || echo 4)"
-            else
-                make LLAMA_CUDA=1 -j"$(nproc || echo 4)"
-            fi
+            cmake llama.cpp -B llama.cpp/build \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DGGML_CUDA=ON \
+                -G Ninja
         else
-            make -j"$(nproc || echo 4)"
+            cmake llama.cpp -B llama.cpp/build \
+                -DCMAKE_BUILD_TYPE=Release \
+                -G Ninja
         fi
-        cd ..
-        print_success "llama.cpp built"
+        cmake --build llama.cpp/build --config Release -j"$(nproc || echo 4)"
+        print_success "llama.cpp built (CMake)"
     else
         print_warning "llama.cpp already exists – skipping"
     fi
@@ -272,7 +276,7 @@ if [ -f "$SCRIPT_PATH" ]; then
 #!/bin/bash
 source "$VENV_DIR/bin/activate"
 export HF_HUB_ENABLE_HF_TRANSFER=1
-export PATH="\$PATH:$PROJECT_ROOT/llama.cpp"
+export PATH="\$PATH:$PROJECT_ROOT/llama.cpp/build/bin"  # H-5 FIX: executables are in build/bin
 python "$SCRIPT_PATH" "\$@"
 EOF
     chmod +x "$LAUNCHER"

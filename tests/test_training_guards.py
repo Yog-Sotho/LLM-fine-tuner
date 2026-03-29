@@ -28,8 +28,13 @@ def _make_ds(n: int):
 
 # We test the split logic in isolation — pull it out of training/sft.py
 
-def _simulate_split(ds, test_size=0.2):
-    """Mirror the guard logic from training/sft.py for unit testing."""
+def _simulate_split(ds, test_size=0.1):
+    """Mirror the guard logic from training/sft.py lines 171-180 for unit testing.
+
+    M-20 FIX: Changed default test_size from 0.2 to 0.1 to match the actual
+    value used in training/sft.py — previously tests passed at 0.2 but the
+    real code behaved differently on the same dataset sizes.
+    """
     if len(ds) < 2:
         return ds, None
     split = ds.train_test_split(test_size=test_size, seed=42)

@@ -31,9 +31,16 @@ def build_rlhf_tab() -> dict:
                 )
                 with gr.Row():
                     with gr.Column():
-                        rm_model_choice = gr.Textbox(
-                            label="Base Model ID", value=recommended_model,
-                            placeholder="e.g. mistralai/Mistral-7B-v0.1",
+                        # L-2 FIX: Use Dropdown with preset options, matching Training tab UX.
+                        rm_model_choice = gr.Dropdown(
+                            choices=[
+                                "gpt2", "distilgpt2", "facebook/opt-125m",
+                                "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                                "mistralai/Mistral-7B-v0.1",
+                            ],
+                            value=recommended_model,
+                            label="Base Model ID",
+                            allow_custom_value=True,
                         )
                         rm_file = gr.File(
                             label="Preference Dataset (CSV/JSONL with chosen & rejected)",
@@ -62,8 +69,17 @@ def build_rlhf_tab() -> dict:
                 )
                 with gr.Row():
                     with gr.Column():
-                        ppo_policy_model = gr.Textbox(label="Policy Model ID",
-                                                       value=recommended_model)
+                        # L-2 FIX: Use Dropdown to match Training tab UX.
+                        ppo_policy_model = gr.Dropdown(
+                            choices=[
+                                "gpt2", "distilgpt2", "facebook/opt-125m",
+                                "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                                "mistralai/Mistral-7B-v0.1",
+                            ],
+                            value=recommended_model,
+                            label="Policy Model ID",
+                            allow_custom_value=True,
+                        )
                         ppo_reward_path  = gr.Textbox(
                             label="Reward Model Path (from step A)",
                             placeholder="./reward_model",
@@ -98,8 +114,17 @@ def build_rlhf_tab() -> dict:
                 )
                 with gr.Row():
                     with gr.Column():
-                        orpo_model_choice = gr.Textbox(label="Base Model ID",
-                                                        value=recommended_model)
+                        # L-2 FIX: Use Dropdown to match Training tab UX.
+                        orpo_model_choice = gr.Dropdown(
+                            choices=[
+                                "gpt2", "distilgpt2", "facebook/opt-125m",
+                                "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                                "mistralai/Mistral-7B-v0.1",
+                            ],
+                            value=recommended_model,
+                            label="Base Model ID",
+                            allow_custom_value=True,
+                        )
                         orpo_file = gr.File(
                             label="Preference Dataset (prompt, chosen, rejected)",
                             file_types=[".csv", ".jsonl"],

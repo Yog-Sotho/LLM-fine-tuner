@@ -542,7 +542,8 @@ def train_model(
         return summary, log_callback.records
 
     except Exception as e:
-        raise RuntimeError(f"Training failed: {e}")
+        # M-15 FIX: Chain exception to preserve original traceback for debugging.
+        raise RuntimeError(f"Training failed: {e}") from e
 
 
 def load_qlora_model_v27(model_name: str, use_flash_attn: bool = False):

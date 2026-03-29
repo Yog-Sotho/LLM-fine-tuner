@@ -22,14 +22,11 @@ import pandas as pd
 import pytest
 
 from data.loader import detect_file_type, load_dataset_from_file, safe_extract_zip
+from cli.commands import DummyFile  # L-16 FIX: reuse shared DummyFile instead of duplicating
 from config.constants import COL_INSTRUCTION, COL_OUTPUT, COL_TEXT, COL_PROMPT, COL_CHOSEN, COL_REJECTED
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
-
-class DummyFile:
-    def __init__(self, name):
-        self.name = name
 
 
 def _write_csv(tmp_dir, rows: list[dict], fname="data.csv") -> str:

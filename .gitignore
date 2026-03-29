@@ -1,3 +1,11 @@
+# Secrets & environment files — L-14 FIX: prevent accidental credential commits
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*_credentials.json
+
 # Python
 __pycache__/
 *.py[cod]

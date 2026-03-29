@@ -46,12 +46,19 @@ def create_zip_from_folder(folder_path: str) -> str:
     """
     with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
         zip_path = tmp.name
+    # M-7 FIX: Open ZipFile outside the NamedTemporaryFile context so that an
+    # exception during archiving cleans up the temp file rather than leaking it.
+    try:
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for root, _, files in os.walk(folder_path):
                 for fname in files:
                     fpath    = os.path.join(root, fname)
                     arc_name = os.path.relpath(fpath, start=os.path.dirname(folder_path))
                     zf.write(fpath, arc_name)
+    except Exception:
+        if os.path.exists(zip_path):
+            os.unlink(zip_path)
+        raise
     return zip_path
 
 
@@ -130,7 +137,8 @@ This model is a {mode} of `{model_name}` trained with **{training_type}**.
         card += f"| LoRA alpha | {hyperparams.get('lora_alpha', 'N/A')} |\n"
     card += (
         f"| LR scheduler | {hyperparams.get('lr_scheduler', 'linear')} |\n"
-        f"Trained: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        # M-8 FIX: Blank line required between Markdown table and following paragraph.
+        f"\nTrained: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
         f"GGUF & Heretic ready for maximum potential."
     )
 

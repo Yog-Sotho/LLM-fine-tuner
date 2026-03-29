@@ -133,7 +133,7 @@ Create a simple spreadsheet (CSV file) with two columns:
 
 That's it. No special formatting, no coding. Just questions and the answers you want the model to give.
 
-> Don't have a CSV? The tool also accepts Word docs, PDFs, Excel files, plain text files, and more.
+> Don't have a CSV? The tool also accepts PDFs, Excel files, plain text files, and JSON/JSONL, and more.
 
 ### Step 2 — Upload and train
 

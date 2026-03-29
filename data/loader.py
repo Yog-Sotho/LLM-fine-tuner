@@ -64,11 +64,15 @@ def extract_text_from_pdf(pdf_path: str) -> str:
 
     text = []
     with open(pdf_path, "rb") as f:
-        reader = PyPDF2.PdfReader(f)
-        for page in reader.pages:
-            t = page.extract_text()
-            if t:
-                text.append(t)
+        # M-12 FIX: Wrap reader construction to surface corrupt/encrypted PDF errors.
+        try:
+            reader = PyPDF2.PdfReader(f)
+            for page in reader.pages:
+                t = page.extract_text()
+                if t:
+                    text.append(t)
+        except Exception as e:
+            raise RuntimeError(f"Failed to read PDF '{pdf_path}': {e}") from e
     return "\n".join(text)
 
 
@@ -100,10 +104,16 @@ def load_dataset_from_file(
         if file_type == "jsonl":
             data = []
             with open(path, "r", encoding="utf-8") as f:
-                for line in f:
+                # M-11 FIX: Wrap json.loads in try/except to report exact line numbers.
+                for line_no, line in enumerate(f, start=1):
                     line = line.strip()
                     if line:
-                        data.append(json.loads(line))
+                        try:
+                            data.append(json.loads(line))
+                        except json.JSONDecodeError as e:
+                            raise ValueError(
+                                f"Invalid JSON on line {line_no}: {e}"
+                            ) from e
             return Dataset.from_list(data)
 
         # ── JSON ──────────────────────────────────────────────────────────

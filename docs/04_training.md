@@ -80,6 +80,16 @@ Presets are shortcuts that set the number of epochs and learning rate for you.
 
 > **What is an epoch?** One epoch means the model has seen every example in your dataset once. More epochs = more learning, but too many causes overfitting (the model memorises instead of generalising).
 
+### Choosing a Learning Rate
+
+The learning rate controls how fast the model updates its knowledge each step. Picking the right value is one of the most impactful decisions in training:
+
+- **Small LR (1×10⁻⁵ to 5×10⁻⁵):** Best for models that are already partially fine-tuned, DPO alignment, and reward model training — small updates prevent catastrophic forgetting.
+- **Medium LR (1×10⁻⁴ to 5×10⁻⁴):** Standard SFT training. The presets above use this range — a good starting point for most projects.
+- **Large LR (5×10⁻⁴ to 2×10⁻³):** Fastest convergence on small datasets or short experiments. Risk of instability increases; watch the loss curve carefully.
+
+> **Rule of thumb:** if your training loss spikes or diverges (goes up instead of down), your learning rate is too high. Halve it and try again.
+
 ---
 
 ## PEFT Methods (Parameter-Efficient Fine-Tuning)

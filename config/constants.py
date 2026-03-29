@@ -49,6 +49,11 @@ FILE_EXT_TXT  = ".txt"
 FILE_EXT_XLSX = ".xlsx"
 FILE_EXT_PDF  = ".pdf"
 
+# ── UI display constants ───────────────────────────────────────────────────
+# L-5: Centralised row count for dataset preview tables — previously hardcoded
+# as 5 (DPO) and 10 (SFT) separately in data/preprocessing.py.
+PREVIEW_ROWS: int = 10
+
 # ── GGUF quantisation presets ──────────────────────────────────────────────
 GGUF_QUANT_PRESETS: dict[str, dict[str, str]] = {
     "q8_0":  {"desc": "Near-lossless (99% quality)",       "size": "~7 GB (7B)"},

@@ -204,6 +204,13 @@ def run_ppo_v27(
                         reward_val = values[0, last_token_index].item()
                         rewards.append(reward_val)
 
+                # M-3 FIX: Validate lengths match before calling step to surface mismatches.
+                if len(rewards) != len(response_tensors):
+                    raise RuntimeError(
+                        f"Reward count ({len(rewards)}) != response count "
+                        f"({len(response_tensors)}). Batch generation produced "
+                        "mismatched results."
+                    )
                 ppo_trainer.step(query_tensors, response_tensors, rewards)
                 done = min(batch_idx + ppo_batch_size, len(prompts))
                 if progress is not None:

@@ -431,11 +431,20 @@ def evaluate(
 # ── helpers ────────────────────────────────────────────────────────────────
 
 def _infer_ftype(path: str) -> Optional[str]:
-    """Return 'csv' or 'jsonl' based on file extension, or None if unsupported."""
+    """Return a normalised file-type string from a path, or None if unsupported.
+
+    L-3 FIX: Added TXT, Excel, and PDF support to match the UI's detect_file_type().
+    """
     if path.endswith(".csv"):
         return "csv"
     if path.endswith(".jsonl") or path.endswith(".json"):
         return "jsonl"
+    if path.endswith(".txt"):
+        return "txt"
+    if path.endswith(".xlsx"):
+        return "excel"
+    if path.endswith(".pdf"):
+        return "pdf"
     return None
 
 
