@@ -14,9 +14,7 @@ Covers:
   - rewards list contains Python floats, not tensors
 """
 
-import pytest
 import torch
-
 
 # ── helpers mirroring run_ppo_v27 reward extraction ───────────────────────
 
@@ -77,7 +75,7 @@ def test_fixed_rewards_list_compatible_with_trl():
     All values should be finite real numbers.
     """
     rewards = []
-    for i in range(3):
+    for _i in range(3):
         fake = torch.randn(1, 5, 1)
         val = _extract_reward_from_value_head(fake.squeeze(-1))
         _fixed_reward_append(rewards, val)

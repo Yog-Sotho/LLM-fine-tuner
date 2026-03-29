@@ -17,7 +17,7 @@ Patch log
 """
 import gradio as gr
 
-from config.constants import HAS_UNSLOTH, HAS_VLLM
+from config.constants import HAS_UNSLOTH
 from core.hardware import auto_recommend_model, get_model_info
 
 

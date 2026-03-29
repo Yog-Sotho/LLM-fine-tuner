@@ -26,7 +26,6 @@ import tempfile
 import zipfile
 from datetime import datetime
 
-import gradio as gr
 import torch
 
 from data.loader import safe_extract_zip
@@ -164,7 +163,7 @@ def on_peft_zip_upload(zip_file) -> tuple:
 
         # Walk the extracted tree to find the actual adapter root.
         adapter_dir = extract_dir
-        for root, dirs, files in os.walk(extract_dir):
+        for root, _dirs, files in os.walk(extract_dir):
             if (
                 "adapter_config.json" in files
                 or "adapter_model.bin" in files

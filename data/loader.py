@@ -21,18 +21,18 @@ import pandas as pd
 from datasets import Dataset
 
 from config.constants import (
+    COL_CHOSEN,
     COL_INSTRUCTION,
     COL_OUTPUT,
-    COL_TEXT,
     COL_PROMPT,
-    COL_CHOSEN,
     COL_REJECTED,
+    COL_TEXT,
     FILE_EXT_CSV,
-    FILE_EXT_JSONL,
     FILE_EXT_JSON,
+    FILE_EXT_JSONL,
+    FILE_EXT_PDF,
     FILE_EXT_TXT,
     FILE_EXT_XLSX,
-    FILE_EXT_PDF,
     HAS_OPENPYXL,
     HAS_PDF,
 )
@@ -46,12 +46,18 @@ def detect_file_type(file) -> str | None:
     'pdf'   is only returned when PyPDF2 is installed.
     """
     name = Path(file.name).name.lower()
-    if name.endswith(FILE_EXT_CSV):              return "csv"
-    if name.endswith(FILE_EXT_JSONL):            return "jsonl"
-    if name.endswith(FILE_EXT_JSON):             return "json"
-    if name.endswith(FILE_EXT_TXT):              return "txt"
-    if name.endswith(FILE_EXT_XLSX) and HAS_OPENPYXL: return "excel"
-    if name.endswith(FILE_EXT_PDF)  and HAS_PDF:       return "pdf"
+    if name.endswith(FILE_EXT_CSV):
+        return "csv"
+    if name.endswith(FILE_EXT_JSONL):
+        return "jsonl"
+    if name.endswith(FILE_EXT_JSON):
+        return "json"
+    if name.endswith(FILE_EXT_TXT):
+        return "txt"
+    if name.endswith(FILE_EXT_XLSX) and HAS_OPENPYXL:
+        return "excel"
+    if name.endswith(FILE_EXT_PDF) and HAS_PDF:
+        return "pdf"
     return None
 
 
@@ -103,7 +109,7 @@ def load_dataset_from_file(
         # ── JSONL ─────────────────────────────────────────────────────────
         if file_type == "jsonl":
             data = []
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 # M-11 FIX: Wrap json.loads in try/except to report exact line numbers.
                 for line_no, line in enumerate(f, start=1):
                     line = line.strip()
@@ -118,7 +124,7 @@ def load_dataset_from_file(
 
         # ── JSON ──────────────────────────────────────────────────────────
         if file_type == "json":
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
             if not isinstance(data, list):
                 raise ValueError("JSON file must contain a top-level array of objects.")
@@ -126,7 +132,7 @@ def load_dataset_from_file(
 
         # ── Plain text ────────────────────────────────────────────────────
         if file_type == "txt":
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 lines = [ln.strip() for ln in f if ln.strip()]
             return Dataset.from_dict({COL_TEXT: lines})
 

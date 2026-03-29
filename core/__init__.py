@@ -1,1 +1,1 @@
-from core.state import app_state, AppState  # noqa: F401
+from core.state import AppState, app_state  # noqa: F401

@@ -114,6 +114,9 @@ addopts = "-v --tb=short"
 [tool.ruff]
 target-version = "py310"
 line-length = 100
+exclude = [
+    "archive/",   # deprecated monolith — do not lint
+]
 
 
 [tool.ruff.lint]
@@ -121,4 +124,7 @@ select = ["E", "F", "W", "I", "UP", "B"]
 ignore = [
     "E501",   # line too long — handled by formatter
     "B008",   # do not perform function calls in argument defaults (Typer pattern)
+    "B904",   # raise-without-from-cause — intentional in Typer CLI exit handlers
+    "B905",   # zip-without-explicit-strict — internal paired lists are always equal-length
+    "B017",   # assert-raises-exception — used in safe_extract_zip path-traversal test
 ]

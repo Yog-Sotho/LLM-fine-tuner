@@ -27,27 +27,29 @@ Fix history preserved inline:
 """
 
 import os
-import sys
 from datetime import datetime
-from typing import Optional
 
 import torch
 import typer
 
 from config.constants import (
-    COL_CHOSEN, COL_REJECTED,
-    COL_PROMPT, COL_TEXT, COL_INSTRUCTION,
-    HAS_REWARD_TRAINER, HAS_PPO, HAS_ORPO,
+    COL_CHOSEN,
+    COL_INSTRUCTION,
+    COL_PROMPT,
+    COL_REJECTED,
+    COL_TEXT,
+    HAS_ORPO,
+    HAS_PPO,
+    HAS_REWARD_TRAINER,
 )
 from data.loader import load_dataset_from_file
 from data.preprocessing import validate_and_clean_dataset
-from inference.evaluation import compute_bleu_rouge, compute_bertscore_metric
+from inference.evaluation import compute_bertscore_metric, compute_bleu_rouge
 from inference.generate import _load_for_inference
 from training.orpo import train_orpo_v27
 from training.ppo import run_ppo_v27
 from training.reward import train_reward_model_v27
 from training.sft import train_model
-
 
 app = typer.Typer(
     name="llm-fine-tuner",
@@ -351,7 +353,7 @@ def ppo(
 def evaluate(
     model: str = typer.Option(..., "--model", help="Model ID or local path"),
     data: str = typer.Option(..., "--data", help="Test dataset (prompt / reference columns)"),
-    lora: Optional[str] = typer.Option(None, "--lora", help="PEFT adapter path"),
+    lora: str | None = typer.Option(None, "--lora", help="PEFT adapter path"),
     bertscore: bool = typer.Option(False, "--bertscore", help="Compute BERTScore"),
     batch_size: int = typer.Option(4, "--batch-size", help="Generation batch size (FIX 2b)"),
     max_new_tokens: int = typer.Option(150, "--max-new-tokens", help="Tokens to generate"),
@@ -430,7 +432,7 @@ def evaluate(
 
 # ── helpers ────────────────────────────────────────────────────────────────
 
-def _infer_ftype(path: str) -> Optional[str]:
+def _infer_ftype(path: str) -> str | None:
     """Return a normalised file-type string from a path, or None if unsupported.
 
     L-3 FIX: Added TXT, Excel, and PDF support to match the UI's detect_file_type().

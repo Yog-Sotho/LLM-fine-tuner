@@ -19,12 +19,16 @@ from peft import LoraConfig, TaskType, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 from config.constants import (
-    COL_PROMPT,
     COL_CHOSEN,
+    COL_PROMPT,
     COL_REJECTED,
     HAS_ORPO,
 )
-from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
+from core.callbacks import (  # F-2: ETAProgressCallback added
+    ETAProgressCallback,
+    LoggingCallback,
+    StopCallback,
+)
 from core.hardware import get_lora_targets
 from core.state import app_state
 from data.loader import detect_file_type, load_dataset_from_file

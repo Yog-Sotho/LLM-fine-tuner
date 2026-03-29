@@ -10,7 +10,7 @@ Patch log
 """
 import gradio as gr
 
-from config.constants import HAS_NLTK, HAS_ROUGE, HAS_BERTSCORE, LLM_JUDGE_CRITERIA
+from config.constants import HAS_BERTSCORE, HAS_NLTK, HAS_ROUGE, LLM_JUDGE_CRITERIA
 
 
 def build_evaluation_tab() -> dict:

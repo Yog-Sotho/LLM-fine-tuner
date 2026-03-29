@@ -159,7 +159,7 @@ def batch_generate(
                 return "❌ CSV must have a 'prompt' column."
             prompts = df["prompt"].tolist()
         else:
-            with open(prompts_file.name, "r", encoding="utf-8") as f:
+            with open(prompts_file.name, encoding="utf-8") as f:
                 prompts = [ln.strip() for ln in f if ln.strip()]
 
         # N-2 FIX: Guard against empty input before computing batch_size.

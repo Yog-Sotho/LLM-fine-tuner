@@ -23,11 +23,9 @@ import os
 import tempfile
 
 import pandas as pd
-import pytest
 from typer.testing import CliRunner
 
-from cli.commands import app, DummyFile
-
+from cli.commands import DummyFile, app
 
 runner = CliRunner(mix_stderr=False)
 

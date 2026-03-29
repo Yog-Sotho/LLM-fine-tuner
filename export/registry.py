@@ -80,11 +80,11 @@ class ModelRegistry:
                 adapter_config_path = os.path.join(model_path, "adapter_config.json")
                 config_path         = os.path.join(model_path, "config.json")
                 if os.path.exists(adapter_config_path):
-                    with open(adapter_config_path, "r") as f:
+                    with open(adapter_config_path) as f:
                         adapter_cfg = json.load(f)
                     base_model_name = adapter_cfg.get("base_model_name_or_path", "unknown")
                 elif os.path.exists(config_path):
-                    with open(config_path, "r") as f:
+                    with open(config_path) as f:
                         cfg = json.load(f)
                     base_model_name = cfg.get(
                         "_name_or_path", cfg.get("base_model_name", "unknown")
@@ -133,7 +133,7 @@ class ModelRegistry:
                         repo_type="model",
                         token=self.token,
                     )
-                    with open(content, "r") as f:
+                    with open(content) as f:
                         meta = json.load(f)
                     ver   = meta_file.replace("metadata_v", "").replace(".json", "")
                     base  = meta.get("base_model", "unknown")

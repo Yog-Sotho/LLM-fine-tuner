@@ -1,7 +1,7 @@
 """ui/tabs/rlhf_tab.py — Reward model, PPO, ORPO sub-tabs."""
 import gradio as gr
 
-from config.constants import HAS_REWARD_TRAINER, HAS_PPO, HAS_ORPO
+from config.constants import HAS_ORPO, HAS_PPO, HAS_REWARD_TRAINER
 from core.hardware import auto_recommend_model
 
 

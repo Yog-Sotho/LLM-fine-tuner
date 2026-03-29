@@ -27,7 +27,11 @@ from config.constants import (
     HAS_PPO,
     HAS_REWARD_TRAINER,
 )
-from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
+from core.callbacks import (  # F-2: ETAProgressCallback added
+    ETAProgressCallback,
+    LoggingCallback,
+    StopCallback,
+)
 from core.state import app_state
 from data.loader import detect_file_type, load_dataset_from_file
 

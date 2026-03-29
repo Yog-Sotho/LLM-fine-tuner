@@ -39,20 +39,18 @@ Patch log
 
 import random
 
+import gradio as gr
 import numpy as np  # M-5 FIX: moved from inside compute_bleu_rouge() to module top-level
 import pandas as pd
-import gradio as gr
 import torch
 
 from config.constants import (
+    HAS_BERTSCORE,
     HAS_NLTK,
     HAS_ROUGE,
-    HAS_BERTSCORE,
-    LLM_JUDGE_CRITERIA,
 )
 from core.state import app_state
 from inference.generate import _load_for_inference
-
 
 # ── HTML escaping helper ───────────────────────────────────────────────────
 # Fix-2: Defined at module scope, not inside the rendering loop.
@@ -80,7 +78,7 @@ def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
     results = {}
 
     if HAS_NLTK and predictions and references:
-        from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction  # lazy
+        from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu  # lazy
 
         smoothing = SmoothingFunction().method4
         bleu_scores = []

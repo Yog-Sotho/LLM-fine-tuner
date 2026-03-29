@@ -42,6 +42,7 @@ def main() -> None:
     else:
         # ── Gradio UI mode ───────────────────────────────────────────────────
         import torch
+
         # C-2 FIX: import from correct package path `ui.app`
         from ui.app import build_demo  # noqa: PLC0415
 

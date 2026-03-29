@@ -12,7 +12,6 @@ Covers:
   - Unknown extensions return None from detect_file_type
 """
 
-import io
 import json
 import os
 import tempfile
@@ -21,10 +20,16 @@ import zipfile
 import pandas as pd
 import pytest
 
-from data.loader import detect_file_type, load_dataset_from_file, safe_extract_zip
 from cli.commands import DummyFile  # L-16 FIX: reuse shared DummyFile instead of duplicating
-from config.constants import COL_INSTRUCTION, COL_OUTPUT, COL_TEXT, COL_PROMPT, COL_CHOSEN, COL_REJECTED
-
+from config.constants import (
+    COL_CHOSEN,
+    COL_INSTRUCTION,
+    COL_OUTPUT,
+    COL_PROMPT,
+    COL_REJECTED,
+    COL_TEXT,
+)
+from data.loader import detect_file_type, load_dataset_from_file, safe_extract_zip
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 

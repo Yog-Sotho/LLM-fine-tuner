@@ -30,23 +30,26 @@ Patch log
 import os
 import tempfile
 
+import gradio as gr
 import numpy as np
 import pandas as pd
-import gradio as gr
 import torch
 
 from config.constants import (
-    COL_INSTRUCTION, COL_OUTPUT, COL_TEXT,
-    COL_PROMPT, COL_CHOSEN, COL_REJECTED,
+    COL_CHOSEN,
+    COL_INSTRUCTION,
+    COL_OUTPUT,
+    COL_PROMPT,
+    COL_REJECTED,
+    COL_TEXT,
 )
 from core.state import app_state
 from data.loader import detect_file_type, load_dataset_from_file
-from data.preprocessing import validate_and_clean_dataset, preview_dataset
+from data.preprocessing import preview_dataset, validate_and_clean_dataset
 from export.hub import push_to_hub
-from export.utils import create_zip_from_folder, create_model_card
-from inference.generate import generate_text, batch_generate
+from export.utils import create_model_card, create_zip_from_folder
+from inference.generate import batch_generate, generate_text
 from training.sft import train_model
-
 
 # ── Training ───────────────────────────────────────────────────────────────
 
@@ -315,8 +318,8 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
             col_map[col_text] = COL_TEXT
 
     try:
-        import tempfile as _tmp
         import os as _os
+        import tempfile as _tmp
 
         if file_type_state in ("csv", "excel"):
             tmp = _tmp.NamedTemporaryFile(delete=False, suffix=f".{file_type_state}")

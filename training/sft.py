@@ -37,8 +37,6 @@ import glob
 import os
 import subprocess
 import time
-from datetime import datetime
-from pathlib import Path
 
 import gradio as gr
 import torch
@@ -49,7 +47,6 @@ from peft import (
     # AdapterConfig is now imported lazily and guarded by HAS_ADAPTER_CONFIG inside
     # the Adapters branch of train_model() below.
     LoraConfig,
-    PeftModel,
     PrefixTuningConfig,
     PromptTuningConfig,
     PromptTuningInit,
@@ -69,15 +66,18 @@ from transformers import (
 from config.constants import (
     COL_INSTRUCTION,
     COL_OUTPUT,
-    COL_TEXT,
     HAS_ADAPTER_CONFIG,
-    HAS_HERETIC,    # N-5 FIX: imported so the Heretic Mode branch can guard the subprocess call
+    HAS_HERETIC,  # N-5 FIX: imported so the Heretic Mode branch can guard the subprocess call
     HAS_TRL,
     HAS_UNSLOTH,
     QLORA_ENHANCED_BNB_KWARGS,
     QLORA_ENHANCED_LORA_CONFIG,
 )
-from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
+from core.callbacks import (  # F-2: ETAProgressCallback added
+    ETAProgressCallback,
+    LoggingCallback,
+    StopCallback,
+)
 from core.hardware import get_lora_targets, is_unsloth_supported
 from core.state import app_state
 from data.preprocessing import preprocess_function
@@ -182,7 +182,6 @@ def train_model(
         # ── Model loading ──────────────────────────────────────────────────
         if progress is not None:
             progress(0.1, desc="Loading model… ")
-        is_unsloth  = False
         peft_applied = False  # prevent double PEFT application
 
         # ── Path A: QLoRA Enhanced (CUDA only) ────────────────────────────
@@ -247,7 +246,6 @@ def train_model(
                 load_in_4bit=(device == "cuda"),
                 trust_remote_code=True,
             )
-            is_unsloth = True
             model = FastLanguageModel.get_peft_model(
                 model,
                 r=lora_rank,

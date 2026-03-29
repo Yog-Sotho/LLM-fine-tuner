@@ -22,31 +22,34 @@ Patch log
 
 import gradio as gr
 
-from config.constants import HAS_VLLM
 from core.hardware import get_hardware_summary, get_model_info
 from data.augmentation import on_augment_click, on_quality_filter_click
 from export.gguf import on_export_gguf
-from export.registry import on_registry_upload, on_registry_list
-from export.utils import on_peft_zip_upload, clear_gpu_cache
+from export.registry import on_registry_list, on_registry_upload
+from export.utils import clear_gpu_cache, on_peft_zip_upload
 from inference.evaluation import on_evaluate_click
 from inference.vllm_runner import on_merge_adapter_click, on_vllm_generate
-from training.reward import train_reward_model_v27
-from training.ppo import run_ppo_v27
 from training.orpo import train_orpo_v27
+from training.ppo import run_ppo_v27
+from training.reward import train_reward_model_v27
 from ui.css import CUSTOM_CSS
 from ui.handlers import (
-    on_train_click, on_stop,
-    on_generate, on_batch_test,
-    on_push, on_file_upload, on_refresh_preview,
     build_loss_chart,
+    on_batch_test,
+    on_file_upload,
+    on_generate,
+    on_push,
+    on_refresh_preview,
+    on_stop,
+    on_train_click,
 )
-from ui.tabs.data_tab       import build_data_tab
-from ui.tabs.train_tab      import build_train_tab
-from ui.tabs.gguf_tab       import build_gguf_tab
-from ui.tabs.inference_tab  import build_inference_tab
-from ui.tabs.rlhf_tab       import build_rlhf_tab
+from ui.tabs.data_tab import build_data_tab
 from ui.tabs.evaluation_tab import build_evaluation_tab
-from ui.tabs.share_tab      import build_share_tab
+from ui.tabs.gguf_tab import build_gguf_tab
+from ui.tabs.inference_tab import build_inference_tab
+from ui.tabs.rlhf_tab import build_rlhf_tab
+from ui.tabs.share_tab import build_share_tab
+from ui.tabs.train_tab import build_train_tab
 
 
 def build_demo() -> gr.Blocks:

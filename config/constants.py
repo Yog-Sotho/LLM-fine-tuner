@@ -15,6 +15,7 @@ Rule: nothing in this file may import from any other llm_fine_tuner module.
 
 import shutil
 import warnings
+
 import torch
 
 # H-2 FIX: Removed the previous global `warnings.filterwarnings("ignore")` call.
@@ -146,36 +147,38 @@ except ImportError:
 
 # ── Unsloth (2-5× faster training + GGUF export) ──────────────────────────
 try:
-    from unsloth import FastLanguageModel          # noqa: F401
-    from unsloth import is_bfloat16_supported      # noqa: F401
+    from unsloth import (
+        FastLanguageModel,  # noqa: F401
+        is_bfloat16_supported,  # noqa: F401
+    )
     HAS_UNSLOTH = True
 except ImportError:
     HAS_UNSLOTH = False
 
 # ── TRL core (DPO / SFT) ──────────────────────────────────────────────────
 try:
-    from trl import DPOTrainer, DPOConfig, SFTTrainer, SFTConfig  # noqa: F401
+    from trl import DPOConfig, DPOTrainer, SFTConfig, SFTTrainer  # noqa: F401
     HAS_TRL = True
 except ImportError:
     HAS_TRL = False
 
 # ── TRL RewardTrainer ─────────────────────────────────────────────────────
 try:
-    from trl import RewardTrainer, RewardConfig  # noqa: F401
+    from trl import RewardConfig, RewardTrainer  # noqa: F401
     HAS_REWARD_TRAINER = True
 except ImportError:
     HAS_REWARD_TRAINER = False
 
 # ── TRL PPO ───────────────────────────────────────────────────────────────
 try:
-    from trl import PPOTrainer, PPOConfig, AutoModelForCausalLMWithValueHead  # noqa: F401
+    from trl import AutoModelForCausalLMWithValueHead, PPOConfig, PPOTrainer  # noqa: F401
     HAS_PPO = True
 except ImportError:
     HAS_PPO = False
 
 # ── TRL ORPO ──────────────────────────────────────────────────────────────
 try:
-    from trl import ORPOTrainer, ORPOConfig  # noqa: F401
+    from trl import ORPOConfig, ORPOTrainer  # noqa: F401
     HAS_ORPO = True
 except ImportError:
     HAS_ORPO = False
@@ -223,7 +226,9 @@ try:
     except LookupError:
         nltk.download("punkt", quiet=True)
     from nltk.translate.bleu_score import (  # noqa: F401
-        sentence_bleu, corpus_bleu, SmoothingFunction,
+        SmoothingFunction,
+        corpus_bleu,
+        sentence_bleu,
     )
     HAS_NLTK = True
 except ImportError:

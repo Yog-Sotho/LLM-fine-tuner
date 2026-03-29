@@ -13,7 +13,6 @@ Patch log
 """
 
 import time
-from typing import Optional
 
 from transformers import TrainerCallback
 

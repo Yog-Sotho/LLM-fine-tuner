@@ -15,8 +15,8 @@ Covers:
   - load_best_model_at_end is False when no eval
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
 import datasets
 
 from config.constants import COL_TEXT
