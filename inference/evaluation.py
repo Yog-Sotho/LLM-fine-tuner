@@ -6,27 +6,35 @@ Imports: config.constants, core.state, inference.generate, stdlib, pandas, gradi
 
 Functions
 ---------
-compute_bleu_rouge         — compute BLEU-1 and ROUGE-1/2/L scores
-compute_bertscore_metric   — compute BERTScore precision / recall / F1
-llm_judge_evaluate         — score responses with a local LLM judge
+compute_bleu_rouge            — compute BLEU-1 and ROUGE-1/2/L scores
+compute_bertscore_metric      — compute BERTScore precision / recall / F1
+llm_judge_evaluate            — score responses with a local LLM judge
 build_prediction_preview_html — build styled HTML showing N random example rows (F-6)
-on_evaluate_click          — Gradio UI handler for the Evaluation tab Run button
+on_evaluate_click             — Gradio UI handler for the Evaluation tab Run button
 
 Patch log
 ---------
-  M-5  : ``import numpy as np`` was inside the body of ``compute_bleu_rouge()``.
-         Moved to the top-level import block where it belongs. Python caches
-         module imports so this has zero runtime cost; it improves readability
-         and static analysis coverage.
-  F-6  : New ``build_prediction_preview_html()`` helper.  After evaluation,
-         3 random examples are rendered as a styled HTML table showing the
-         prompt, reference, prediction, and per-row ROUGE-L score (when
-         rouge-score is installed and references are available). The table
-         makes quality tangible for non-technical users who find aggregate
-         BLEU/ROUGE numbers hard to interpret.
-         ``on_evaluate_click()`` now returns a third value — the HTML preview
-         string — so the evaluation tab can display it without a separate
-         button click.
+  M-5    : ``import numpy as np`` was inside the body of ``compute_bleu_rouge()``.
+           Moved to the top-level import block where it belongs. Python caches
+           module imports so this has zero runtime cost; it improves readability
+           and static analysis coverage.
+  F-6    : New ``build_prediction_preview_html()`` helper.  After evaluation,
+           3 random examples are rendered as a styled HTML table showing the
+           prompt, reference, prediction, and per-row ROUGE-L score (when
+           rouge-score is installed and references are available). The table
+           makes quality tangible for non-technical users who find aggregate
+           BLEU/ROUGE numbers hard to interpret.
+           ``on_evaluate_click()`` now returns a third value — the HTML preview
+           string — so the evaluation tab can display it without a separate
+           button click.
+  Fix-2  : ``_esc()`` helper was defined inside the ``for`` loop in
+           ``build_prediction_preview_html()``.  Python creates a new function
+           object on every iteration (Ruff B023 / Pylint W0640).  Hoisted to
+           module scope so it is defined exactly once and reused for all rows.
+  Fix-3  : Misleading docstring comment claimed ``random.sample`` used a
+           "fixed seed" — no seed was ever set.  The behaviour (different
+           examples on each click) is actually desirable for variety; corrected
+           the comment to accurately describe what the code does.
 """
 
 import random
@@ -46,6 +54,21 @@ from core.state import app_state
 from inference.generate import _load_for_inference
 
 
+# ── HTML escaping helper ───────────────────────────────────────────────────
+# Fix-2: Defined at module scope, not inside the rendering loop.
+# Escapes the four characters that are meaningful inside HTML attribute values
+# and element text, preventing XSS from model outputs or user prompts.
+
+def _esc(s: str) -> str:
+    """Escape HTML special characters in ``s`` for safe inline rendering."""
+    return (
+        s.replace("&", "&amp;")
+         .replace("<", "&lt;")
+         .replace(">", "&gt;")
+         .replace('"', "&quot;")
+    )
+
+
 # ── BLEU + ROUGE ───────────────────────────────────────────────────────────
 
 def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
@@ -53,7 +76,7 @@ def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
 
     Falls back to string placeholders when optional deps are missing.
     """
-    # numpy is now imported at the top of the module (M-5 FIX)
+    # numpy is imported at the top of the module (M-5 FIX)
     results = {}
 
     if HAS_NLTK and predictions and references:
@@ -151,7 +174,7 @@ def llm_judge_evaluate(
     1-10 score with brief reasoning. Returns a list of result dicts.
 
     H5 FIX: Previously swallowed all exceptions and appended a phantom row
-    with `"prompt": "ERROR"` — a broken judge silently contaminated the
+    with ``"prompt": "ERROR"`` — a broken judge silently contaminated the
     output DataFrame. Now raises RuntimeError so the caller can report
     the failure cleanly instead of mixing error rows with real results.
 
@@ -225,8 +248,12 @@ def build_prediction_preview_html(
 
     # Clamp n to the actual number of examples available
     n = min(n, len(predictions))
-    # Sample without replacement; use a fixed seed so the preview is stable
-    # across multiple clicks on the same result set.
+
+    # Fix-3: The previous comment claimed a fixed seed was used for stability.
+    # No seed was ever set — random.sample() uses the global random state,
+    # which produces different rows on each call.  This is intentional: showing
+    # different examples on repeated clicks gives the user more variety and a
+    # better sense of overall model quality.
     indices = random.sample(range(len(predictions)), n)
 
     # Optionally compute per-row ROUGE-L when rouge-score is installed and
@@ -315,20 +342,13 @@ def build_prediction_preview_html(
     if has_rouge:
         header_cells += "<th>ROUGE-L</th>"
 
+    # Fix-2: _esc() is now defined at module scope (see top of file).
+    # It is no longer redefined on every loop iteration.
     rows_html = ""
     for rank, idx in enumerate(indices, start=1):
         # Truncate very long strings to keep the table readable
         prompt_txt = (prompts[idx][:280] + "…") if len(prompts[idx]) > 280 else prompts[idx]
         pred_txt   = (predictions[idx][:380] + "…") if len(predictions[idx]) > 380 else predictions[idx]
-
-        # Escape HTML special chars to avoid XSS / rendering issues
-        def _esc(s: str) -> str:
-            return (
-                s.replace("&", "&amp;")
-                 .replace("<", "&lt;")
-                 .replace(">", "&gt;")
-                 .replace('"', "&quot;")
-            )
 
         row = (
             f'<td><span class="badge-idx">{rank}</span></td>'
