@@ -88,6 +88,8 @@ all = [
 [project.scripts]
 # After `pip install .` the `llm-finetune` command calls main:main directly.
 llm-finetune = "main:main"
+# Explicit entry point required by Vercel
+app = "main:main"
 
 
 [project.urls]
