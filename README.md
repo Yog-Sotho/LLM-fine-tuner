@@ -1,3 +1,28 @@
+---
+title: LLM Fine-Tuner v3.2
+emoji: 🧠
+colorFrom: indigo
+colorTo: purple
+sdk: gradio
+sdk_version: "5.0.0"
+python_version: "3.10"
+app_file: app.py
+pinned: false
+suggested_hardware: "l4x1"
+suggested_storage: "large"
+tags:
+  - llm
+  - fine-tuning
+  - peft
+  - lora
+  - gradio
+  - transformers
+  - unsloth
+  - qlora
+  - dpo
+  - rlhf
+---
+
 <div align="center">
   <img src="Images/logo.jpg" alt="LLM Fine-Tuner" width="800"/>
 
