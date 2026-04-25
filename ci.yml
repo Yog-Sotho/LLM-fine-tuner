@@ -1,0 +1,416 @@
+# =============================================================================
+# .github/workflows/ci.yml
+# LLM Fine-Tuner v3.2 — Continuous Integration
+#
+# Triggers
+# --------
+#   push  → main, develop, release/**
+#   PR    → main, develop
+#   Manual via workflow_dispatch
+#
+# Job graph (each → means "needs")
+# ----------------------------------
+#   lint ──────────────────────────────────────────────────┐
+#   type-check  (needs: lint) ─────────────────────────────┤
+#   test        (needs: lint) [matrix: py3.10/3.11/3.12] ──┤→ ci-summary
+#   security    (needs: lint) ─────────────────────────────┤
+#   docker-lint (needs: lint) ─────────────────────────────┤
+#   validate-package (needs: lint) ────────────────────────┘
+#
+# Merge gate: protect the default branch on `ci-summary` only.
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "release/**"
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+# Cancel any in-flight run for the same branch/PR when a new commit arrives.
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+# Global least-privilege — individual jobs escalate only what they need.
+permissions:
+  contents: read
+
+# ---------------------------------------------------------------------------
+# Global environment — prevents any job from making unwanted network calls
+# to HuggingFace Hub or Gradio telemetry during the test suite.
+# ---------------------------------------------------------------------------
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONUNBUFFERED: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_COLOR: "1"
+  # Prevent any transformers / datasets call from hitting the network.
+  # Tests that genuinely need models patch _load_for_inference with mocks.
+  TRANSFORMERS_OFFLINE: "1"
+  HF_DATASETS_OFFLINE: "1"
+  # Stop Gradio from phoning home during imports.
+  GRADIO_ANALYTICS_ENABLED: "False"
+  # Headless matplotlib so import does not open a display.
+  MPLBACKEND: "Agg"
+
+# ===========================================================================
+# JOB 1 — LINT
+# ruff in two passes:
+#   ruff format --check  → formatting consistency (no auto-fix in CI)
+#   ruff check           → all rules declared in pyproject.toml [tool.ruff]
+#                          select = ["E", "F", "W", "I", "UP", "B"]
+# ===========================================================================
+jobs:
+  lint:
+    name: "Lint — ruff"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: "Cache pip"
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: "lint-${{ hashFiles('pyproject.toml') }}"
+          restore-keys: "lint-"
+
+      - name: "Install ruff"
+        # Same version range declared in [project.optional-dependencies] dev
+        run: pip install --quiet "ruff>=0.4.0"
+
+      - name: "ruff format --check"
+        run: ruff format --check --diff .
+
+      - name: "ruff check"
+        # --output-format github annotates PR diffs inline in the Files tab
+        run: ruff check --output-format=github .
+
+  # =========================================================================
+  # JOB 2 — TYPE CHECK
+  # mypy on the pure-Python layers (config, core, data, export, cli).
+  # Training / inference layers import torch/peft at module scope and need
+  # full stub packages — excluded to keep CI fast and dependency-light.
+  # =========================================================================
+  type-check:
+    name: "Type check — mypy"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [lint]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: "Cache pip"
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: "mypy-${{ hashFiles('pyproject.toml') }}"
+          restore-keys: "mypy-"
+
+      - name: "Install mypy + lightweight stubs"
+        run: |
+          pip install --quiet \
+            "mypy>=1.10.0" \
+            "pandas-stubs" \
+            "types-tqdm" \
+            "types-PyYAML" \
+            "numpy>=2.0.0" \
+            "pandas>=2.2.0" \
+            "typer>=0.15.0"
+
+      - name: "Run mypy (pure-Python layers)"
+        run: |
+          mypy \
+            config/ \
+            core/ \
+            data/ \
+            export/ \
+            cli/ \
+            --ignore-missing-imports \
+            --no-strict-optional \
+            --show-error-codes \
+            --pretty
+
+  # =========================================================================
+  # JOB 3 — TEST
+  # Matrix: Python 3.10 × 3.11 × 3.12 on ubuntu-latest.
+  #
+  # CPU-only PyTorch avoids requiring a GPU runner.
+  # All GPU-dependent code paths (train_model, _load_for_inference, etc.)
+  # are patched via monkeypatch in the existing test suite.
+  #
+  # pyproject.toml testpaths = ["tests"], addopts = "-v --tb=short".
+  # CI appends --cov flags so local dev runs stay clean.
+  #
+  # Codecov upload: 3.11 leg only (avoids duplicate reports).
+  # =========================================================================
+  test:
+    name: "Test — Python ${{ matrix.python-version }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [lint]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "${{ matrix.python-version }}"
+
+      - name: "Cache pip"
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: >-
+            test-py${{ matrix.python-version }}-
+            ${{ hashFiles('pyproject.toml', 'requirements.txt') }}
+          restore-keys: "test-py${{ matrix.python-version }}-"
+
+      # Install CPU PyTorch before any other dep to avoid pip resolving the
+      # CUDA build (~2 GB) from the default PyPI index.
+      - name: "Install CPU-only PyTorch 2.5.1"
+        run: |
+          pip install --quiet \
+            "torch==2.5.1" \
+            "torchvision==0.20.1" \
+            "torchaudio==2.5.1" \
+            --index-url https://download.pytorch.org/whl/cpu
+
+      # Exact version floors from pyproject.toml [project.dependencies]
+      - name: "Install core runtime dependencies"
+        run: |
+          pip install --quiet \
+            "gradio>=5.0.0" \
+            "transformers>=4.48.0" \
+            "datasets>=3.0.0" \
+            "peft>=0.14.0" \
+            "accelerate>=1.3.0" \
+            "bitsandbytes>=0.45.0" \
+            "trl>=0.8.0" \
+            "numpy>=2.0.0" \
+            "pandas>=2.2.0" \
+            "safetensors>=0.4.3" \
+            "tqdm>=4.66.0" \
+            "einops>=0.8.0" \
+            "matplotlib>=3.9.0" \
+            "huggingface_hub>=0.25.0" \
+            "typer>=0.15.0" \
+            "PyPDF2>=3.0.0" \
+            "openpyxl>=3.1.0" \
+            "psutil>=6.0.0"
+
+      # eval extras — used by test_preprocessing.py and evaluation tests
+      - name: "Install evaluation extras"
+        run: |
+          pip install --quiet \
+            "evaluate>=0.4.0" \
+            "rouge-score>=0.1.2" \
+            "nltk>=3.8.0"
+
+      - name: "Install dev / test tools"
+        run: |
+          pip install --quiet \
+            "pytest>=8.0.0" \
+            "pytest-cov>=5.0.0" \
+            "pytest-timeout>=2.3.0"
+
+      # constants.py tries to find punkt at import time and downloads if absent.
+      # Pre-fetch here so tests don't fail with a network call that's blocked
+      # by TRANSFORMERS_OFFLINE (that var only affects transformers, not nltk).
+      - name: "Pre-fetch NLTK punkt data"
+        run: |
+          python -c "
+          import nltk
+          nltk.download('punkt',     quiet=True)
+          nltk.download('punkt_tab', quiet=True)
+          nltk.download('averaged_perceptron_tagger', quiet=True)
+          print('NLTK data ready')
+          "
+
+      - name: "Run pytest with coverage"
+        run: |
+          pytest tests/ \
+            --cov=. \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing \
+            --cov-omit="archive/*,docs/*,tests/*,setup.py" \
+            --timeout=120 \
+            -p no:warnings
+
+      - name: "Upload coverage to Codecov"
+        if: matrix.python-version == '3.11'
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+          flags: unittests
+          name: "llm-fine-tuner-py311"
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # =========================================================================
+  # JOB 4 — SECURITY
+  # pip-audit scans the dependency declarations in requirements.txt for
+  # known CVEs using the OSV (Open Source Vulnerabilities) database.
+  # =========================================================================
+  security:
+    name: "Security — pip-audit"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [lint]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: "Cache pip"
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: "audit-${{ hashFiles('requirements.txt') }}"
+          restore-keys: "audit-"
+
+      - name: "Install pip-audit"
+        run: pip install --quiet pip-audit
+
+      - name: "Audit requirements.txt for CVEs"
+        run: |
+          pip-audit \
+            --requirement requirements.txt \
+            --skip-editable \
+            --output-format columns \
+            --progress-spinner off
+
+  # =========================================================================
+  # JOB 5 — DOCKER LINT
+  # hadolint performs Dockerfile best-practice static analysis.
+  # No image is built or pushed — lint only.
+  #
+  # Suppressed rules (intentional):
+  #   DL3008 — apt-get version pins break when packages are removed from
+  #             Ubuntu mirrors, which is common for CUDA base images.
+  #   DL3013 — pip version pins are delegated to requirements.txt, not here.
+  # =========================================================================
+  docker-lint:
+    name: "Docker lint — hadolint"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [lint]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Lint GPU Dockerfile"
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          ignore: DL3008,DL3013
+          failure-threshold: warning
+
+      - name: "Lint CPU Dockerfile"
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile.cpu
+          ignore: DL3008,DL3013
+          failure-threshold: warning
+
+  # =========================================================================
+  # JOB 6 — VALIDATE PACKAGE
+  # Builds an sdist + wheel and verifies the metadata with twine --strict.
+  # Catches malformed entry_points, broken README rendering, and missing
+  # METADATA fields before they reach PyPI or a user running pip install.
+  # =========================================================================
+  validate-package:
+    name: "Validate packaging"
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    needs: [lint]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: "Cache pip"
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: "pkg-${{ hashFiles('pyproject.toml', 'setup.py') }}"
+          restore-keys: "pkg-"
+
+      - name: "Install build toolchain"
+        run: pip install --quiet "build>=1.2.0" twine "setuptools>=68" wheel
+
+      - name: "Build sdist + wheel"
+        # --no-isolation: reuse the current env (avoids a redundant heavy install)
+        run: python -m build --sdist --wheel --no-isolation
+
+      - name: "Verify dist with twine --strict"
+        run: twine check --strict dist/*
+
+  # =========================================================================
+  # JOB 7 — CI SUMMARY  (the only job that needs branch protection)
+  # Always runs so the status never stays "pending" after a cancellation.
+  # =========================================================================
+  ci-summary:
+    name: "CI Summary"
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    if: always()
+    needs:
+      - lint
+      - type-check
+      - test
+      - security
+      - docker-lint
+      - validate-package
+
+    steps:
+      - name: "Evaluate job results"
+        env:
+          RESULTS: ${{ toJson(needs) }}
+        run: |
+          python3 - << 'EOF'
+          import json, os, sys
+
+          results = json.loads(os.environ["RESULTS"])
+          failed  = [
+              name
+              for name, data in results.items()
+              if data.get("result") not in ("success", "skipped")
+          ]
+
+          if failed:
+              print(f"❌ Failed jobs: {', '.join(failed)}", flush=True)
+              sys.exit(1)
+
+          print("✅ All CI jobs passed!", flush=True)
+          EOF
