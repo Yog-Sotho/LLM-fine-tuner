@@ -235,11 +235,49 @@ def preprocess_function(
         else:
             texts = examples[COL_TEXT]
 
+    # BOLT OPTIMIZATION: Use padding=False (dynamic padding) instead of
+    # padding="max_length". The DataCollator will pad batches to the longest
+    # sequence in that batch, significantly reducing VRAM and increasing speed.
     tokenized = tokenizer(
         texts,
         truncation=True,
-        padding="max_length",
+        padding=False,
         max_length=max_length,
     )
     tokenized["labels"] = tokenized["input_ids"].copy()
     return tokenized
+
+
+def tokenize_reward_function(
+    examples,
+    tokenizer,
+    rm_max_length: int,
+) -> dict:
+    """Tokenise a batch of examples for Reward Model training.
+
+    Returns a dict with input_ids and attention_mask for both chosen and
+    rejected responses.
+    """
+    # BOLT OPTIMIZATION: Use padding=False (dynamic padding) instead of
+    # padding="max_length". The DataCollator will pad batches to the longest
+    # sequence in that batch, significantly reducing VRAM and increasing speed.
+    chosen_tok = tokenizer(
+        examples[COL_CHOSEN],
+        truncation=True,
+        max_length=rm_max_length,
+        padding=False,
+        return_attention_mask=True,
+    )
+    rejected_tok = tokenizer(
+        examples[COL_REJECTED],
+        truncation=True,
+        max_length=rm_max_length,
+        padding=False,
+        return_attention_mask=True,
+    )
+    return {
+        "input_ids_chosen":        chosen_tok["input_ids"],
+        "attention_mask_chosen":   chosen_tok["attention_mask"],
+        "input_ids_rejected":      rejected_tok["input_ids"],
+        "attention_mask_rejected": rejected_tok["attention_mask"],
+    }

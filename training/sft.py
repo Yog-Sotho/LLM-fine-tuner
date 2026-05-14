@@ -155,13 +155,20 @@ def train_model(
                 if COL_INSTRUCTION in dataset.column_names and COL_OUTPUT in dataset.column_names
                 else "lm"
             )
+            # BOLT OPTIMIZATION: num_proc=os.cpu_count() parallelises tokenisation
+            # Using fn_kwargs instead of lambda to ensure picklability for multiprocessing
             tokenized = dataset.map(
-                lambda x: preprocess_function(
-                    x, tokenizer, hyperparams["max_length"],
-                    task_type, use_chat_template, system_prompt,
-                ),
+                preprocess_function,
                 batched=True,
+                fn_kwargs={
+                    "tokenizer": tokenizer,
+                    "max_length": hyperparams["max_length"],
+                    "task_type": task_type,
+                    "use_chat_template": use_chat_template,
+                    "system_prompt": system_prompt,
+                },
                 remove_columns=dataset.column_names,
+                num_proc=os.cpu_count(),
                 desc="Tokenising",
             )
 
