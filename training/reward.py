@@ -95,27 +95,23 @@ def train_reward_model_v27(
             trust_remote_code=True,
         )
 
-        def tokenize_reward(examples):
-            chosen_tok = tokenizer(
-                examples[COL_CHOSEN],
-                truncation=True, max_length=rm_max_length,
-                padding="max_length", return_attention_mask=True,
-            )
-            rejected_tok = tokenizer(
-                examples[COL_REJECTED],
-                truncation=True, max_length=rm_max_length,
-                padding="max_length", return_attention_mask=True,
-            )
-            return {
-                "input_ids_chosen":       chosen_tok["input_ids"],
-                "attention_mask_chosen":  chosen_tok["attention_mask"],
-                "input_ids_rejected":     rejected_tok["input_ids"],
-                "attention_mask_rejected":rejected_tok["attention_mask"],
-            }
+        from data.preprocessing import tokenize_reward_function
+        import os
 
         if progress is not None:
             progress(0.15, desc="Tokenising reward pairs…")
-        tokenized_ds = ds.map(tokenize_reward, batched=True, remove_columns=ds.column_names)
+        # BOLT OPTIMIZATION: num_proc=os.cpu_count() parallelises tokenisation
+        # Using top-level tokenize_reward_function and fn_kwargs for picklability
+        tokenized_ds = ds.map(
+            tokenize_reward_function,
+            batched=True,
+            fn_kwargs={
+                "tokenizer": tokenizer,
+                "rm_max_length": rm_max_length,
+            },
+            remove_columns=ds.column_names,
+            num_proc=os.cpu_count(),
+        )
 
         # v3.2 Fix #1: Guard against datasets too small to produce a non-empty eval split.
         if len(tokenized_ds) < 2:
