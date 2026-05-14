@@ -20,11 +20,7 @@ Fix log
 
 import os
 
-from config.constants import HAS_HUB
-
-# HuggingFace write tokens always start with this prefix and are >= 36 chars.
-_HF_TOKEN_PREFIX: str = "hf_"
-_HF_TOKEN_MIN_LEN: int = 36
+from config.constants import HAS_HUB, HF_TOKEN_PREFIX, HF_TOKEN_MIN_LEN
 
 
 def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
@@ -45,12 +41,12 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
     # M6 FIX: validate the token format properly — HF tokens are `hf_` + 33 chars.
     if (
         not token
-        or not token.startswith(_HF_TOKEN_PREFIX)
-        or len(token) < _HF_TOKEN_MIN_LEN
+        or not token.startswith(HF_TOKEN_PREFIX)
+        or len(token) < HF_TOKEN_MIN_LEN
     ):
         return (
             "❌ Invalid Hugging Face write token.\n"
-            "Tokens start with 'hf_' and are at least 36 characters long.\n"
+            f"Tokens start with '{HF_TOKEN_PREFIX}' and are at least {HF_TOKEN_MIN_LEN} characters long.\n"
             "Get yours at: https://huggingface.co/settings/tokens"
         )
     if not HAS_HUB:

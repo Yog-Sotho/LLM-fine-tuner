@@ -18,7 +18,7 @@ import json
 import os
 from datetime import datetime
 
-from config.constants import HAS_HUB
+from config.constants import HAS_HUB, HF_TOKEN_PREFIX, HF_TOKEN_MIN_LEN
 
 
 class ModelRegistry:
@@ -161,8 +161,16 @@ def on_registry_upload(
     """Handler for the Registry Upload button in the Share tab."""
     if not registry_repo_id or "/" not in registry_repo_id:
         return "❌ Invalid Repo ID. Format: username/model-name"
-    if not registry_token or len(registry_token) < 8:
-        return "❌ Please provide a valid Hugging Face write token."
+    # Sentinel: standardized robust token validation.
+    if (
+        not registry_token
+        or not registry_token.startswith(HF_TOKEN_PREFIX)
+        or len(registry_token) < HF_TOKEN_MIN_LEN
+    ):
+        return (
+            "❌ Invalid Hugging Face write token.\n"
+            f"Tokens start with '{HF_TOKEN_PREFIX}' and are at least {HF_TOKEN_MIN_LEN} characters long."
+        )
     if not registry_version.strip():
         return "❌ Please enter a version tag (e.g. 1.0, 1.0.1)."
     if not model_path_state or not os.path.isdir(model_path_state):
@@ -183,8 +191,16 @@ def on_registry_list(registry_repo_id: str, registry_token: str) -> str:
     """Handler for the List Versions button in the Share tab."""
     if not registry_repo_id or "/" not in registry_repo_id:
         return "❌ Invalid Repo ID."
-    if not registry_token or len(registry_token) < 8:
-        return "❌ Please provide a valid HF token."
+    # Sentinel: standardized robust token validation.
+    if (
+        not registry_token
+        or not registry_token.startswith(HF_TOKEN_PREFIX)
+        or len(registry_token) < HF_TOKEN_MIN_LEN
+    ):
+        return (
+            "❌ Invalid Hugging Face write token.\n"
+            f"Tokens start with '{HF_TOKEN_PREFIX}' and are at least {HF_TOKEN_MIN_LEN} characters long."
+        )
 
     try:
         reg = ModelRegistry(registry_repo_id.strip(), registry_token.strip())

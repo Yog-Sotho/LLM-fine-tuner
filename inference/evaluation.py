@@ -60,12 +60,17 @@ from inference.generate import _load_for_inference
 # and element text, preventing XSS from model outputs or user prompts.
 
 def _esc(s: str) -> str:
-    """Escape HTML special characters in ``s`` for safe inline rendering."""
+    """Escape HTML special characters in ``s`` for safe inline rendering.
+
+    Sentinel: Enhanced to include single quote escaping (&#x27;) as per
+    OWASP recommendations for robust XSS prevention.
+    """
     return (
         s.replace("&", "&amp;")
          .replace("<", "&lt;")
          .replace(">", "&gt;")
          .replace('"', "&quot;")
+         .replace("'", "&#x27;")
     )
 
 

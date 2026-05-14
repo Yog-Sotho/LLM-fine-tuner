@@ -85,6 +85,11 @@ LLM_JUDGE_CRITERIA: list[str] = [
     "helpfulness", "accuracy", "coherence", "safety", "relevance",
 ]
 
+# ── HuggingFace Hub constants ─────────────────────────────────────────────
+# HuggingFace write tokens always start with this prefix and are >= 36 chars.
+HF_TOKEN_PREFIX: str = "hf_"
+HF_TOKEN_MIN_LEN: int = 36
+
 # ── LoRA target module map ─────────────────────────────────────────────────
 # Used by get_lora_targets() in core/hardware.py
 LORA_TARGET_MAP: dict[str, list[str]] = {
