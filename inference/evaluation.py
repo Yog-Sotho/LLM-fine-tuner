@@ -192,31 +192,46 @@ def llm_judge_evaluate(
     model, tokenizer = _load_for_inference(judge_model_name, judge_lora_path)
 
     results = []
-    for prompt, response in zip(prompts, responses):
-        eval_prompt = (
+    # BOLT OPTIMIZATION: Process judge evaluations in batches (default size 8)
+    # to utilize GPU parallelism, significantly speeding up large evaluations.
+    batch_size = 8
+    for i in range(0, len(prompts), batch_size):
+        batch_prompts = prompts[i: i + batch_size]
+        batch_responses = responses[i: i + batch_size]
+
+        eval_texts = [
             f"Evaluate the following response based on: {criteria}\n"
-            f"Prompt: {prompt}\nResponse: {response}\n"
+            f"Prompt: {p}\nResponse: {r}\n"
             f"Score (1-10) and brief reasoning:"
-        )
+            for p, r in zip(batch_prompts, batch_responses)
+        ]
+
         inputs = tokenizer(
-            eval_prompt,
+            eval_texts,
             return_tensors="pt",
             truncation=True,
+            padding=True,
             max_length=1024,
         )
         if torch.cuda.is_available():
             inputs = {k: v.cuda() for k, v in inputs.items()}
+
         with torch.no_grad():
-            out = model.generate(
+            outputs = model.generate(
                 **inputs,
                 max_new_tokens=max_new_tokens,
                 do_sample=False,
                 pad_token_id=tokenizer.eos_token_id,
             )
-        judgment = tokenizer.decode(
-            out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
-        ).strip()
-        results.append({"prompt": prompt, "response": response, "judgment": judgment})
+
+        # Simplified prompt stripping: left-padding ensures all responses start
+        # at the same relative offset (input_ids.shape[1]).
+        input_len = inputs["input_ids"].shape[1]
+        for idx, (p, r) in enumerate(zip(batch_prompts, batch_responses)):
+            judgment = tokenizer.decode(
+                outputs[idx, input_len:], skip_special_tokens=True
+            ).strip()
+            results.append({"prompt": p, "response": r, "judgment": judgment})
 
     return results
 
@@ -471,13 +486,11 @@ def on_evaluate_click(
                     top_p=0.9,
                     pad_token_id=tokenizer.eos_token_id,
                 )
-            # CRITICAL FIX #3: Strip prompt tokens via attention mask lengths,
-            # not by slicing at a fixed offset.
-            input_lengths = inputs["attention_mask"].sum(dim=1).tolist()
-            for idx, gen_ids in enumerate(outputs):
-                gen_len   = gen_ids.shape[0]
-                input_len = input_lengths[idx]
-                response_ids = gen_ids[input_len:] if input_len < gen_len else gen_ids
+            # BOLT OPTIMIZATION: Left-padding simplifies prompt stripping by
+            # ensuring all responses start at input_ids.shape[1].
+            input_len = inputs["input_ids"].shape[1]
+            for gen_ids in outputs:
+                response_ids = gen_ids[input_len:]
                 predictions.append(
                     tokenizer.decode(response_ids, skip_special_tokens=True)
                 )
