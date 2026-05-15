@@ -68,6 +68,9 @@ def _load_for_inference(model_name: str, lora_path: str | None):
             tokenizer.add_special_tokens({"eos_token": "</s>"})
             tokenizer.eos_token = "</s>"
     tokenizer.pad_token = tokenizer.eos_token
+    # BOLT OPTIMIZATION: Use left-padding for inference to enable more
+    # efficient and reliable batch generation with decoder-only models.
+    tokenizer.padding_side = "left"
 
     base = AutoModelForCausalLM.from_pretrained(
         model_name,
@@ -124,7 +127,9 @@ def generate_text(
                 top_p=top_p,
                 pad_token_id=tokenizer.eos_token_id,
             )
-        input_len = inputs["attention_mask"].sum(dim=-1)[0].item()
+        # BOLT OPTIMIZATION: Left-padding ensures the generated response starts
+        # exactly at the end of the input tokens (input_ids.shape[1]).
+        input_len = inputs["input_ids"].shape[1]
         return tokenizer.decode(out[0][input_len:], skip_special_tokens=True)
     except Exception as e:
         return f"❌ Generation failed: {e}"
@@ -191,13 +196,11 @@ def batch_generate(
                     top_p=0.9,
                     pad_token_id=tokenizer.eos_token_id,
                 )
-            # C-4 FIX: Strip prompt tokens using attention_mask lengths.
-            # Previously batch_decode(outputs) returned full sequences including
-            # the prompt prefix, so every response started with the original prompt.
-            input_lengths = inputs["attention_mask"].sum(dim=1).tolist()
-            for idx, gen_ids in enumerate(outputs):
-                input_len = int(input_lengths[idx])
-                response_ids = gen_ids[input_len:] if input_len < gen_ids.shape[0] else gen_ids
+            # BOLT OPTIMIZATION: Left-padding ensures all responses in the batch
+            # start at the same offset (input_ids.shape[1]), simplifying logic.
+            input_len = inputs["input_ids"].shape[1]
+            for gen_ids in outputs:
+                response_ids = gen_ids[input_len:]
                 all_responses.append(tokenizer.decode(response_ids, skip_special_tokens=True))
 
         result_df = pd.DataFrame({"prompt": prompts, "response": all_responses})
