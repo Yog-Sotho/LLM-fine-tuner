@@ -226,12 +226,13 @@ def llm_judge_evaluate(
 
         # Simplified prompt stripping: left-padding ensures all responses start
         # at the same relative offset (input_ids.shape[1]).
+        # BOLT OPTIMIZATION: Use batch_decode for efficient judgment extraction.
         input_len = inputs["input_ids"].shape[1]
-        for idx, (p, r) in enumerate(zip(batch_prompts, batch_responses)):
-            judgment = tokenizer.decode(
-                outputs[idx, input_len:], skip_special_tokens=True
-            ).strip()
-            results.append({"prompt": p, "response": r, "judgment": judgment})
+        judgments = tokenizer.batch_decode(
+            outputs[:, input_len:], skip_special_tokens=True
+        )
+        for p, r, j in zip(batch_prompts, batch_responses, judgments):
+            results.append({"prompt": p, "response": r, "judgment": j.strip()})
 
     return results
 
@@ -486,14 +487,12 @@ def on_evaluate_click(
                     top_p=0.9,
                     pad_token_id=tokenizer.eos_token_id,
                 )
-            # BOLT OPTIMIZATION: Left-padding simplifies prompt stripping by
-            # ensuring all responses start at input_ids.shape[1].
+            # BOLT OPTIMIZATION: Left-padding simplifies prompt stripping.
+            # Use batch_decode for efficient response extraction.
             input_len = inputs["input_ids"].shape[1]
-            for gen_ids in outputs:
-                response_ids = gen_ids[input_len:]
-                predictions.append(
-                    tokenizer.decode(response_ids, skip_special_tokens=True)
-                )
+            predictions.extend(
+                tokenizer.batch_decode(outputs[:, input_len:], skip_special_tokens=True)
+            )
 
         # ── Metrics ────────────────────────────────────────────────────────
         metrics: dict = {}

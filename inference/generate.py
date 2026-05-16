@@ -197,11 +197,13 @@ def batch_generate(
                     pad_token_id=tokenizer.eos_token_id,
                 )
             # BOLT OPTIMIZATION: Left-padding ensures all responses in the batch
-            # start at the same offset (input_ids.shape[1]), simplifying logic.
+            # start at the same offset (input_ids.shape[1]). Using batch_decode
+            # instead of a serial loop is more efficient.
             input_len = inputs["input_ids"].shape[1]
-            for gen_ids in outputs:
-                response_ids = gen_ids[input_len:]
-                all_responses.append(tokenizer.decode(response_ids, skip_special_tokens=True))
+            response_tensors = outputs[:, input_len:]
+            all_responses.extend(
+                tokenizer.batch_decode(response_tensors, skip_special_tokens=True)
+            )
 
         result_df = pd.DataFrame({"prompt": prompts, "response": all_responses})
         with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as tmp:
