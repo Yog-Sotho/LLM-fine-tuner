@@ -65,6 +65,7 @@ def build_train_tab() -> dict:
                     label="System Prompt",
                     value="You are a helpful, respectful and honest assistant.",
                     lines=2,
+                    max_length=1000,
                 )
 
                 with gr.Row():
