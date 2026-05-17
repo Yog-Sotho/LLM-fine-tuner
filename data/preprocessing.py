@@ -66,7 +66,9 @@ def validate_and_clean_dataset(
         lengths = [len(str(t).strip()) for t in dataset[COL_TEXT]]
     elif COL_INSTRUCTION in dataset.column_names and COL_OUTPUT in dataset.column_names:
         lengths = [
-            len(str(i).strip()) + len(str(o).strip())
+            # Sentinel: Use min() for empty detection — if either side is empty,
+            # the row is effectively invalid for supervised fine-tuning.
+            min(len(str(i).strip()), len(str(o).strip()))
             for i, o in zip(dataset[COL_INSTRUCTION], dataset[COL_OUTPUT])
         ]
     else:

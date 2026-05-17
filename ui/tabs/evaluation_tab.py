@@ -59,6 +59,7 @@ def build_evaluation_tab() -> dict:
                 judge_model_name = gr.Textbox(
                     label="Judge Model ID (used when LLM-as-Judge enabled)",
                     placeholder="gpt2 or any local model",
+                    max_length=512,
                 )
                 judge_criteria = gr.Dropdown(
                     choices=LLM_JUDGE_CRITERIA,

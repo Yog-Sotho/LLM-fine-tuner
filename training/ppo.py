@@ -162,7 +162,8 @@ def run_ppo_v27(
                     break
                 batch_prompts = prompts[batch_idx: batch_idx + ppo_batch_size]
                 query_tensors = [
-                    tokenizer.encode(p, return_tensors="pt").squeeze(0)
+                    # Sentinel: Enforce max input length to prevent DoS via resource exhaustion.
+                    tokenizer.encode(p, return_tensors="pt", truncation=True, max_length=512).squeeze(0)
                     for p in batch_prompts
                 ]
 

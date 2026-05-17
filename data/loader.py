@@ -197,8 +197,9 @@ def safe_extract_zip(zip_path: str, extract_dir: str) -> str:
             # The target must be inside the extract directory
             # (os.sep suffix prevents prefix-collision: /tmp/out vs /tmp/outside)
             if not target.startswith(abs_extract_dir + os.sep) and target != abs_extract_dir:
+                # Sentinel: ensure error message contains "Path traversal" for test compatibility
                 raise ValueError(
-                    f"Unsafe path in ZIP (path traversal attempt): {file_info.filename!r}"
+                    f"Path traversal attempt: Unsafe path in ZIP: {file_info.filename!r}"
                 )
             zf.extract(file_info, extract_dir)
     return extract_dir
