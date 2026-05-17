@@ -115,7 +115,8 @@ def generate_text(
     """
     try:
         model, tokenizer = _load_for_inference(model_name, lora_path)
-        inputs = tokenizer(prompt, return_tensors="pt")
+        # Sentinel: Enforce max input length to prevent DoS via resource exhaustion.
+        inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048)
         if torch.cuda.is_available():
             inputs = {k: v.cuda() for k, v in inputs.items()}
         with torch.no_grad():

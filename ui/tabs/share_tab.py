@@ -34,6 +34,7 @@ def build_share_tab() -> dict:
                     label="Notes / Changelog",
                     placeholder="What changed in this version?",
                     lines=3,
+                    max_length=4096,
                 )
                 with gr.Row():
                     registry_upload_btn = gr.Button("📤 Upload Versioned Model", variant="primary")
