@@ -23,9 +23,11 @@ def build_inference_tab() -> dict:
                     label="PEFT adapter path (auto-filled after training)",
                     interactive=False,
                 )
-                prompt_in    = gr.Textbox(label="Prompt", lines=4,
-                                          placeholder="Enter your prompt here…",
-                                          max_length=4096)
+                prompt_in    = gr.Textbox(
+                    label="Prompt", lines=4,
+                    placeholder="Enter your prompt here…",
+                    max_length=4000,
+                )
                 with gr.Row():
                     max_tok = gr.Slider(10, 500, value=200, step=10, label="Max new tokens")
                     temp    = gr.Slider(0.1, 2.0, value=0.7, step=0.1, label="Temperature")
@@ -82,7 +84,7 @@ def build_inference_tab() -> dict:
                 vllm_prompt_in  = gr.Textbox(
                     label="vLLM Prompt", lines=4,
                     placeholder="Enter prompt for high-throughput vLLM inference…",
-                    max_length=4096,
+                    max_length=4000,
                 )
                 with gr.Row():
                     vllm_quant_select = gr.Dropdown(
