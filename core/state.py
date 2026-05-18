@@ -8,9 +8,13 @@ The module-level singleton `app_state` is the single source of truth for:
   • inference_cache  — (model_name, lora_path) → (model, tokenizer)
   • vllm_cache       — (model_path, quant, tensor_parallel) → LLM engine
   • _last_zip_path   — path of last training ZIP for cleanup (M-6 fix)
+  • _last_model_dir  — path of last training output directory (Sentinel fix)
+  • _last_gguf_dir   — path of last GGUF export directory (Sentinel fix)
+  • _last_peft_dir   — path of last PEFT extraction directory (Sentinel fix)
 """
 
 import os
+import shutil
 import threading
 
 
@@ -33,11 +37,32 @@ class AppState:
         self.vllm_cache: dict = {}
         self.max_vllm_engines: int = int(os.environ.get("MAX_VLLM_ENGINES", "1"))
 
-        # M-6 FIX: Track last ZIP path for cleanup on next training run.
-        # create_zip_from_folder() creates NamedTemporaryFile(delete=False)
-        # which is never deleted without explicit cleanup. On_train_click
-        # stores the current zip path here and removes the previous one.
+        # ── Resource tracking for DoS prevention (Sentinel) ────────────────
+        # Many operations create temporary files or directories that are
+        # never deleted. We track the most recent ones to ensure we don't
+        # exhaust disk space in long-running sessions.
         self._last_zip_path: str | None = None
+        self._last_model_dir: str | None = None
+        self._last_gguf_dir: str | None = None
+        self._last_peft_dir: str | None = None
+
+    def cleanup_resource(self, attr_name: str, new_value: str | None = None) -> None:
+        """Safely delete a file or directory tracked by an attribute and update it.
+
+        Sentinel: Centralised cleanup to prevent disk exhaustion (DoS prevention).
+        If the path exists, it is removed (shutil.rmtree for dirs, os.unlink for files).
+        The attribute is then updated to `new_value` (default None).
+        """
+        old_path = getattr(self, attr_name, None)
+        if old_path and os.path.exists(old_path):
+            try:
+                if os.path.isdir(old_path):
+                    shutil.rmtree(old_path)
+                else:
+                    os.unlink(old_path)
+            except OSError:
+                pass  # Best effort cleanup — avoid crashing on permission errors
+        setattr(self, attr_name, new_value)
 
 
 # Module-level singleton — import this everywhere:

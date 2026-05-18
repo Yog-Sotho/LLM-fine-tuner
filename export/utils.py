@@ -30,6 +30,7 @@ import gradio as gr
 import torch
 
 from data.loader import safe_extract_zip
+from core.state import app_state
 
 
 def create_zip_from_folder(folder_path: str) -> str:
@@ -150,8 +151,13 @@ def on_peft_zip_upload(zip_file) -> tuple:
     if zip_file is None:
         return " ", "No file uploaded.", " "
 
+    # Sentinel: Clean up the previous PEFT extraction directory to prevent disk exhaustion (DoS).
+    app_state.cleanup_resource("_last_peft_dir")
+
     try:
         extract_dir = tempfile.mkdtemp(prefix="peft_zip_")
+        # Sentinel: Track the new PEFT directory for future cleanup.
+        app_state._last_peft_dir = extract_dir
         safe_extract_zip(zip_file.name, extract_dir)
 
         # Walk the extracted tree to find the actual adapter root.
