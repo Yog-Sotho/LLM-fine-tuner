@@ -39,20 +39,18 @@ Patch log
 
 import random
 
+import gradio as gr
 import numpy as np  # M-5 FIX: moved from inside compute_bleu_rouge() to module top-level
 import pandas as pd
-import gradio as gr
 import torch
 
 from config.constants import (
+    HAS_BERTSCORE,
     HAS_NLTK,
     HAS_ROUGE,
-    HAS_BERTSCORE,
-    LLM_JUDGE_CRITERIA,
 )
 from core.state import app_state
 from inference.generate import _load_for_inference
-
 
 # ── HTML escaping helper ───────────────────────────────────────────────────
 # Fix-2: Defined at module scope, not inside the rendering loop.
@@ -85,7 +83,7 @@ def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
     results = {}
 
     if HAS_NLTK and predictions and references:
-        from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction  # lazy
+        from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu  # lazy
 
         smoothing = SmoothingFunction().method4
         bleu_scores = []
@@ -462,7 +460,9 @@ def on_evaluate_click(
             model_name,
             eval_lora_path if eval_lora_path else None,
         )
-        batch_size = 4
+        # BOLT OPTIMIZATION: Increased batch size to 8 to better utilize GPU
+        # parallelism, matching the judge evaluation component.
+        batch_size = 8
 
         for i in range(0, len(prompts), batch_size):
             if app_state.stop_event.is_set():
@@ -488,12 +488,12 @@ def on_evaluate_click(
                 )
             # BOLT OPTIMIZATION: Left-padding simplifies prompt stripping by
             # ensuring all responses start at input_ids.shape[1].
+            # Using batch_decode instead of serial decode for faster processing.
             input_len = inputs["input_ids"].shape[1]
-            for gen_ids in outputs:
-                response_ids = gen_ids[input_len:]
-                predictions.append(
-                    tokenizer.decode(response_ids, skip_special_tokens=True)
-                )
+            batch_responses = tokenizer.batch_decode(
+                outputs[:, input_len:], skip_special_tokens=True
+            )
+            predictions.extend(batch_responses)
 
         # ── Metrics ────────────────────────────────────────────────────────
         metrics: dict = {}
