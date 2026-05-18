@@ -73,13 +73,9 @@ def on_train_click(
     """
     app_state.stop_event.clear()
 
-    # M-6 FIX: Clean up the previous training ZIP file before creating a new one.
-    if app_state._last_zip_path and os.path.isfile(app_state._last_zip_path):
-        try:
-            os.unlink(app_state._last_zip_path)
-        except OSError:
-            pass  # Non-fatal — best effort cleanup
-    app_state._last_zip_path = None
+    # Sentinel: Clean up previous training resources to prevent disk exhaustion (DoS).
+    app_state.cleanup_resource("_last_zip_path")
+    app_state.cleanup_resource("_last_model_dir")
 
     training_mode = "dpo" if "dpo" in training_mode.lower() else "sft"
 
@@ -190,8 +186,9 @@ def on_train_click(
         )
         zip_path = create_zip_from_folder(output_dir)
 
-        # M-6 FIX: Store the new ZIP path so the next call can clean it up.
+        # Sentinel: Track resources so the next run can clean them up.
         app_state._last_zip_path = zip_path
+        app_state._last_model_dir = output_dir
 
         full_msg  = msg + "\n" + issues_str
         return full_msg, zip_path, output_dir, log_records
