@@ -45,15 +45,26 @@ def create_zip_from_folder(folder_path: str) -> str:
     next training run, preventing indefinite accumulation of large ZIP files in
     the OS temp directory.
     """
-    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-        zip_path = tmp.name
+    zip_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+            zip_path = tmp.name
+
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for root, _, files in os.walk(folder_path):
                 for fname in files:
                     fpath    = os.path.join(root, fname)
                     arc_name = os.path.relpath(fpath, start=os.path.dirname(folder_path))
                     zf.write(fpath, arc_name)
-    return zip_path
+        return zip_path
+    except Exception:
+        # Sentinel: Ensure partial ZIP files are cleaned up on failure to prevent disk exhaustion.
+        if zip_path and os.path.exists(zip_path):
+            try:
+                os.unlink(zip_path)
+            except OSError:
+                pass
+        raise
 
 
 def create_model_card(

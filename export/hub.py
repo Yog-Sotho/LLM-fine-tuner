@@ -38,6 +38,9 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
         return "❌ No model found. Please train a model first."
     if not repo_id or "/" not in repo_id:
         return "❌ Invalid Repo ID. Format: `username/model-name`"
+
+    # Sentinel: standardized robust token validation with whitespace stripping.
+    token = token.strip() if token else ""
     # M6 FIX: validate the token format properly — HF tokens are `hf_` + 33 chars.
     if (
         not token

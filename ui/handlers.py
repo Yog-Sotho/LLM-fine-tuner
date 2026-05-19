@@ -140,6 +140,8 @@ def on_train_click(
         dpo_beta=dpo_beta,
     )
     output_dir = tempfile.mkdtemp()
+    # Sentinel: Track resources immediately after creation so failed runs are cleaned up.
+    app_state._last_model_dir = output_dir
 
     # N-3 FIX: Compute dataset stats by inspecting ACTUAL column names on `ds`.
     try:
@@ -186,9 +188,8 @@ def on_train_click(
         )
         zip_path = create_zip_from_folder(output_dir)
 
-        # Sentinel: Track resources so the next run can clean them up.
+        # Sentinel: Track the ZIP path for the next run cleanup.
         app_state._last_zip_path = zip_path
-        app_state._last_model_dir = output_dir
 
         full_msg  = msg + "\n" + issues_str
         return full_msg, zip_path, output_dir, log_records

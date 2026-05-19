@@ -161,7 +161,9 @@ def on_registry_upload(
     """Handler for the Registry Upload button in the Share tab."""
     if not registry_repo_id or "/" not in registry_repo_id:
         return "❌ Invalid Repo ID. Format: username/model-name"
-    # Sentinel: standardized robust token validation.
+
+    # Sentinel: standardized robust token validation with whitespace stripping.
+    registry_token = registry_token.strip() if registry_token else ""
     if (
         not registry_token
         or not registry_token.startswith(HF_TOKEN_PREFIX)
@@ -171,8 +173,12 @@ def on_registry_upload(
             "❌ Invalid Hugging Face write token.\n"
             f"Tokens start with '{HF_TOKEN_PREFIX}' and are at least {HF_TOKEN_MIN_LEN} characters long."
         )
-    if not registry_version.strip():
+    registry_version = registry_version.strip()
+    if not registry_version:
         return "❌ Please enter a version tag (e.g. 1.0, 1.0.1)."
+    # Sentinel: Prevent path traversal in metadata filenames via malicious version strings.
+    if any(char in registry_version for char in ["..", "/", "\\"]):
+        return "❌ Invalid version tag: characters '..', '/', and '\\' are not allowed."
     if not model_path_state or not os.path.isdir(model_path_state):
         return "❌ No trained model found. Train a model first."
 
@@ -191,7 +197,9 @@ def on_registry_list(registry_repo_id: str, registry_token: str) -> str:
     """Handler for the List Versions button in the Share tab."""
     if not registry_repo_id or "/" not in registry_repo_id:
         return "❌ Invalid Repo ID."
-    # Sentinel: standardized robust token validation.
+
+    # Sentinel: standardized robust token validation with whitespace stripping.
+    registry_token = registry_token.strip() if registry_token else ""
     if (
         not registry_token
         or not registry_token.startswith(HF_TOKEN_PREFIX)

@@ -85,6 +85,14 @@ def on_merge_adapter_click(
     base    = base_model_name.strip() if base_model_name and base_model_name.strip() else ""
     adapter = adapter_path.strip() if adapter_path and adapter_path.strip() else (model_path_state or "")
 
+    # Sentinel: Path traversal protection for user-provided adapter path.
+    # Blocks absolute paths and traversal components.
+    if any(char in str(adapter) for char in ["..", "/", "\\"]):
+        return (
+            "❌ Invalid adapter path: characters '..', '/', and '\\' are not allowed.",
+            gr.update(),
+        )
+
     if not adapter or not os.path.isdir(str(adapter)):
         return (
             "❌ No valid adapter/model path. Train a model first or enter a path.",
