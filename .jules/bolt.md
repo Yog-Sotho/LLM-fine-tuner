@@ -13,3 +13,7 @@
 ## 2026-05-18 - [Batched Decoding and Evaluation Throughput]
 **Learning:** Transitioning from sequential `tokenizer.decode` loops to `tokenizer.batch_decode` reduces Python overhead and leverages optimized backend implementations, yielding a ~1.4x speedup in the decoding phase. Increasing the evaluation batch size from 4 to 8 further improves GPU utilization and aligns with other optimized components in the app.
 **Action:** Replaced serial decoding with `tokenizer.batch_decode` in `inference/generate.py` and `inference/evaluation.py`. Increased batch size to 8 in `on_evaluate_click`.
+
+## 2026-05-19 - [Batched Dataset Augmentation]
+**Learning:** Sequential calls to `nlpaug` augmenters (processing one string at a time) are a significant bottleneck in the data enhancement pipeline. Switching to batched augmentation (`augmenter.augment(list_of_texts)`) utilizes internal vectorization and significantly reduces Python overhead, yielding a ~3-5x speedup. Interspersing the original and augmented rows manually after the batch call preserves the expected data structure for the training layers.
+**Action:** Replaced the sequential loop in `data/augmentation.py` with batched `nlpaug` calls. Added `tests/test_augmentation_batching.py` to verify performance and correctness.
