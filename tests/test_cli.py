@@ -29,7 +29,7 @@ from typer.testing import CliRunner
 from cli.commands import app, DummyFile
 
 
-runner = CliRunner(mix_stderr=False)
+runner = CliRunner()
 
 
 # ── DummyFile ──────────────────────────────────────────────────────────────

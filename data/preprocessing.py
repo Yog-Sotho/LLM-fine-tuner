@@ -42,115 +42,97 @@ def validate_and_clean_dataset(
     dataset: Dataset,
     is_dpo: bool = False,
 ) -> tuple:
-    """Validate and clean a Dataset in-place.
+    """Validate and clean a Dataset efficiently.
 
     Removes empty examples, deduplicates, and reports long ones (> 2048 chars).
+    BOLT OPTIMIZATION: Uses a single pass for empty detection and length calculation,
+    then selects valid indices to avoid redundant dataset iterations.
 
     Returns
     -------
     (cleaned_dataset, issues)  where issues is a list[str] of warning messages.
     """
     issues = []
+    valid_indices = []
+    lengths_after_empty_removal = []
 
-    # ── Compute lengths per row (strip whitespace for accurate empty detection) ──
+    # ── Single-pass validation and filtering ──────────────────────────────
     if is_dpo:
-        lengths = [
-            len(str(p).strip()) + len(str(c).strip()) + len(str(r).strip())
-            for p, c, r in zip(
-                dataset[COL_PROMPT],
-                dataset[COL_CHOSEN],
-                dataset[COL_REJECTED],
-            )
-        ]
+        col_p = [str(x).strip() for x in dataset[COL_PROMPT]]
+        col_c = [str(x).strip() for x in dataset[COL_CHOSEN]]
+        col_r = [str(x).strip() for x in dataset[COL_REJECTED]]
+        for idx, (p, c, r) in enumerate(zip(col_p, col_c, col_r)):
+            if p and c and r:
+                valid_indices.append(idx)
+                lengths_after_empty_removal.append(len(p) + len(c) + len(r))
     elif COL_TEXT in dataset.column_names:
-        lengths = [len(str(t).strip()) for t in dataset[COL_TEXT]]
+        col_t = [str(x).strip() for x in dataset[COL_TEXT]]
+        for idx, t in enumerate(col_t):
+            if t:
+                valid_indices.append(idx)
+                lengths_after_empty_removal.append(len(t))
     elif COL_INSTRUCTION in dataset.column_names and COL_OUTPUT in dataset.column_names:
-        lengths = [
-            # Sentinel: Use min() for empty detection — if either side is empty,
-            # the row is effectively invalid for supervised fine-tuning.
-            min(len(str(i).strip()), len(str(o).strip()))
-            for i, o in zip(dataset[COL_INSTRUCTION], dataset[COL_OUTPUT])
-        ]
+        col_i = [str(x).strip() for x in dataset[COL_INSTRUCTION]]
+        col_o = [str(x).strip() for x in dataset[COL_OUTPUT]]
+        for idx, (i, o) in enumerate(zip(col_i, col_o)):
+            # Sentinel: Use AND for empty detection — if either side is empty,
+            # the row is invalid for supervised fine-tuning.
+            if i and o:
+                valid_indices.append(idx)
+                lengths_after_empty_removal.append(len(i) + len(o))
     else:
         return dataset, ["⚠️ Unknown column structure — cannot validate."]
 
-    # ── Report and remove empty / whitespace-only examples ────────────────
-    empty = sum(1 for ln in lengths if ln == 0)
+    # ── Report empty removal and select valid rows ────────────────────────
+    empty = len(dataset) - len(valid_indices)
     if empty:
         issues.append(f"⚠️ {empty} empty examples removed. ")
-
-    if is_dpo:
-        dataset = dataset.filter(
-            lambda x: (
-                len(str(x[COL_PROMPT]).strip()) > 0
-                and len(str(x[COL_CHOSEN]).strip()) > 0
-                and len(str(x[COL_REJECTED]).strip()) > 0
-            )
-        )
-    elif COL_TEXT in dataset.column_names:
-        # BUG 3 FIX: strip so whitespace-only strings count as empty
-        dataset = dataset.filter(lambda x: len(str(x[COL_TEXT]).strip()) > 0)
+        dataset = dataset.select(valid_indices)
     else:
-        # BUG 2 FIX: check each column independently with AND, not sum with OR
-        dataset = dataset.filter(
-            lambda x: (
-                len(str(x[COL_INSTRUCTION]).strip()) > 0
-                and len(str(x[COL_OUTPUT]).strip()) > 0
-            )
-        )
+        # Optimization: no need to re-select if everything is valid
+        pass
 
     # ── Duplicate detection AND removal (M4 FIX) ──────────────────────────
-    # Previously only warned — now actually removes duplicates using an
-    # ordered seen-set so original row order is preserved.
+    # BOLT OPTIMIZATION: Reuse columns already in memory if possible, otherwise
+    # load only the necessary ones for deduplication.
     if COL_TEXT in dataset.column_names:
         texts = [str(t) for t in dataset[COL_TEXT]]
         seen: set[str] = set()
         unique_indices: list[int] = []
+        final_lengths = []
         for idx, text in enumerate(texts):
             if text not in seen:
                 seen.add(text)
                 unique_indices.append(idx)
+                final_lengths.append(lengths_after_empty_removal[idx])
         n_dups = len(texts) - len(unique_indices)
         if n_dups > 0:
             issues.append(f"⚠️ {n_dups} duplicate examples removed. ")
             dataset = dataset.select(unique_indices)
+            lengths_after_empty_removal = final_lengths
 
     elif COL_INSTRUCTION in dataset.column_names and COL_OUTPUT in dataset.column_names:
-        pairs = list(zip(
-            [str(i) for i in dataset[COL_INSTRUCTION]],
-            [str(o) for o in dataset[COL_OUTPUT]],
-        ))
+        # Load columns for deduplication
+        insts = [str(i) for i in dataset[COL_INSTRUCTION]]
+        outs = [str(o) for o in dataset[COL_OUTPUT]]
         seen_pairs: set[tuple] = set()
         unique_pair_indices: list[int] = []
-        for idx, pair in enumerate(pairs):
+        final_lengths = []
+        for idx, (i, o) in enumerate(zip(insts, outs)):
+            pair = (i, o)
             if pair not in seen_pairs:
                 seen_pairs.add(pair)
                 unique_pair_indices.append(idx)
-        n_dups = len(pairs) - len(unique_pair_indices)
+                final_lengths.append(lengths_after_empty_removal[idx])
+        n_dups = len(insts) - len(unique_pair_indices)
         if n_dups > 0:
             issues.append(f"⚠️ {n_dups} duplicate examples removed. ")
             dataset = dataset.select(unique_pair_indices)
+            lengths_after_empty_removal = final_lengths
 
     # ── Report long examples (will be truncated by tokeniser) ─────────────
-    # Recompute lengths from the current (post-filter) dataset for accuracy.
-    if is_dpo:
-        current_lengths = [
-            len(str(p).strip()) + len(str(c).strip()) + len(str(r).strip())
-            for p, c, r in zip(
-                dataset[COL_PROMPT],
-                dataset[COL_CHOSEN],
-                dataset[COL_REJECTED],
-            )
-        ]
-    elif COL_TEXT in dataset.column_names:
-        current_lengths = [len(str(t).strip()) for t in dataset[COL_TEXT]]
-    else:
-        current_lengths = [
-            len(str(i).strip()) + len(str(o).strip())
-            for i, o in zip(dataset[COL_INSTRUCTION], dataset[COL_OUTPUT])
-        ]
-
-    long_ = sum(1 for ln in current_lengths if ln > 2048)
+    # BOLT OPTIMIZATION: Reuse pre-calculated lengths instead of re-iterating.
+    long_ = sum(1 for ln in lengths_after_empty_removal if ln > 2048)
     if long_:
         issues.append(f"⚠️ {long_} examples exceed 2048 chars — they will be truncated. ")
 
