@@ -128,6 +128,7 @@ def quality_filter_v27(
     is_dpo: bool = False,
 ) -> tuple:
     """Filter examples by character-length bounds.
+    BOLT OPTIMIZATION: Uses batched filtering to significantly speed up processing.
 
     Parameters
     ----------
@@ -141,27 +142,32 @@ def quality_filter_v27(
     original_len = len(dataset)
     try:
         if is_dpo:
-            dataset = dataset.filter(
-                lambda x: (
-                    min_length <= len(str(x.get(COL_PROMPT,   ""))) <= max_length
-                    and min_length <= len(str(x.get(COL_CHOSEN,  ""))) <= max_length
-                    and min_length <= len(str(x.get(COL_REJECTED,""))) <= max_length
-                )
-            )
+            def filter_dpo(batch):
+                col_p = batch.get(COL_PROMPT, [""] * len(next(iter(batch.values()))))
+                col_c = batch.get(COL_CHOSEN, [""] * len(col_p))
+                col_r = batch.get(COL_REJECTED, [""] * len(col_p))
+                return [
+                    (min_length <= len(str(p)) <= max_length
+                     and min_length <= len(str(c)) <= max_length
+                     and min_length <= len(str(r)) <= max_length)
+                    for p, c, r in zip(col_p, col_c, col_r)
+                ]
+            dataset = dataset.filter(filter_dpo, batched=True)
         elif COL_TEXT in dataset.column_names:
-            dataset = dataset.filter(
-                lambda x: min_length <= len(str(x[COL_TEXT])) <= max_length
-            )
+            def filter_text(batch):
+                return [min_length <= len(str(t)) <= max_length for t in batch[COL_TEXT]]
+            dataset = dataset.filter(filter_text, batched=True)
         elif COL_INSTRUCTION in dataset.column_names:
             # v3.1 Fix #6: Combined instruction+output length checked against
             # max_length * 2 because both fields are concatenated during tokenisation.
-            dataset = dataset.filter(
-                lambda x: (
-                    min_length
-                    <= len(str(x.get(COL_INSTRUCTION, ""))) + len(str(x.get(COL_OUTPUT, "")))
-                    <= max_length * 2
-                )
-            )
+            def filter_inst(batch):
+                col_i = batch.get(COL_INSTRUCTION, [""] * len(next(iter(batch.values()))))
+                col_o = batch.get(COL_OUTPUT, [""] * len(col_i))
+                return [
+                    min_length <= (len(str(i)) + len(str(o))) <= max_length * 2
+                    for i, o in zip(col_i, col_o)
+                ]
+            dataset = dataset.filter(filter_inst, batched=True)
 
         removed = original_len - len(dataset)
         msg = (
