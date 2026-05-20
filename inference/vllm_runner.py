@@ -82,8 +82,12 @@ def on_merge_adapter_click(
     Falls back to model_path_state when adapter_path is empty.
     On success, also updates the merged model path state component.
     """
+    # Sentinel: strip whitespace and validate against path traversal.
     base    = base_model_name.strip() if base_model_name and base_model_name.strip() else ""
     adapter = adapter_path.strip() if adapter_path and adapter_path.strip() else (model_path_state or "")
+
+    if ".." in base or ".." in str(adapter):
+        return "❌ Path traversal attempt detected.", gr.update()
 
     if not adapter or not os.path.isdir(str(adapter)):
         return (

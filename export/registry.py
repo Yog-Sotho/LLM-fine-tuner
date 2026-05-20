@@ -159,8 +159,14 @@ def on_registry_upload(
     registry_notes: str,
 ) -> str:
     """Handler for the Registry Upload button in the Share tab."""
-    if not registry_repo_id or "/" not in registry_repo_id:
+    # Sentinel: strip whitespace and validate against path traversal / malformed input.
+    registry_repo_id = registry_repo_id.strip() if registry_repo_id else ""
+    registry_token   = registry_token.strip()   if registry_token   else ""
+    registry_version = registry_version.strip() if registry_version else ""
+
+    if not registry_repo_id or "/" not in registry_repo_id or ".." in registry_repo_id or "\\" in registry_repo_id:
         return "❌ Invalid Repo ID. Format: username/model-name"
+
     # Sentinel: standardized robust token validation.
     if (
         not registry_token
@@ -171,26 +177,31 @@ def on_registry_upload(
             "❌ Invalid Hugging Face write token.\n"
             f"Tokens start with '{HF_TOKEN_PREFIX}' and are at least {HF_TOKEN_MIN_LEN} characters long."
         )
-    if not registry_version.strip():
-        return "❌ Please enter a version tag (e.g. 1.0, 1.0.1)."
+    if not registry_version or ".." in registry_version or "/" in registry_version or "\\" in registry_version:
+        return "❌ Please enter a valid version tag (no '..', '/', or '\\')."
     if not model_path_state or not os.path.isdir(model_path_state):
         return "❌ No trained model found. Train a model first."
 
     try:
-        reg = ModelRegistry(registry_repo_id.strip(), registry_token.strip())
+        reg = ModelRegistry(registry_repo_id, registry_token)
         metadata = {
             "notes": registry_notes or "",
             "trained_with": "LLM Fine-Tuner v3.2",
         }
-        return reg.upload_model(model_path_state, registry_version.strip(), metadata)
+        return reg.upload_model(model_path_state, registry_version, metadata)
     except Exception as e:
         return f"❌ Registry upload failed: {e}"
 
 
 def on_registry_list(registry_repo_id: str, registry_token: str) -> str:
     """Handler for the List Versions button in the Share tab."""
-    if not registry_repo_id or "/" not in registry_repo_id:
+    # Sentinel: strip whitespace and validate against path traversal.
+    registry_repo_id = registry_repo_id.strip() if registry_repo_id else ""
+    registry_token   = registry_token.strip()   if registry_token   else ""
+
+    if not registry_repo_id or "/" not in registry_repo_id or ".." in registry_repo_id or "\\" in registry_repo_id:
         return "❌ Invalid Repo ID."
+
     # Sentinel: standardized robust token validation.
     if (
         not registry_token
@@ -203,7 +214,7 @@ def on_registry_list(registry_repo_id: str, registry_token: str) -> str:
         )
 
     try:
-        reg = ModelRegistry(registry_repo_id.strip(), registry_token.strip())
+        reg = ModelRegistry(registry_repo_id, registry_token)
         return reg.list_versions()
     except Exception as e:
         return f"❌ {e}"
