@@ -50,6 +50,13 @@ def train_reward_model_v27(
 
     Returns a status string for display in the UI.
     """
+    # Sentinel: strip whitespace and validate against path traversal.
+    model_name = model_name.strip() if model_name else ""
+    output_dir = output_dir.strip() if output_dir else ""
+
+    if ".." in model_name or "\\" in model_name or ".." in output_dir or "\\" in output_dir:
+        return "❌ Path traversal attempt detected in model name or output directory."
+
     # H-4 FIX: Both HAS_REWARD_TRAINER and HAS_PPO are checked at the very top,
     # before any tokenizer or model loading. Previously HAS_PPO was checked only
     # after the tokenizer was already loaded, causing a ~2s delay before the user

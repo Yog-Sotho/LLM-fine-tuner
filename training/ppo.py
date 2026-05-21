@@ -46,6 +46,16 @@ def run_ppo_v27(
 
     Returns a status string for display in the UI.
     """
+    # Sentinel: strip whitespace and validate against path traversal.
+    policy_model_name = policy_model_name.strip() if policy_model_name else ""
+    reward_model_path = reward_model_path.strip() if reward_model_path else ""
+    output_dir        = output_dir.strip()        if output_dir        else ""
+
+    if ".." in policy_model_name or "\\" in policy_model_name or \
+       ".." in reward_model_path or "\\" in reward_model_path or \
+       ".." in output_dir        or "\\" in output_dir:
+        return "❌ Path traversal attempt detected."
+
     if not HAS_PPO:
         return "❌ PPOTrainer not available. Install: pip install trl>=0.7.0"
     if ppo_file is None:

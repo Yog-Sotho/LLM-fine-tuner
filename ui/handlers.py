@@ -82,7 +82,12 @@ def on_train_click(
     if file is None and augmented_ds is None:
         return "❌ Please upload a data file first.", None, None, []
 
-    model_name = custom_model.strip() if custom_model.strip() else model_choice
+    # Sentinel: strip whitespace and validate against path traversal.
+    custom_model = custom_model.strip() if custom_model else ""
+    if ".." in custom_model or "\\" in custom_model:
+        return "❌ Path traversal attempt detected in custom model path.", None, None, []
+
+    model_name = custom_model if custom_model else model_choice
     device     = "cuda" if torch.cuda.is_available() else "cpu"
     is_dpo     = training_mode == "dpo"
 
@@ -206,12 +211,24 @@ def on_stop() -> str:
 # ── Inference ──────────────────────────────────────────────────────────────
 
 def on_generate(prompt, model_choice, custom_model, lora_path, max_tok, temp, top_p) -> str:
-    model_name = custom_model.strip() if custom_model.strip() else model_choice
+    # Sentinel: strip whitespace and validate against path traversal.
+    custom_model = custom_model.strip() if custom_model else ""
+    lora_path    = lora_path.strip()    if lora_path    else ""
+    if ".." in custom_model or "\\" in custom_model or ".." in lora_path or "\\" in lora_path:
+        return "❌ Path traversal attempt detected."
+
+    model_name = custom_model if custom_model else model_choice
     return generate_text(model_name, lora_path, prompt, int(max_tok), temp, top_p)
 
 
 def on_batch_test(f, model_choice, custom_model, lora_path) -> str:
-    model_name = custom_model.strip() if custom_model.strip() else model_choice
+    # Sentinel: strip whitespace and validate against path traversal.
+    custom_model = custom_model.strip() if custom_model else ""
+    lora_path    = lora_path.strip()    if lora_path    else ""
+    if ".." in custom_model or "\\" in custom_model or ".." in lora_path or "\\" in lora_path:
+        return "❌ Path traversal attempt detected."
+
+    model_name = custom_model if custom_model else model_choice
     return batch_generate(model_name, lora_path, f)
 
 
