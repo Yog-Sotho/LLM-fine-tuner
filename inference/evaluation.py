@@ -224,12 +224,12 @@ def llm_judge_evaluate(
 
         # Simplified prompt stripping: left-padding ensures all responses start
         # at the same relative offset (input_ids.shape[1]).
+        # BOLT OPTIMIZATION: Using batch_decode instead of serial decode for faster processing.
         input_len = inputs["input_ids"].shape[1]
-        for idx, (p, r) in enumerate(zip(batch_prompts, batch_responses)):
-            judgment = tokenizer.decode(
-                outputs[idx, input_len:], skip_special_tokens=True
-            ).strip()
-            results.append({"prompt": p, "response": r, "judgment": judgment})
+        judgments = tokenizer.batch_decode(outputs[:, input_len:], skip_special_tokens=True)
+
+        for p, r, judgment in zip(batch_prompts, batch_responses, judgments):
+            results.append({"prompt": p, "response": r, "judgment": judgment.strip()})
 
     return results
 

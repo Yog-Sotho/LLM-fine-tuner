@@ -17,3 +17,7 @@
 ## 2026-05-19 - [Batched Dataset Augmentation]
 **Learning:** Sequential calls to `nlpaug` augmenters (processing one string at a time) are a significant bottleneck in the data enhancement pipeline. Switching to batched augmentation (`augmenter.augment(list_of_texts)`) utilizes internal vectorization and significantly reduces Python overhead, yielding a ~3-5x speedup. Interspersing the original and augmented rows manually after the batch call preserves the expected data structure for the training layers.
 **Action:** Replaced the sequential loop in `data/augmentation.py` with batched `nlpaug` calls. Added `tests/test_augmentation_batching.py` to verify performance and correctness.
+
+## 2026-05-21 - [Standardized Batched Decoding in CLI and Judge]
+**Learning:** Manual serial decoding loops in CLI commands and LLM-as-Judge evaluations were inconsistent and slower than necessary. Transitioning to `tokenizer.batch_decode` across all evaluation paths (UI and CLI) reduces Python overhead and standardizes prompt-stripping logic. Increasing the CLI default batch size to 8 aligns it with the optimized UI evaluation throughput.
+**Action:** Replaced serial loops with `tokenizer.batch_decode` in `inference/evaluation.py` and `cli/commands.py`. Increased default batch size to 8 in the CLI `evaluate` command. Updated `tests/test_evaluation_batching.py` to verify the optimized logic.
