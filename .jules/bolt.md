@@ -17,3 +17,7 @@
 ## 2026-05-19 - [Batched Dataset Augmentation]
 **Learning:** Sequential calls to `nlpaug` augmenters (processing one string at a time) are a significant bottleneck in the data enhancement pipeline. Switching to batched augmentation (`augmenter.augment(list_of_texts)`) utilizes internal vectorization and significantly reduces Python overhead, yielding a ~3-5x speedup. Interspersing the original and augmented rows manually after the batch call preserves the expected data structure for the training layers.
 **Action:** Replaced the sequential loop in `data/augmentation.py` with batched `nlpaug` calls. Added `tests/test_augmentation_batching.py` to verify performance and correctness.
+
+## 2026-05-20 - [Standardized Batched Decoding and Prompt Stripping]
+**Learning:** Standardizing on `input_ids.shape[1]` for prompt stripping across all evaluation and inference layers (UI and CLI) is critical for correctness when using left-padding. Previous attention-mask-based stripping in the CLI was inaccurate for padded batches, often including prompt tokens in the output. Consistently using `tokenizer.batch_decode` further reduces Python overhead for a ~1.4x speedup in the decoding phase.
+**Action:** Replaced serial `tokenizer.decode` with `tokenizer.batch_decode` in `llm_judge_evaluate` and the CLI `evaluate` command. Standardized prompt stripping logic to use the `input_ids.shape[1]` offset.

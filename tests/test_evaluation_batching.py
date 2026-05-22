@@ -29,7 +29,7 @@ def test_llm_judge_evaluate_batching():
         return {"input_ids": input_ids, "attention_mask": torch.ones_like(input_ids)}
 
     mock_tokenizer.side_effect = mock_tokenizer_call
-    mock_tokenizer.decode.return_value = "Excellent response."
+    mock_tokenizer.batch_decode.return_value = ["Excellent response."] * 8 # return enough for first batch
     mock_tokenizer.eos_token_id = 50256
 
     # Mock model.generate(...)
@@ -70,6 +70,8 @@ def test_llm_judge_evaluate_batching():
     # Second batch should have 2
     args, kwargs = mock_model.generate.call_args_list[1]
     assert kwargs["input_ids"].shape[0] == 2
+    # Verify batch_decode
+    assert mock_tokenizer.batch_decode.call_count == 2
 
 def test_prompt_stripping_offset():
     """Verify that stripping logic uses the correct offset (input_ids.shape[1])."""
@@ -93,8 +95,10 @@ def test_prompt_stripping_offset():
 
     mock_model.generate.side_effect = mock_model_generate
 
-    # We want to check what slice is passed to tokenizer.decode
-    # The code does: tokenizer.decode(outputs[idx, input_len:], ...)
+    # We want to check what slice is passed to tokenizer.batch_decode
+    # The code does: tokenizer.batch_decode(outputs[:, input_len:], ...)
+
+    mock_tokenizer.batch_decode.return_value = ["Decoded Response"]
 
     with patch("inference.evaluation._load_for_inference", return_value=(mock_model, mock_tokenizer)):
         llm_judge_evaluate(
@@ -104,12 +108,13 @@ def test_prompt_stripping_offset():
             judge_model_name="mock-judge"
         )
 
-    # Check mock_tokenizer.decode call
-    args, kwargs = mock_tokenizer.decode.call_args
+    # Check mock_tokenizer.batch_decode call
+    args, kwargs = mock_tokenizer.batch_decode.call_args
     passed_tensor = args[0]
-    assert passed_tensor.shape[0] == 5
+    # passed_tensor is (batch_size, new_tokens) = (1, 5)
+    assert passed_tensor.shape == (1, 5)
     # The values should be 0, 1, 2, 3, 4 (the new tokens we added)
-    assert torch.equal(passed_tensor, torch.arange(5))
+    assert torch.equal(passed_tensor, torch.arange(5).unsqueeze(0))
 
 def test_on_evaluate_click_batching():
     """Verify that on_evaluate_click batches calls to model.generate with size 8."""
