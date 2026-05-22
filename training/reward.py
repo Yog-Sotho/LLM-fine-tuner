@@ -28,7 +28,7 @@ from config.constants import (
     HAS_REWARD_TRAINER,
 )
 from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
-from core.state import app_state
+from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
 
 
@@ -50,6 +50,15 @@ def train_reward_model_v27(
 
     Returns a status string for display in the UI.
     """
+    # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
+    model_name = model_name.strip() if model_name else ""
+    output_dir = output_dir.strip() if output_dir else ""
+
+    if validate_path_traversal(model_name):
+        return "❌ Invalid model name or path."
+    if validate_path_traversal(output_dir):
+        return "❌ Invalid output directory."
+
     # H-4 FIX: Both HAS_REWARD_TRAINER and HAS_PPO are checked at the very top,
     # before any tokenizer or model loading. Previously HAS_PPO was checked only
     # after the tokenizer was already loaded, causing a ~2s delay before the user

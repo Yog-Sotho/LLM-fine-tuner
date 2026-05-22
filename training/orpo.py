@@ -26,7 +26,7 @@ from config.constants import (
 )
 from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
 from core.hardware import get_lora_targets
-from core.state import app_state
+from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
 from data.preprocessing import validate_and_clean_dataset
 
@@ -49,6 +49,15 @@ def train_orpo_v27(
 
     Returns a status string for display in the UI.
     """
+    # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
+    model_name = model_name.strip() if model_name else ""
+    output_dir = output_dir.strip() if output_dir else ""
+
+    if validate_path_traversal(model_name):
+        return "❌ Invalid model name or path."
+    if validate_path_traversal(output_dir):
+        return "❌ Invalid output directory."
+
     if not HAS_ORPO:
         return "❌ ORPOTrainer not available. Install: pip install trl>=0.8.0"
     if orpo_file is None:

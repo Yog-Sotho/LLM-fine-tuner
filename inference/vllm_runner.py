@@ -21,7 +21,7 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from config.constants import HAS_VLLM
-from core.state import app_state
+from core.state import app_state, validate_path_traversal
 
 
 def merge_adapter_for_inference(
@@ -82,11 +82,11 @@ def on_merge_adapter_click(
     Falls back to model_path_state when adapter_path is empty.
     On success, also updates the merged model path state component.
     """
-    # Sentinel: strip whitespace and validate against path traversal.
+    # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
     base    = base_model_name.strip() if base_model_name and base_model_name.strip() else ""
     adapter = adapter_path.strip() if adapter_path and adapter_path.strip() else (model_path_state or "")
 
-    if ".." in base or ".." in str(adapter):
+    if validate_path_traversal(base) or validate_path_traversal(str(adapter)):
         return "❌ Path traversal attempt detected.", gr.update()
 
     if not adapter or not os.path.isdir(str(adapter)):

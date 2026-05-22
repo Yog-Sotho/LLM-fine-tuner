@@ -18,6 +18,13 @@ import shutil
 import threading
 
 
+def validate_path_traversal(path: str) -> bool:
+    """Return True if the path contains '..' or '\' (unsafe)."""
+    if not path:
+        return False
+    return ".." in path or "\\" in path
+
+
 class AppState:
     def __init__(self) -> None:
         # Training stop signal

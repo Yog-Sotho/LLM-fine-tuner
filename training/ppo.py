@@ -21,7 +21,7 @@ from config.constants import (
     HAS_PPO,
     QLORA_ENHANCED_LORA_CONFIG,
 )
-from core.state import app_state
+from core.state import app_state, validate_path_traversal
 from core.hardware import get_lora_targets
 from data.loader import detect_file_type, load_dataset_from_file
 
@@ -46,6 +46,18 @@ def run_ppo_v27(
 
     Returns a status string for display in the UI.
     """
+    # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
+    policy_model_name = policy_model_name.strip() if policy_model_name else ""
+    reward_model_path = reward_model_path.strip() if reward_model_path else ""
+    output_dir        = output_dir.strip()        if output_dir        else ""
+
+    if validate_path_traversal(policy_model_name):
+        return "❌ Invalid policy model name."
+    if validate_path_traversal(reward_model_path):
+        return "❌ Invalid reward model path."
+    if validate_path_traversal(output_dir):
+        return "❌ Invalid output directory."
+
     if not HAS_PPO:
         return "❌ PPOTrainer not available. Install: pip install trl>=0.7.0"
     if ppo_file is None:
