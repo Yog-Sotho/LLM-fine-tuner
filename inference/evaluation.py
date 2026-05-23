@@ -420,7 +420,17 @@ def on_evaluate_click(
 
     Returns (metrics_str, result_dataframe, preview_html).
     """
-    model_name = eval_custom_model.strip() if eval_custom_model.strip() else eval_model_name
+    # Sentinel: strip whitespace and validate against path traversal.
+    eval_custom_model = eval_custom_model.strip() if eval_custom_model else ""
+    eval_lora_path    = eval_lora_path.strip()    if eval_lora_path    else ""
+    judge_model_name  = judge_model_name.strip()  if judge_model_name  else ""
+
+    if ".." in eval_custom_model or "\\" in eval_custom_model or \
+       ".." in eval_lora_path    or "\\" in eval_lora_path    or \
+       ".." in judge_model_name  or "\\" in judge_model_name:
+        return "❌ Path traversal attempt detected.", pd.DataFrame(), ""
+
+    model_name = eval_custom_model if eval_custom_model else eval_model_name
     if not model_name:
         return "❌ Please select a model.", pd.DataFrame(), ""
     if eval_file is None:

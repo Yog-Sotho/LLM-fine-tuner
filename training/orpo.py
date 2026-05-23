@@ -49,6 +49,13 @@ def train_orpo_v27(
 
     Returns a status string for display in the UI.
     """
+    # Sentinel: strip whitespace and validate against path traversal.
+    model_name = model_name.strip() if model_name else ""
+    output_dir = output_dir.strip() if output_dir else ""
+
+    if ".." in model_name or "\\" in model_name or ".." in output_dir or "\\" in output_dir:
+        return "❌ Path traversal attempt detected."
+
     if not HAS_ORPO:
         return "❌ ORPOTrainer not available. Install: pip install trl>=0.8.0"
     if orpo_file is None:
