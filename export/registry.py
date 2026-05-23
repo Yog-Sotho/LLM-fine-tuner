@@ -163,6 +163,10 @@ def on_registry_upload(
     registry_repo_id = registry_repo_id.strip() if registry_repo_id else ""
     registry_token   = registry_token.strip()   if registry_token   else ""
     registry_version = registry_version.strip() if registry_version else ""
+    model_path_state = model_path_state.strip() if model_path_state else ""
+
+    if ".." in model_path_state or "\\" in model_path_state:
+        return "❌ Path traversal attempt detected in model path."
 
     if not registry_repo_id or "/" not in registry_repo_id or ".." in registry_repo_id or "\\" in registry_repo_id:
         return "❌ Invalid Repo ID. Format: username/model-name"

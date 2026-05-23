@@ -29,7 +29,7 @@ def test_llm_judge_evaluate_batching():
         return {"input_ids": input_ids, "attention_mask": torch.ones_like(input_ids)}
 
     mock_tokenizer.side_effect = mock_tokenizer_call
-    mock_tokenizer.decode.return_value = "Excellent response."
+    mock_tokenizer.batch_decode.return_value = ["Excellent response."] * 10
     mock_tokenizer.eos_token_id = 50256
 
     # Mock model.generate(...)
@@ -104,12 +104,12 @@ def test_prompt_stripping_offset():
             judge_model_name="mock-judge"
         )
 
-    # Check mock_tokenizer.decode call
-    args, kwargs = mock_tokenizer.decode.call_args
+    # Check mock_tokenizer.batch_decode call
+    args, kwargs = mock_tokenizer.batch_decode.call_args
     passed_tensor = args[0]
-    assert passed_tensor.shape[0] == 5
+    assert passed_tensor.shape == (1, 5) # 1 prompt, 5 new tokens
     # The values should be 0, 1, 2, 3, 4 (the new tokens we added)
-    assert torch.equal(passed_tensor, torch.arange(5))
+    assert torch.equal(passed_tensor[0], torch.arange(5))
 
 def test_on_evaluate_click_batching():
     """Verify that on_evaluate_click batches calls to model.generate with size 8."""

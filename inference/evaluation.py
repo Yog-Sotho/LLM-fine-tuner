@@ -224,12 +224,12 @@ def llm_judge_evaluate(
 
         # Simplified prompt stripping: left-padding ensures all responses start
         # at the same relative offset (input_ids.shape[1]).
+        # BOLT OPTIMIZATION: Using batch_decode instead of serial decode for faster processing.
         input_len = inputs["input_ids"].shape[1]
-        for idx, (p, r) in enumerate(zip(batch_prompts, batch_responses)):
-            judgment = tokenizer.decode(
-                outputs[idx, input_len:], skip_special_tokens=True
-            ).strip()
-            results.append({"prompt": p, "response": r, "judgment": judgment})
+        judgments = tokenizer.batch_decode(outputs[:, input_len:], skip_special_tokens=True)
+
+        for p, r, judgment in zip(batch_prompts, batch_responses, judgments):
+            results.append({"prompt": p, "response": r, "judgment": judgment.strip()})
 
     return results
 
@@ -420,7 +420,17 @@ def on_evaluate_click(
 
     Returns (metrics_str, result_dataframe, preview_html).
     """
-    model_name = eval_custom_model.strip() if eval_custom_model.strip() else eval_model_name
+    # Sentinel: strip whitespace and validate against path traversal.
+    eval_custom_model = eval_custom_model.strip() if eval_custom_model else ""
+    eval_lora_path    = eval_lora_path.strip()    if eval_lora_path    else ""
+    judge_model_name  = judge_model_name.strip()  if judge_model_name  else ""
+
+    if ".." in eval_custom_model or "\\" in eval_custom_model or \
+       ".." in eval_lora_path    or "\\" in eval_lora_path    or \
+       ".." in judge_model_name  or "\\" in judge_model_name:
+        return "❌ Path traversal attempt detected.", pd.DataFrame(), ""
+
+    model_name = eval_custom_model if eval_custom_model else eval_model_name
     if not model_name:
         return "❌ Please select a model.", pd.DataFrame(), ""
     if eval_file is None:
