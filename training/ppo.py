@@ -21,7 +21,7 @@ from config.constants import (
     HAS_PPO,
     QLORA_ENHANCED_LORA_CONFIG,
 )
-from core.state import app_state
+from core.state import app_state, validate_path_traversal
 from core.hardware import get_lora_targets
 from data.loader import detect_file_type, load_dataset_from_file
 

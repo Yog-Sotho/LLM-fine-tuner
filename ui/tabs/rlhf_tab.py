@@ -34,12 +34,15 @@ def build_rlhf_tab() -> dict:
                         rm_model_choice = gr.Textbox(
                             label="Base Model ID", value=recommended_model,
                             placeholder="e.g. mistralai/Mistral-7B-v0.1",
+                            max_length=512,
                         )
                         rm_file = gr.File(
                             label="Preference Dataset (CSV/JSONL with chosen & rejected)",
                             file_types=[".csv", ".jsonl"],
                         )
-                        rm_output_dir = gr.Textbox(label="Output Directory", value="./reward_model")
+                        rm_output_dir = gr.Textbox(
+                            label="Output Directory", value="./reward_model", max_length=512
+                        )
                         with gr.Row():
                             rm_epochs    = gr.Slider(1, 10, value=3, step=1, label="Epochs")
                             rm_lr        = gr.Number(value=1.4e-5, label="Learning Rate", precision=8)
@@ -62,17 +65,21 @@ def build_rlhf_tab() -> dict:
                 )
                 with gr.Row():
                     with gr.Column():
-                        ppo_policy_model = gr.Textbox(label="Policy Model ID",
-                                                       value=recommended_model)
+                        ppo_policy_model = gr.Textbox(
+                            label="Policy Model ID", value=recommended_model, max_length=512
+                        )
                         ppo_reward_path  = gr.Textbox(
                             label="Reward Model Path (from step A)",
                             placeholder="./reward_model",
+                            max_length=512,
                         )
                         ppo_file = gr.File(
                             label="Prompts Dataset (CSV/JSONL with 'prompt' column)",
                             file_types=[".csv", ".jsonl"],
                         )
-                        ppo_output_dir = gr.Textbox(label="Output Directory", value="./ppo_model")
+                        ppo_output_dir = gr.Textbox(
+                            label="Output Directory", value="./ppo_model", max_length=512
+                        )
                         with gr.Row():
                             ppo_lr         = gr.Number(value=1.4e-5, label="Learning Rate",
                                                         precision=8)
@@ -98,14 +105,16 @@ def build_rlhf_tab() -> dict:
                 )
                 with gr.Row():
                     with gr.Column():
-                        orpo_model_choice = gr.Textbox(label="Base Model ID",
-                                                        value=recommended_model)
+                        orpo_model_choice = gr.Textbox(
+                            label="Base Model ID", value=recommended_model, max_length=512
+                        )
                         orpo_file = gr.File(
                             label="Preference Dataset (prompt, chosen, rejected)",
                             file_types=[".csv", ".jsonl"],
                         )
-                        orpo_output_dir = gr.Textbox(label="Output Directory",
-                                                      value="./orpo_model")
+                        orpo_output_dir = gr.Textbox(
+                            label="Output Directory", value="./orpo_model", max_length=512
+                        )
                         with gr.Row():
                             orpo_lr    = gr.Number(value=1e-4, label="Learning Rate", precision=8)
                             orpo_beta  = gr.Slider(0.01, 1.0, value=0.1, step=0.01, label="Beta")

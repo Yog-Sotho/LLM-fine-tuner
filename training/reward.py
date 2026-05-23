@@ -28,7 +28,7 @@ from config.constants import (
     HAS_REWARD_TRAINER,
 )
 from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
-from core.state import app_state
+from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
 
 
