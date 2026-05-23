@@ -26,7 +26,7 @@ from config.constants import (
 )
 from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
 from core.hardware import get_lora_targets
-from core.state import app_state
+from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
 from data.preprocessing import validate_and_clean_dataset
 
@@ -51,6 +51,13 @@ def train_orpo_v27(
     """
     if not HAS_ORPO:
         return "❌ ORPOTrainer not available. Install: pip install trl>=0.8.0"
+
+    # Sentinel: validate against path traversal.
+    for p in [model_name, output_dir]:
+        err = validate_path_traversal(p)
+        if err:
+            return err
+
     if orpo_file is None:
         return "❌ Please upload a preference dataset (prompt, chosen, rejected)."
 

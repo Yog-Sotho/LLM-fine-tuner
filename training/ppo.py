@@ -21,7 +21,7 @@ from config.constants import (
     HAS_PPO,
     QLORA_ENHANCED_LORA_CONFIG,
 )
-from core.state import app_state
+from core.state import app_state, validate_path_traversal
 from core.hardware import get_lora_targets
 from data.loader import detect_file_type, load_dataset_from_file
 
@@ -48,6 +48,13 @@ def run_ppo_v27(
     """
     if not HAS_PPO:
         return "❌ PPOTrainer not available. Install: pip install trl>=0.7.0"
+
+    # Sentinel: validate against path traversal.
+    for p in [policy_model_name, reward_model_path, output_dir]:
+        err = validate_path_traversal(p)
+        if err:
+            return err
+
     if ppo_file is None:
         return "❌ Please upload a dataset with a 'prompt' column."
     # H-7 FIX: os is now a proper top-level import, not __import__("os") inline.
