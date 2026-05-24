@@ -53,8 +53,8 @@ def train_orpo_v27(
     model_name = model_name.strip() if model_name else ""
     output_dir = output_dir.strip() if output_dir else ""
 
-    if ".." in model_name or "\\" in model_name or ".." in output_dir or "\\" in output_dir:
-        return "❌ Path traversal attempt detected."
+    if err := (validate_path_traversal(model_name) or validate_path_traversal(output_dir)):
+        return err
 
     if not HAS_ORPO:
         return "❌ ORPOTrainer not available. Install: pip install trl>=0.8.0"

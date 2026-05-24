@@ -165,10 +165,15 @@ def on_registry_upload(
     registry_version = registry_version.strip() if registry_version else ""
     model_path_state = model_path_state.strip() if model_path_state else ""
 
-    if ".." in model_path_state or "\\" in model_path_state:
-        return "❌ Path traversal attempt detected in model path."
+    from core.state import validate_path_traversal
+    if err := (
+        validate_path_traversal(model_path_state)
+        or validate_path_traversal(registry_repo_id)
+        or validate_path_traversal(registry_version)
+    ):
+        return err
 
-    if not registry_repo_id or "/" not in registry_repo_id or ".." in registry_repo_id or "\\" in registry_repo_id:
+    if not registry_repo_id or "/" not in registry_repo_id:
         return "❌ Invalid Repo ID. Format: username/model-name"
 
     # Sentinel: standardized robust token validation.
@@ -203,7 +208,11 @@ def on_registry_list(registry_repo_id: str, registry_token: str) -> str:
     registry_repo_id = registry_repo_id.strip() if registry_repo_id else ""
     registry_token   = registry_token.strip()   if registry_token   else ""
 
-    if not registry_repo_id or "/" not in registry_repo_id or ".." in registry_repo_id or "\\" in registry_repo_id:
+    from core.state import validate_path_traversal
+    if err := validate_path_traversal(registry_repo_id):
+        return err
+
+    if not registry_repo_id or "/" not in registry_repo_id:
         return "❌ Invalid Repo ID."
 
     # Sentinel: standardized robust token validation.
