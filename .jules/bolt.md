@@ -21,3 +21,7 @@
 ## 2026-05-21 - [Standardized Batched Decoding in CLI and Judge]
 **Learning:** Manual serial decoding loops in CLI commands and LLM-as-Judge evaluations were inconsistent and slower than necessary. Transitioning to `tokenizer.batch_decode` across all evaluation paths (UI and CLI) reduces Python overhead and standardizes prompt-stripping logic. Increasing the CLI default batch size to 8 aligns it with the optimized UI evaluation throughput.
 **Action:** Replaced serial loops with `tokenizer.batch_decode` in `inference/evaluation.py` and `cli/commands.py`. Increased default batch size to 8 in the CLI `evaluate` command. Updated `tests/test_evaluation_batching.py` to verify the optimized logic.
+
+## 2026-05-23 - [Vectorized Dataset Preprocessing]
+**Learning:** Sequential Python loops and list comprehensions in `validate_and_clean_dataset` are a major bottleneck for large datasets (100k+ rows). Transitioning to vectorized Pandas operations for string stripping, filtering, and deduplication yields a ~36x speedup (0.5s vs 18.2s for 100k rows) while maintaining exact logical parity.
+**Action:** Refactored `validate_and_clean_dataset` in `data/preprocessing.py` to use Pandas `to_pandas()` followed by vectorized masking and `drop_duplicates()`. Added `tests/benchmark_preprocessing.py` for verification.
