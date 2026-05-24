@@ -39,7 +39,7 @@ from config.constants import (
     COL_INSTRUCTION, COL_OUTPUT, COL_TEXT,
     COL_PROMPT, COL_CHOSEN, COL_REJECTED,
 )
-from core.state import app_state
+from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
 from data.preprocessing import validate_and_clean_dataset, preview_dataset
 from export.hub import push_to_hub
@@ -84,8 +84,8 @@ def on_train_click(
 
     # Sentinel: strip whitespace and validate against path traversal.
     custom_model = custom_model.strip() if custom_model else ""
-    if ".." in custom_model or "\\" in custom_model:
-        return "❌ Path traversal attempt detected in custom model path.", None, None, []
+    if err := validate_path_traversal(custom_model):
+        return err, None, None, []
 
     model_name = custom_model if custom_model else model_choice
     device     = "cuda" if torch.cuda.is_available() else "cpu"
@@ -214,8 +214,8 @@ def on_generate(prompt, model_choice, custom_model, lora_path, max_tok, temp, to
     # Sentinel: strip whitespace and validate against path traversal.
     custom_model = custom_model.strip() if custom_model else ""
     lora_path    = lora_path.strip()    if lora_path    else ""
-    if ".." in custom_model or "\\" in custom_model or ".." in lora_path or "\\" in lora_path:
-        return "❌ Path traversal attempt detected."
+    if err := (validate_path_traversal(custom_model) or validate_path_traversal(lora_path)):
+        return err
 
     model_name = custom_model if custom_model else model_choice
     return generate_text(model_name, lora_path, prompt, int(max_tok), temp, top_p)
@@ -225,8 +225,8 @@ def on_batch_test(f, model_choice, custom_model, lora_path) -> str:
     # Sentinel: strip whitespace and validate against path traversal.
     custom_model = custom_model.strip() if custom_model else ""
     lora_path    = lora_path.strip()    if lora_path    else ""
-    if ".." in custom_model or "\\" in custom_model or ".." in lora_path or "\\" in lora_path:
-        return "❌ Path traversal attempt detected."
+    if err := (validate_path_traversal(custom_model) or validate_path_traversal(lora_path)):
+        return err
 
     model_name = custom_model if custom_model else model_choice
     return batch_generate(model_name, lora_path, f)

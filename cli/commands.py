@@ -39,6 +39,7 @@ from config.constants import (
     COL_PROMPT, COL_TEXT, COL_INSTRUCTION,
     HAS_REWARD_TRAINER, HAS_PPO, HAS_ORPO,
 )
+from core.state import validate_path_traversal
 from data.loader import load_dataset_from_file
 from data.preprocessing import validate_and_clean_dataset
 from inference.evaluation import compute_bleu_rouge, compute_bertscore_metric
@@ -88,6 +89,10 @@ def train(
         if peft_method != "QLoRA Enhanced":
             typer.echo(f"⚠️  --qlora-enhanced overrides --peft '{peft_method}' → 'QLoRA Enhanced'")
         peft_method = "QLoRA Enhanced"
+
+    if err := (validate_path_traversal(model) or validate_path_traversal(output)):
+        typer.echo(err, err=True)
+        raise typer.Exit(code=1)
 
     typer.echo(f"🚀 Starting training: {model} | PEFT: {peft_method} | Data: {data} | Output: {output}")
 
@@ -159,6 +164,10 @@ def reward(
     batch_size: int = typer.Option(4, "--batch-size"),
 ):
     """Train a Reward Model from preference data (FIX 3c: full implementation)."""
+    if err := (validate_path_traversal(model) or validate_path_traversal(output)):
+        typer.echo(err, err=True)
+        raise typer.Exit(code=1)
+
     typer.echo(f"🎖️  Training reward model: {model} | Max Length: {max_length}")
 
     if not HAS_REWARD_TRAINER:
@@ -226,6 +235,10 @@ def orpo(
     batch_size: int = typer.Option(2, "--batch-size"),
 ):
     """ORPO alignment training (FIX 3c: full implementation)."""
+    if err := (validate_path_traversal(model) or validate_path_traversal(output)):
+        typer.echo(err, err=True)
+        raise typer.Exit(code=1)
+
     typer.echo(f"🌀 ORPO training: {model} | Beta: {beta} | Alpha: {alpha}")
 
     if not HAS_ORPO:
@@ -287,6 +300,14 @@ def ppo(
                                         help="Max tokens per generated response"),
 ):
     """PPO fine-tuning with a trained reward model (FIX 3c: full implementation)."""
+    if err := (
+        validate_path_traversal(policy_model)
+        or validate_path_traversal(reward_model)
+        or validate_path_traversal(output)
+    ):
+        typer.echo(err, err=True)
+        raise typer.Exit(code=1)
+
     typer.echo(f"🔁 PPO: Policy={policy_model} | Reward={reward_model}")
 
     if not HAS_PPO:
@@ -357,6 +378,10 @@ def evaluate(
     max_new_tokens: int = typer.Option(150, "--max-new-tokens", help="Tokens to generate"),
 ):
     """Batched BLEU / ROUGE / BERTScore evaluation suite (BOLT OPTIMIZED)."""
+    if err := (validate_path_traversal(model) or validate_path_traversal(lora)):
+        typer.echo(err, err=True)
+        raise typer.Exit(code=1)
+
     typer.echo(f"🧪 Evaluating {model} on {data} (batch_size={batch_size})")
 
     if not os.path.isfile(data):

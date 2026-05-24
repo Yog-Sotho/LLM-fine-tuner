@@ -18,11 +18,16 @@ import shutil
 import threading
 
 
-def validate_path_traversal(path: str) -> bool:
-    """Return True if the path contains '..' or '\' (unsafe)."""
+def validate_path_traversal(path: str | None) -> str | None:
+    """Check if the path contains '..' or '\\' (unsafe).
+
+    Returns a standardized error message if unsafe, or None if safe.
+    """
     if not path:
-        return False
-    return ".." in path or "\\" in path
+        return None
+    if ".." in path or "\\" in path:
+        return "❌ Path traversal attempt detected."
+    return None
 
 
 class AppState:

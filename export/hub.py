@@ -42,10 +42,11 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
     if not model_path or not os.path.isdir(model_path):
         return "❌ No model found. Please train a model first."
 
-    if ".." in model_path or "\\" in model_path:
-        return "❌ Path traversal attempt detected in model path."
+    from core.state import validate_path_traversal
+    if err := (validate_path_traversal(model_path) or validate_path_traversal(repo_id)):
+        return err
 
-    if not repo_id or "/" not in repo_id or ".." in repo_id or "\\" in repo_id:
+    if not repo_id or "/" not in repo_id:
         return "❌ Invalid Repo ID. Format: `username/model-name`"
 
     # M6 FIX: validate the token format properly — HF tokens are `hf_` + 33 chars.
