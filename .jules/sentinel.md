@@ -12,3 +12,8 @@
 **Vulnerability:** Missing whitespace stripping and path traversal validation in Hub push, Registry, and Adapter Merge handlers.
 **Learning:** High-level UI handlers (Layer 4/5) often assume sanitized input from the frontend, but must independently enforce security boundaries to prevent path traversal via '..' or '\' and logic errors caused by leading/trailing whitespace in identifiers.
 **Prevention:** Always strip whitespace from Repo IDs, tokens, and version tags at the handler entry point. Enforce validation against '..' and '\' for all user-provided strings that are used to construct local paths or remote repository names.
+
+## 2025-05-20 - [Immediate Resource Tracking for DoS Prevention]
+**Vulnerability:** Potential disk exhaustion (DoS) due to untracked temporary training directories when training fails or is stopped early.
+**Learning:** High-level handlers (`ui/handlers.py`) that create temporary filesystem resources must register them with the global state *immediately* after creation. Deferring registration until the end of a complex function creates a leak window where an exception or early return prevents the resource from ever being cleaned up in subsequent runs.
+**Prevention:** Always assign temporary paths to state-tracked attributes (like `app_state._last_model_dir`) immediately after `tempfile.mkdtemp()` or similar calls, ensuring they are eligible for the next run's cleanup routine regardless of the current run's outcome.
