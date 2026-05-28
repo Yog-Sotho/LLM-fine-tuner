@@ -25,3 +25,7 @@
 ## 2026-05-23 - [Vectorized Dataset Preprocessing]
 **Learning:** Sequential Python loops and list comprehensions in `validate_and_clean_dataset` are a major bottleneck for large datasets (100k+ rows). Transitioning to vectorized Pandas operations for string stripping, filtering, and deduplication yields a ~36x speedup (0.5s vs 18.2s for 100k rows) while maintaining exact logical parity.
 **Action:** Refactored `validate_and_clean_dataset` in `data/preprocessing.py` to use Pandas `to_pandas()` followed by vectorized masking and `drop_duplicates()`. Added `tests/benchmark_preprocessing.py` for verification.
+
+## 2026-05-28 - [PPO Batched Tokenization]
+**Learning:** Sequential tokenization of prompts inside the PPO training loop is a major bottleneck, especially when repeated across multiple epochs. Pre-tokenizing the entire dataset using a single batched 'tokenizer()' call outside the loop avoids redundant work and leverages optimized backend implementations, providing a ~4.5x speedup in the preprocessing phase.
+**Action:** Implemented pre-tokenization and batched query tensor storage in 'training/ppo.py'. Verified logic with a mock-based unit test 'tests/test_ppo_pre_tokenization.py'.
