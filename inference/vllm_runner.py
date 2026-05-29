@@ -171,7 +171,7 @@ def on_vllm_generate(
     vllm_top_p: float,
 ) -> str:
     """Gradio UI handler for the vLLM Generate button."""
-    # Sentinel: strip whitespace and validate against path traversal.
+    # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
     model_path_state = model_path_state.strip() if model_path_state else ""
     if err := validate_path_traversal(model_path_state):
         return err

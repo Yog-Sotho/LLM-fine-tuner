@@ -136,10 +136,8 @@ def on_export_gguf(model_path: str, quantization: str):
 
     Returns (status_str, gguf_file_path_or_None).
     """
-    # Sentinel: strip whitespace and validate against path traversal.
-    model_path   = model_path.strip()   if model_path   else ""
-    quantization = quantization.strip() if quantization else ""
-
+    # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
+    model_path = model_path.strip() if model_path else ""
     if err := validate_path_traversal(model_path):
         return err, None
 
