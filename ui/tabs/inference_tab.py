@@ -18,7 +18,8 @@ def build_inference_tab() -> dict:
                     value="gpt2", label="Model",
                 )
                 infer_custom = gr.Textbox(label="Or custom model ID",
-                                          placeholder="username/my-model")
+                                          placeholder="username/my-model",
+                                          max_length=512)
                 lora_path    = gr.Textbox(
                     label="PEFT adapter path (auto-filled after training)",
                     interactive=False,
@@ -66,11 +67,13 @@ def build_inference_tab() -> dict:
                 merge_base_model_in   = gr.Textbox(
                     label="Base Model ID (used during training)",
                     placeholder="e.g. mistralai/Mistral-7B-v0.1 or gpt2",
+                    max_length=512,
                 )
                 merge_adapter_path_in = gr.Textbox(
                     label="Adapter / Model Path (auto-filled after training)",
                     interactive=True,
                     placeholder="./output or leave blank to use last trained model path",
+                    max_length=512,
                 )
                 merge_btn = gr.Button("🔗 Merge Adapter into Full Model", variant="secondary")
             with gr.Column():

@@ -38,10 +38,12 @@ def build_evaluation_tab() -> dict:
                 eval_custom_model = gr.Textbox(
                     label="Or custom model / local path",
                     placeholder="./output/model or username/model",
+                    max_length=512,
                 )
                 eval_lora_path_in = gr.Textbox(
                     label="PEFT Adapter Path (optional)",
                     placeholder="./output or leave empty",
+                    max_length=512,
                 )
                 eval_file = gr.File(
                     label="Test Dataset (CSV/JSONL with 'prompt' and optionally 'reference' columns)",
