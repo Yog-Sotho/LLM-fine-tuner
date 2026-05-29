@@ -42,6 +42,7 @@ def build_train_tab() -> dict:
                 custom_model  = gr.Textbox(
                     label="Or enter any HuggingFace model ID",
                     placeholder="e.g., meta-llama/Llama-2-7b-hf",
+                    max_length=512,
                 )
                 model_info_md = gr.Markdown(get_model_info(recommended_model))
 
