@@ -138,8 +138,12 @@ def on_export_gguf(model_path: str, quantization: str):
     """
     # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
     model_path = model_path.strip() if model_path else ""
-    if err := validate_path_traversal(model_path):
+    quantization = quantization.strip() if quantization else ""
+
+    if err := (validate_path_traversal(model_path) or validate_path_traversal(quantization)):
         return err, None
+    if "/" in quantization:
+        return "❌ Path traversal attempt detected.", None
 
     if not model_path or not os.path.isdir(model_path):
         return "❌ No trained model found. Train first.", None
