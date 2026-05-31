@@ -29,3 +29,7 @@
 ## 2026-05-28 - [PPO Batched Tokenization]
 **Learning:** Sequential tokenization of prompts inside the PPO training loop is a major bottleneck, especially when repeated across multiple epochs. Pre-tokenizing the entire dataset using a single batched 'tokenizer()' call outside the loop avoids redundant work and leverages optimized backend implementations, providing a ~4.5x speedup in the preprocessing phase.
 **Action:** Implemented pre-tokenization and batched query tensor storage in 'training/ppo.py'. Verified logic with a mock-based unit test 'tests/test_ppo_pre_tokenization.py'.
+
+## 2026-05-31 - [Vectorized Dataset Statistics]
+**Learning:** Calculating dataset statistics (average character length) using sequential Python loops over Hugging Face Dataset columns is a significant bottleneck for large datasets (100k+ rows), taking several seconds. Converting the dataset to a Pandas DataFrame and using vectorized string operations (`.astype(str).str.len()`) provides a ~500x speedup, reducing the overhead to milliseconds while maintaining exact logical parity for SFT and DPO formats.
+**Action:** Replaced loop-based statistics calculation in `ui/handlers.py` with vectorized Pandas operations. Added `tests/benchmark_stats.py` and `tests/test_stats_calculation.py` for verification.
