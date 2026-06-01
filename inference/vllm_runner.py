@@ -176,6 +176,11 @@ def on_vllm_generate(
     if err := validate_path_traversal(model_path_state):
         return err
 
+    # Sentinel: Hardened quantization string validation (blocks traversal and slashes).
+    vllm_quant = vllm_quant.strip() if vllm_quant else "none"
+    if validate_path_traversal(vllm_quant) or "/" in vllm_quant:
+        return "❌ Invalid quantization format."
+
     if not HAS_VLLM:
         return (
             "❌ vLLM not installed. Run: pip install vllm>=0.2.0\n"
