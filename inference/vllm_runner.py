@@ -173,8 +173,14 @@ def on_vllm_generate(
     """Gradio UI handler for the vLLM Generate button."""
     # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
     model_path_state = model_path_state.strip() if model_path_state else ""
-    if err := validate_path_traversal(model_path_state):
+    vllm_quant       = vllm_quant.strip()       if vllm_quant       else ""
+
+    if err := (validate_path_traversal(model_path_state) or validate_path_traversal(vllm_quant)):
         return err
+
+    # vLLM generation: quantization string is used in cache key; block forward slashes.
+    if "/" in vllm_quant:
+        return "❌ Path traversal attempt detected."
 
     if not HAS_VLLM:
         return (
