@@ -176,6 +176,10 @@ def on_vllm_generate(
     if err := validate_path_traversal(model_path_state):
         return err
 
+    vllm_quant = vllm_quant.strip() if vllm_quant else ""
+    if err := validate_path_traversal(vllm_quant):
+        return err
+
     if not HAS_VLLM:
         return (
             "❌ vLLM not installed. Run: pip install vllm>=0.2.0\n"
