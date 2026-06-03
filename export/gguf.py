@@ -141,6 +141,10 @@ def on_export_gguf(model_path: str, quantization: str):
     if err := validate_path_traversal(model_path):
         return err, None
 
+    quantization = quantization.strip() if quantization else ""
+    if "/" in quantization or validate_path_traversal(quantization):
+        return "❌ Path traversal attempt detected.", None
+
     if not model_path or not os.path.isdir(model_path):
         return "❌ No trained model found. Train first.", None
 
