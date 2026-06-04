@@ -141,6 +141,13 @@ def on_export_gguf(model_path: str, quantization: str):
     if err := validate_path_traversal(model_path):
         return err, None
 
+    # Sentinel: Hardened quantization string validation to prevent arbitrary file writes.
+    quantization = quantization.strip() if quantization else "q6_k"
+    if err := validate_path_traversal(quantization):
+        return err, None
+    if "/" in quantization:
+        return "❌ Invalid quantization format.", None
+
     if not model_path or not os.path.isdir(model_path):
         return "❌ No trained model found. Train first.", None
 

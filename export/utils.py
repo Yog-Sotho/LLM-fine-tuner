@@ -29,8 +29,30 @@ from datetime import datetime
 import gradio as gr
 import torch
 
-from data.loader import safe_extract_zip
+from config.constants import HF_TOKEN_PREFIX, HF_TOKEN_MIN_LEN
 from core.state import app_state
+from data.loader import safe_extract_zip
+
+
+def validate_hf_token(token: str | None) -> str | None:
+    """Validate the format of a Hugging Face write token.
+
+    Sentinel: Centralised token validation to ensure consistency across modules.
+    Tokens must start with 'hf_' and meet a minimum length requirement.
+
+    Returns an error message if invalid, or None if valid.
+    """
+    if not token:
+        return "❌ Hugging Face token is required."
+
+    token = token.strip()
+    if not token.startswith(HF_TOKEN_PREFIX) or len(token) < HF_TOKEN_MIN_LEN:
+        return (
+            "❌ Invalid Hugging Face write token.\n"
+            f"Tokens start with '{HF_TOKEN_PREFIX}' and are at least {HF_TOKEN_MIN_LEN} characters long.\n"
+            "Get yours at: https://huggingface.co/settings/tokens"
+        )
+    return None
 
 
 def create_zip_from_folder(folder_path: str) -> str:
