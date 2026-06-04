@@ -17,3 +17,8 @@
 **Vulnerability:** Missing path traversal validation in GGUF Export and vLLM generation handlers.
 **Learning:** Even when UI components are marked as non-interactive (e.g., auto-filled paths), handlers must independently validate inputs to prevent exploitation via direct backend calls or future UI changes. Standardizing on `validate_path_traversal` and `.strip()` across all entry points ensures defense-in-depth.
 **Prevention:** Explicitly validate all user-provided or state-derived paths in Gradio handlers before passing them to low-level filesystem or subprocess operations.
+
+## 2025-05-22 - [Centralized Credential Validation & Parameter Hardening]
+**Vulnerability:** Input parameters like `quantization` (GGUF export) and `vllm_quant` (vLLM inference) were used to construct filesystem paths or command arguments without validation, and Hugging Face token validation was duplicated across modules.
+**Learning:** High-level UI parameters that are incorporated into file paths (e.g., `model_{quantization}.gguf`) must be validated against both path traversal patterns (`..`, `\`) and directory separators (`/`) to prevent arbitrary file writes. Centralizing credential validation in `export/utils.py` ensures consistency and reduces the risk of logic drift between `hub.py` and `registry.py`.
+**Prevention:** Always validate every user-provided string used in path construction, even if it's a dropdown/radio option in the UI, as it can be manipulated via direct API calls. Use a shared utility for sensitive format checks like Hugging Face tokens.
