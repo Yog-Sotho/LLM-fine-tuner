@@ -11,6 +11,7 @@ generate_text        — single-prompt greedy / sampling generation
 batch_generate       — batch generation from CSV / txt file; returns CSV path
 """
 
+import csv
 import os
 import tempfile
 import threading
@@ -27,6 +28,22 @@ from core.state import app_state
 # this lock, concurrent requests could simultaneously evict the cache and trigger
 # multiple redundant model downloads, or read a half-loaded cache entry.
 _cache_lock = threading.Lock()
+
+# H-BUG03 FIX: Per-key loading locks prevent duplicate concurrent model loads.
+# Without this, two threads requesting the same key simultaneously both miss the
+# cache fast-path, both load the full model from disk, and the second write evicts
+# the first — wasting VRAM and load time. The key lock serialises loads for the
+# same (model_name, lora_path) pair while still allowing different keys to load
+# in parallel.
+_key_locks: dict = {}
+_key_locks_mutex = threading.Lock()
+
+
+def _get_key_lock(key: tuple) -> threading.Lock:
+    with _key_locks_mutex:
+        if key not in _key_locks:
+            _key_locks[key] = threading.Lock()
+        return _key_locks[key]
 
 
 def _load_for_inference(model_name: str, lora_path: str | None):
@@ -55,47 +72,56 @@ def _load_for_inference(model_name: str, lora_path: str | None):
         if key in app_state.inference_cache:
             return app_state.inference_cache[key]
 
-    # Slow path: load model outside the lock to avoid blocking other threads
-    # during the (potentially long) download/load.
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    # Ensure eos/pad tokens are set
-    if tokenizer.eos_token is None:
-        if hasattr(tokenizer, "bos_token") and tokenizer.bos_token:
-            tokenizer.eos_token = tokenizer.bos_token
-        elif hasattr(tokenizer, "unk_token") and tokenizer.unk_token:
-            tokenizer.eos_token = tokenizer.unk_token
-        else:
-            tokenizer.add_special_tokens({"eos_token": "</s>"})
-            tokenizer.eos_token = "</s>"
-    tokenizer.pad_token = tokenizer.eos_token
-    # BOLT OPTIMIZATION: Use left-padding for inference to enable more
-    # efficient and reliable batch generation with decoder-only models.
-    tokenizer.padding_side = "left"
+    # H-BUG03 FIX: Acquire per-key lock before loading to prevent two threads
+    # from loading the same model simultaneously. The inner cache re-check
+    # (double-checked locking) handles the case where another thread loaded the
+    # model while we were waiting for the key lock.
+    with _get_key_lock(key):
+        with _cache_lock:
+            if key in app_state.inference_cache:
+                return app_state.inference_cache[key]
 
-    base = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-        device_map="auto" if torch.cuda.is_available() else None,
-        trust_remote_code=True,
-    )
-    model = (
-        PeftModel.from_pretrained(base, lora_path)
-        if (lora_path and os.path.isdir(lora_path))
-        else base
-    )
-    model.eval()
+        # Slow path: load model outside _cache_lock (but inside _key_lock) to
+        # avoid blocking other requests during the potentially long download.
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        # Ensure eos/pad tokens are set
+        if tokenizer.eos_token is None:
+            if hasattr(tokenizer, "bos_token") and tokenizer.bos_token:
+                tokenizer.eos_token = tokenizer.bos_token
+            elif hasattr(tokenizer, "unk_token") and tokenizer.unk_token:
+                tokenizer.eos_token = tokenizer.unk_token
+            else:
+                tokenizer.add_special_tokens({"eos_token": "</s>"})
+                tokenizer.eos_token = "</s>"
+        tokenizer.pad_token = tokenizer.eos_token
+        # BOLT OPTIMIZATION: Use left-padding for inference to enable more
+        # efficient and reliable batch generation with decoder-only models.
+        tokenizer.padding_side = "left"
 
-    # N-1 FIX: Write back under lock, then return the LOCAL (model, tokenizer)
-    # tuple — NOT app_state.inference_cache[key].
-    # The previous code returned `app_state.inference_cache[key]` after releasing
-    # the lock, creating a TOCTOU window: a concurrent thread could evict the
-    # entry between the lock release and the dict read, raising a KeyError.
-    with _cache_lock:
-        if key not in app_state.inference_cache:
-            # Evict before adding to keep at most one model resident
-            if app_state.inference_cache:
-                app_state.inference_cache.clear()
-            app_state.inference_cache[key] = (model, tokenizer)
+        base = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            device_map="auto" if torch.cuda.is_available() else None,
+            trust_remote_code=True,
+        )
+        model = (
+            PeftModel.from_pretrained(base, lora_path)
+            if (lora_path and os.path.isdir(lora_path))
+            else base
+        )
+        model.eval()
+
+        # N-1 FIX: Write back under lock, then return the LOCAL (model, tokenizer)
+        # tuple — NOT app_state.inference_cache[key].
+        # The previous code returned `app_state.inference_cache[key]` after releasing
+        # the lock, creating a TOCTOU window: a concurrent thread could evict the
+        # entry between the lock release and the dict read, raising a KeyError.
+        with _cache_lock:
+            if key not in app_state.inference_cache:
+                # Evict before adding to keep at most one model resident
+                if app_state.inference_cache:
+                    app_state.inference_cache.clear()
+                app_state.inference_cache[key] = (model, tokenizer)
 
     return model, tokenizer
 
@@ -205,8 +231,11 @@ def batch_generate(
             all_responses.extend(responses)
 
         result_df = pd.DataFrame({"prompt": prompts, "response": all_responses})
+        # M-BUG06 FIX: Use QUOTE_ALL to prevent CSV injection. Without this,
+        # model outputs starting with '=', '+', '@', '-' would be interpreted
+        # as spreadsheet formulas when the CSV is opened in Excel/Sheets.
         with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as tmp:
-            result_df.to_csv(tmp.name, index=False)
+            result_df.to_csv(tmp.name, index=False, quoting=csv.QUOTE_ALL)
         return tmp.name
 
     except Exception as e:

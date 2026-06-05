@@ -124,6 +124,15 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
             f"⚠️ Install llama.cpp quantize tool for quantization"
         )
 
+    except subprocess.TimeoutExpired:
+        # N-BUG04 FIX: Catch TimeoutExpired explicitly for a clear user message.
+        # Previously it fell into the generic Exception handler, producing a
+        # cryptic "Command timed out after 900 seconds" string.
+        return (
+            "❌ GGUF conversion timed out after 15 minutes.\n"
+            "The model may be too large or disk I/O is slow. "
+            "Try a smaller model or free up disk space."
+        )
     except Exception as e:
         return (
             f"❌ GGUF export error: {e}\n"

@@ -19,6 +19,7 @@ Fix log
 """
 
 import os
+import re
 
 from config.constants import HAS_HUB, HF_TOKEN_PREFIX, HF_TOKEN_MIN_LEN
 
@@ -50,6 +51,9 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
         return "❌ Invalid Repo ID. Format: `username/model-name`"
 
     # M6 FIX: validate the token format properly — HF tokens are `hf_` + 33 chars.
+    # M-BUG08 FIX: Added regex check to reject whitespace and control characters.
+    # Previously a token like "hf_" + " " * 33 passed the length check but failed
+    # at the HuggingFace API with a cryptic network error instead of a clear message.
     if (
         not token
         or not token.startswith(HF_TOKEN_PREFIX)
@@ -58,6 +62,12 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
         return (
             "❌ Invalid Hugging Face write token.\n"
             f"Tokens start with '{HF_TOKEN_PREFIX}' and are at least {HF_TOKEN_MIN_LEN} characters long.\n"
+            "Get yours at: https://huggingface.co/settings/tokens"
+        )
+    if not re.fullmatch(r'hf_[A-Za-z0-9]+', token):
+        return (
+            "❌ Token contains invalid characters.\n"
+            "HuggingFace tokens only contain letters and digits after 'hf_'.\n"
             "Get yours at: https://huggingface.co/settings/tokens"
         )
     if not HAS_HUB:

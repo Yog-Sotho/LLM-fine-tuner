@@ -185,6 +185,8 @@ def train_reward_model_v27(
             gc.collect()
 
         final_loss = log_cb.records[-1]["train_loss"] if log_cb.records else "N/A"
+        if progress is not None:
+            progress(1.0, desc="✅ Complete!")
         return (
             f"✅ Reward model training {status}!\n"
             f"⏱ Elapsed: {elapsed/60:.1f} min\n"
@@ -194,3 +196,12 @@ def train_reward_model_v27(
 
     except Exception as e:
         return f"❌ Reward model training failed: {e}"
+    finally:
+        # H-BUG01 FIX: Guarantee GPU memory is freed even when training raises.
+        try:
+            del base_model
+        except (NameError, UnboundLocalError):
+            pass
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()

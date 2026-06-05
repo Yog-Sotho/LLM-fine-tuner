@@ -19,13 +19,17 @@ import threading
 
 
 def validate_path_traversal(path: str | None) -> str | None:
-    """Check if the path contains '..' or '\\' (unsafe).
+    """Check if the path contains '..' or '\\' or is absolute (unsafe).
+
+    H-BUG02 FIX: Added os.path.isabs() check. The previous guard only blocked
+    relative traversal via '..' or '\\' but allowed absolute paths like
+    '/etc/passwd' to pass through unblocked.
 
     Returns a standardized error message if unsafe, or None if safe.
     """
     if not path:
         return None
-    if ".." in path or "\\" in path:
+    if ".." in path or "\\" in path or os.path.isabs(path):
         return "❌ Path traversal attempt detected."
     return None
 
@@ -47,7 +51,9 @@ class AppState:
         # environment to allow more concurrent engines (requires proportionally
         # more GPU VRAM per additional engine).
         self.vllm_cache: dict = {}
-        self.max_vllm_engines: int = int(os.environ.get("MAX_VLLM_ENGINES", "1"))
+        # H-BUG05 FIX: Clamp MAX_VLLM_ENGINES to [1, 8]. An unbounded value
+        # (e.g. MAX_VLLM_ENGINES=1000) would load hundreds of engines and exhaust VRAM.
+        self.max_vllm_engines: int = min(max(1, int(os.environ.get("MAX_VLLM_ENGINES", "1"))), 8)
 
         # ── Resource tracking for DoS prevention (Sentinel) ────────────────
         # Many operations create temporary files or directories that are

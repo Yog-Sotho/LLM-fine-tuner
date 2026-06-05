@@ -112,6 +112,18 @@ def validate_and_clean_dataset(
     if len(df) == 0:
         issues.append("❌ Dataset is empty after cleaning. No valid examples remain.")
 
+    # M-BUG09 FIX: Warn when DPO chosen == rejected (zero gradient signal).
+    # If a user accidentally swaps columns or uploads duplicate pairs, training
+    # proceeds silently and produces a useless model.
+    if is_dpo and len(df) > 0:
+        identical = (df[COL_CHOSEN].astype(str) == df[COL_REJECTED].astype(str)).sum()
+        if identical > 0:
+            pct = 100 * identical / len(df)
+            issues.append(
+                f"⚠️ {identical} DPO pairs ({pct:.0f}%) have identical chosen and rejected text. "
+                f"These produce no gradient signal — verify that the columns are correctly assigned."
+            )
+
     # Convert back to HuggingFace Dataset
     return Dataset.from_pandas(df, preserve_index=False), issues
 

@@ -193,6 +193,8 @@ def train_orpo_v27(
             gc.collect()
 
         final_loss = log_cb.records[-1]["train_loss"] if log_cb.records else "N/A"
+        if progress is not None:
+            progress(1.0, desc="✅ Complete!")
         return (
             f"✅ ORPO training {status}!\n"
             f"⏱ Elapsed: {elapsed/60:.1f} min\n"
@@ -202,3 +204,12 @@ def train_orpo_v27(
 
     except Exception as e:
         return f"❌ ORPO training failed: {e}"
+    finally:
+        # H-BUG01 FIX: Guarantee GPU memory is freed even when training raises.
+        try:
+            del model
+        except (NameError, UnboundLocalError):
+            pass
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()

@@ -255,3 +255,20 @@ def run_ppo_v27(
 
     except Exception as e:
         return f"❌ PPO training failed: {e}"
+    finally:
+        # H-BUG01 FIX: Guarantee GPU memory is freed even when training raises.
+        try:
+            del policy_model
+        except (NameError, UnboundLocalError):
+            pass
+        try:
+            del reward_model
+        except (NameError, UnboundLocalError):
+            pass
+        try:
+            del ref_model
+        except (NameError, UnboundLocalError):
+            pass
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()

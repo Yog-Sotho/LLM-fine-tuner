@@ -132,17 +132,21 @@ def on_train_click(
     elif training_preset == "Accurate (5 epochs)":
         epochs, lr = 5, 1e-4
 
+    # N-ENH05 FIX: Explicitly coerce every hyperparameter to its expected type.
+    # Gradio components can return strings in edge cases (e.g. Textbox with a
+    # numeric default); passing uncoerced values deep into training code produces
+    # confusing TypeErrors far from the source.
     hyperparams = dict(
-        learning_rate=lr, epochs=epochs, batch_size=bs,
-        grad_accum=grad_accum, max_length=max_len,
-        warmup_steps=warmup, lora_rank=lora_rank,
-        lora_alpha=lora_alpha, lr_scheduler=lr_sched,
-        prefix_tuning_num_virtual_tokens=prefix_tuning_num_virtual_tokens,
-        prefix_tuning_token_dim=prefix_tuning_token_dim,
-        prefix_tuning_num_layers=prefix_tuning_num_layers,
-        prompt_tuning_num_virtual_tokens=prompt_tuning_num_virtual_tokens,
-        adapter_reduction_factor=adapter_reduction_factor,
-        dpo_beta=dpo_beta,
+        learning_rate=float(lr), epochs=int(epochs), batch_size=int(bs),
+        grad_accum=int(grad_accum), max_length=int(max_len),
+        warmup_steps=int(warmup), lora_rank=int(lora_rank),
+        lora_alpha=float(lora_alpha), lr_scheduler=str(lr_sched),
+        prefix_tuning_num_virtual_tokens=int(prefix_tuning_num_virtual_tokens),
+        prefix_tuning_token_dim=int(prefix_tuning_token_dim),
+        prefix_tuning_num_layers=int(prefix_tuning_num_layers),
+        prompt_tuning_num_virtual_tokens=int(prompt_tuning_num_virtual_tokens),
+        adapter_reduction_factor=int(adapter_reduction_factor),
+        dpo_beta=float(dpo_beta),
     )
     output_dir = tempfile.mkdtemp()
 
@@ -387,10 +391,13 @@ def build_loss_chart(log_records: list) -> pd.DataFrame:
     if not log_records:
         return pd.DataFrame(columns=["Step", "Train Loss", "Eval Loss"])
 
+    # N-ENH02 FIX: Replace NaN eval_loss values with None so chart renderers
+    # display gaps instead of "NaN" cells. NaN appears whenever eval_strategy="no"
+    # (no eval split) — every record carries float("nan") for eval_loss in that case.
     data: dict = {
         "Step":       [r["step"]       for r in log_records],
         "Train Loss": [r["train_loss"] for r in log_records],
-        "Eval Loss":  [r["eval_loss"]  for r in log_records],
+        "Eval Loss":  [None if np.isnan(r["eval_loss"]) else r["eval_loss"] for r in log_records],
     }
 
     # F-2: Include ETA column only when timing data is actually present.
