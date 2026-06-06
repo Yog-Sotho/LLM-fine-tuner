@@ -20,7 +20,8 @@ Fix log
 
 import os
 
-from config.constants import HAS_HUB, HF_TOKEN_PREFIX, HF_TOKEN_MIN_LEN
+from config.constants import HAS_HUB
+from export.utils import validate_hf_token
 
 
 def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
@@ -49,17 +50,10 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
     if not repo_id or "/" not in repo_id:
         return "❌ Invalid Repo ID. Format: `username/model-name`"
 
-    # M6 FIX: validate the token format properly — HF tokens are `hf_` + 33 chars.
-    if (
-        not token
-        or not token.startswith(HF_TOKEN_PREFIX)
-        or len(token) < HF_TOKEN_MIN_LEN
-    ):
-        return (
-            "❌ Invalid Hugging Face write token.\n"
-            f"Tokens start with '{HF_TOKEN_PREFIX}' and are at least {HF_TOKEN_MIN_LEN} characters long.\n"
-            "Get yours at: https://huggingface.co/settings/tokens"
-        )
+    # Sentinel: standardized robust token validation.
+    if err := validate_hf_token(token):
+        return err + "\nGet yours at: https://huggingface.co/settings/tokens"
+
     if not HAS_HUB:
         return "❌ huggingface_hub not installed. Run: pip install huggingface-hub"
 

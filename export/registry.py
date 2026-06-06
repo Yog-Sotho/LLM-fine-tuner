@@ -18,7 +18,8 @@ import json
 import os
 from datetime import datetime
 
-from config.constants import HAS_HUB, HF_TOKEN_PREFIX, HF_TOKEN_MIN_LEN
+from config.constants import HAS_HUB
+from export.utils import validate_hf_token
 
 
 class ModelRegistry:
@@ -177,15 +178,9 @@ def on_registry_upload(
         return "❌ Invalid Repo ID. Format: username/model-name"
 
     # Sentinel: standardized robust token validation.
-    if (
-        not registry_token
-        or not registry_token.startswith(HF_TOKEN_PREFIX)
-        or len(registry_token) < HF_TOKEN_MIN_LEN
-    ):
-        return (
-            "❌ Invalid Hugging Face write token.\n"
-            f"Tokens start with '{HF_TOKEN_PREFIX}' and are at least {HF_TOKEN_MIN_LEN} characters long."
-        )
+    if err := validate_hf_token(registry_token):
+        return err
+
     if not registry_version or ".." in registry_version or "/" in registry_version or "\\" in registry_version:
         return "❌ Please enter a valid version tag (no '..', '/', or '\\')."
     if not model_path_state or not os.path.isdir(model_path_state):
@@ -216,15 +211,8 @@ def on_registry_list(registry_repo_id: str, registry_token: str) -> str:
         return "❌ Invalid Repo ID."
 
     # Sentinel: standardized robust token validation.
-    if (
-        not registry_token
-        or not registry_token.startswith(HF_TOKEN_PREFIX)
-        or len(registry_token) < HF_TOKEN_MIN_LEN
-    ):
-        return (
-            "❌ Invalid Hugging Face write token.\n"
-            f"Tokens start with '{HF_TOKEN_PREFIX}' and are at least {HF_TOKEN_MIN_LEN} characters long."
-        )
+    if err := validate_hf_token(registry_token):
+        return err
 
     try:
         reg = ModelRegistry(registry_repo_id, registry_token)
