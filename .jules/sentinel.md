@@ -17,3 +17,8 @@
 **Vulnerability:** Missing path traversal validation in GGUF Export and vLLM generation handlers.
 **Learning:** Even when UI components are marked as non-interactive (e.g., auto-filled paths), handlers must independently validate inputs to prevent exploitation via direct backend calls or future UI changes. Standardizing on `validate_path_traversal` and `.strip()` across all entry points ensures defense-in-depth.
 **Prevention:** Explicitly validate all user-provided or state-derived paths in Gradio handlers before passing them to low-level filesystem or subprocess operations.
+
+## 2025-05-22 - [Quantization Parameter Hardening]
+**Vulnerability:** User-controlled quantization strings used in GGUF/vLLM path construction without validation.
+**Learning:** Security guards often focus on "path" arguments but miss secondary string parameters (like quantization types) that are interpolated into filenames. These can be exploited for path traversal or arbitrary directory creation if not sanitized.
+**Prevention:** Always strip whitespace and validate ALL user-provided strings that contribute to local file paths, even if they aren't "paths" themselves. Specifically, block forward slashes in such parameters to prevent sub-directory injection.
