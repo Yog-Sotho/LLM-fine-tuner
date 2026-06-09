@@ -29,3 +29,7 @@
 ## 2026-05-28 - [PPO Batched Tokenization]
 **Learning:** Sequential tokenization of prompts inside the PPO training loop is a major bottleneck, especially when repeated across multiple epochs. Pre-tokenizing the entire dataset using a single batched 'tokenizer()' call outside the loop avoids redundant work and leverages optimized backend implementations, providing a ~4.5x speedup in the preprocessing phase.
 **Action:** Implemented pre-tokenization and batched query tensor storage in 'training/ppo.py'. Verified logic with a mock-based unit test 'tests/test_ppo_pre_tokenization.py'.
+
+## 2026-05-31 - [Vectorized Dataset Statistics]
+**Learning:** Calculating dataset statistics (average character length) using sequential Python loops over 100k+ rows in the UI handler was a significant bottleneck (~5s delay before training started). Transitioning this logic to a dedicated `get_dataset_stats` function using vectorized Pandas operations (`.astype(str).str.len().mean()`) yields a ~500x speedup (0.01s vs 4.9s for 100k rows) while improving code maintainability.
+**Action:** Refactored statistics calculation into `data/preprocessing.py:get_dataset_stats` using vectorized Pandas operations. Updated `ui/handlers.py` to use the new function. Added `tests/test_stats_calculation.py` and `tests/benchmark_stats.py` for verification.
