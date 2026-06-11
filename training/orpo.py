@@ -11,6 +11,8 @@ Patch log
 """
 
 import gc
+import inspect
+import os
 import time
 
 import gradio as gr
@@ -166,7 +168,7 @@ def train_orpo_v27(
                 ETAProgressCallback(gradio_progress=progress, progress_start=0.3, progress_end=0.9)
             )
 
-        orpo_trainer = ORPOTrainer(
+        orpo_kwargs = dict(
             model=model,
             args=orpo_config,
             train_dataset=orpo_train_ds,
@@ -174,6 +176,11 @@ def train_orpo_v27(
             tokenizer=tokenizer,
             callbacks=orpo_callbacks,
         )
+        # BOLT OPTIMIZATION: parallelise tokenisation if trainer supports it (TRL >= 0.9.0)
+        if "dataset_num_proc" in inspect.signature(ORPOTrainer.__init__).parameters:
+            orpo_kwargs["dataset_num_proc"] = os.cpu_count()
+
+        orpo_trainer = ORPOTrainer(**orpo_kwargs)
 
         if progress is not None:
             progress(0.3, desc="ORPO training started… calculating ETA…")
