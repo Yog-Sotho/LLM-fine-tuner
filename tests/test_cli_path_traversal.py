@@ -34,3 +34,28 @@ def test_cli_evaluate_path_traversal():
     result = runner.invoke(app, ["evaluate", "--model", "../unsafe", "--data", "dummy.csv"])
     assert result.exit_code == 1
     assert "❌ Path traversal attempt detected." in result.stderr
+
+def test_cli_train_data_traversal():
+    result = runner.invoke(app, ["train", "--model", "ok", "--data", "../unsafe", "--output", "./ok"])
+    assert result.exit_code == 1
+    assert "❌ Path traversal attempt detected." in result.stderr
+
+def test_cli_reward_data_traversal():
+    result = runner.invoke(app, ["reward", "--model", "ok", "--data", "../unsafe", "--output", "./ok"])
+    assert result.exit_code == 1
+    assert "❌ Path traversal attempt detected." in result.stderr
+
+def test_cli_orpo_data_traversal():
+    result = runner.invoke(app, ["orpo", "--model", "ok", "--data", "../unsafe", "--output", "./ok"])
+    assert result.exit_code == 1
+    assert "❌ Path traversal attempt detected." in result.stderr
+
+def test_cli_ppo_data_traversal():
+    result = runner.invoke(app, ["ppo", "--policy-model", "ok", "--reward-model", "./ok", "--data", "../unsafe", "--output", "./ok"])
+    assert result.exit_code == 1
+    assert "❌ Path traversal attempt detected." in result.stderr
+
+def test_cli_evaluate_data_traversal():
+    result = runner.invoke(app, ["evaluate", "--model", "ok", "--data", "../unsafe"])
+    assert result.exit_code == 1
+    assert "❌ Path traversal attempt detected." in result.stderr

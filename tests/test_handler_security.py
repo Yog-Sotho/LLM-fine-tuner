@@ -29,3 +29,23 @@ def test_on_vllm_generate_whitespace_stripping():
         with patch("os.path.isdir", return_value=False):
             status = on_vllm_generate("  non_existent_dir  ", "prompt", "none", 512, 0.7, 0.9)
             assert "❌ No trained model path found." in status
+
+def test_on_export_gguf_quantization_hardening():
+    # Test with traversal pattern in quantization
+    status, file_path = on_export_gguf("./ok", "../unsafe")
+    assert "❌ Path traversal attempt detected." in status
+    assert file_path is None
+
+    # Test with forward slash in quantization
+    status, file_path = on_export_gguf("./ok", "q4_k/m")
+    assert "❌ Path traversal attempt detected." in status
+    assert file_path is None
+
+def test_on_vllm_generate_quantization_hardening():
+    # Test with traversal pattern in quantization
+    status = on_vllm_generate("./ok", "prompt", "../unsafe", 512, 0.7, 0.9)
+    assert "❌ Path traversal attempt detected." in status
+
+    # Test with forward slash in quantization
+    status = on_vllm_generate("./ok", "prompt", "bnb/4bit", 512, 0.7, 0.9)
+    assert "❌ Path traversal attempt detected." in status
