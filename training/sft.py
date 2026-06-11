@@ -34,6 +34,7 @@ Patch log
 
 import gc
 import glob
+import inspect
 import os
 import subprocess
 import time
@@ -434,7 +435,7 @@ def train_model(
             # is deprecated in TRL >= 0.9.
             try:
                 dpo_config = DPOConfig(**base_training_args, remove_unused_columns=False, beta=dpo_beta)
-                trainer = DPOTrainer(
+                dpo_kwargs = dict(
                     model=model,
                     args=dpo_config,
                     train_dataset=train_ds,
@@ -442,10 +443,14 @@ def train_model(
                     tokenizer=tokenizer,
                     callbacks=dpo_callbacks,
                 )
+                # BOLT OPTIMIZATION: parallelise tokenisation if trainer supports it (TRL >= 0.8.0)
+                if "dataset_num_proc" in inspect.signature(DPOTrainer.__init__).parameters:
+                    dpo_kwargs["dataset_num_proc"] = os.cpu_count()
+                trainer = DPOTrainer(**dpo_kwargs)
             except TypeError:
                 # Fallback for older TRL versions
                 training_args = TrainingArguments(**base_training_args, remove_unused_columns=False)
-                trainer = DPOTrainer(
+                dpo_kwargs = dict(
                     model=model,
                     args=training_args,
                     train_dataset=train_ds,
@@ -454,6 +459,10 @@ def train_model(
                     beta=dpo_beta,
                     callbacks=dpo_callbacks,
                 )
+                # BOLT OPTIMIZATION: parallelise tokenisation if trainer supports it
+                if "dataset_num_proc" in inspect.signature(DPOTrainer.__init__).parameters:
+                    dpo_kwargs["dataset_num_proc"] = os.cpu_count()
+                trainer = DPOTrainer(**dpo_kwargs)
         else:
             training_args = TrainingArguments(**base_training_args)
             collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
