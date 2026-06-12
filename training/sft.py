@@ -432,28 +432,37 @@ def train_model(
 
             # v2.9: Use DPOConfig for beta — passing beta to DPOTrainer directly
             # is deprecated in TRL >= 0.9.
+            import inspect as _inspect
             try:
                 dpo_config = DPOConfig(**base_training_args, remove_unused_columns=False, beta=dpo_beta)
-                trainer = DPOTrainer(
-                    model=model,
-                    args=dpo_config,
-                    train_dataset=train_ds,
-                    eval_dataset=eval_ds,
-                    tokenizer=tokenizer,
-                    callbacks=dpo_callbacks,
-                )
+                # BOLT OPTIMIZATION: Parallelize internal trainer tokenization.
+                dpo_trainer_kwargs = {
+                    "model": model,
+                    "args": dpo_config,
+                    "train_dataset": train_ds,
+                    "eval_dataset": eval_ds,
+                    "tokenizer": tokenizer,
+                    "callbacks": dpo_callbacks,
+                }
+                if "dataset_num_proc" in _inspect.signature(DPOTrainer.__init__).parameters:
+                    dpo_trainer_kwargs["dataset_num_proc"] = os.cpu_count()
+                trainer = DPOTrainer(**dpo_trainer_kwargs)
             except TypeError:
                 # Fallback for older TRL versions
                 training_args = TrainingArguments(**base_training_args, remove_unused_columns=False)
-                trainer = DPOTrainer(
-                    model=model,
-                    args=training_args,
-                    train_dataset=train_ds,
-                    eval_dataset=eval_ds,
-                    tokenizer=tokenizer,
-                    beta=dpo_beta,
-                    callbacks=dpo_callbacks,
-                )
+                # BOLT OPTIMIZATION: Parallelize internal trainer tokenization.
+                dpo_trainer_kwargs = {
+                    "model": model,
+                    "args": training_args,
+                    "train_dataset": train_ds,
+                    "eval_dataset": eval_ds,
+                    "tokenizer": tokenizer,
+                    "beta": dpo_beta,
+                    "callbacks": dpo_callbacks,
+                }
+                if "dataset_num_proc" in _inspect.signature(DPOTrainer.__init__).parameters:
+                    dpo_trainer_kwargs["dataset_num_proc"] = os.cpu_count()
+                trainer = DPOTrainer(**dpo_trainer_kwargs)
         else:
             training_args = TrainingArguments(**base_training_args)
             collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
@@ -463,15 +472,20 @@ def train_model(
             # F-2: Add ETA progress callback for SFT training
             if progress is not None:
                 sft_callbacks.append(ETAProgressCallback(gradio_progress=progress))
-            trainer = Trainer(
-                model=model,
-                args=training_args,
-                train_dataset=train_ds,
-                eval_dataset=eval_ds,
-                data_collator=collator,
-                tokenizer=tokenizer,
-                callbacks=sft_callbacks,
-            )
+            # BOLT OPTIMIZATION: Parallelize internal trainer tokenization.
+            import inspect as _inspect
+            sft_trainer_kwargs = {
+                "model": model,
+                "args": training_args,
+                "train_dataset": train_ds,
+                "eval_dataset": eval_ds,
+                "data_collator": collator,
+                "tokenizer": tokenizer,
+                "callbacks": sft_callbacks,
+            }
+            if "dataset_num_proc" in _inspect.signature(Trainer.__init__).parameters:
+                sft_trainer_kwargs["dataset_num_proc"] = os.cpu_count()
+            trainer = Trainer(**sft_trainer_kwargs)
 
         # ── Resume from checkpoint ─────────────────────────────────────────
         resume_path = None
