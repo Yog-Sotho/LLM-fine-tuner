@@ -79,7 +79,7 @@ from config.constants import (
 )
 from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
 from core.hardware import get_lora_targets, is_unsloth_supported
-from core.state import app_state
+from core.state import app_state, validate_path_traversal
 from data.preprocessing import preprocess_function
 
 
@@ -121,6 +121,13 @@ def train_model(
     -------
     (summary_str, log_records_list)
     """
+    # Sentinel: strip whitespace and validate against path traversal.
+    model_name = model_name.strip() if model_name else ""
+    output_dir = output_dir.strip() if output_dir else ""
+
+    if err := (validate_path_traversal(model_name) or validate_path_traversal(output_dir)):
+        return err, []
+
     # v2.9 Major Fix #2: Derive QLoRA Enhanced solely from peft_method.
     use_qlora_enhanced = (peft_method == "QLoRA Enhanced")
     # v3.0 Fix #1 (Critical): Define is_dpo here — was previously undefined.
