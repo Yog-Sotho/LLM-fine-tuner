@@ -33,3 +33,7 @@
 ## 2026-06-05 - [Vectorized Stats & Parallel Trainer Tokenization]
 **Learning:** Manual list comprehension loops for dataset statistics (average length) in UI handlers are a major bottleneck for 100k+ row datasets. Converting to vectorized Pandas operations via `to_pandas()` and `.str.len().mean()` yields a ~240x-450x speedup. Furthermore, TRL's `DPOTrainer` and `ORPOTrainer` (and HF's `Trainer`) can parallelize internal tokenization if `dataset_num_proc` is passed, which significantly reduces training startup time.
 **Action:** Implemented `get_dataset_stats` in `data/preprocessing.py`. Updated `ui/handlers.py` to use it with a safety fallback. Added `dataset_num_proc=os.cpu_count()` to SFT, DPO, and ORPO trainer constructors with `inspect.signature` guards for backward compatibility.
+
+## 2026-06-12 - [Efficient Dataset Slicing and Reconstruction]
+**Learning:** In the Hugging Face `datasets` library, accessing a column then slicing (`dataset[COL][:N]`) loads the entire column from Arrow into Python memory. Slicing first (`dataset[:N][COL]`) only loads the requested rows, providing a ~5x speedup for previews. For dataset reconstruction (like augmentation), building a dictionary of lists and using `Dataset.from_dict()` with slice assignment (`list[start::step] = values`) is ~13x faster than row-wise iteration and dictionary creation.
+**Action:** Always slice datasets before column access for small previews. Use columnar dictionary reconstruction for batch data transformations.
