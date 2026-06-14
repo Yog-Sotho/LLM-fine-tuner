@@ -90,7 +90,16 @@ def train(
             typer.echo(f"⚠️  --qlora-enhanced overrides --peft '{peft_method}' → 'QLoRA Enhanced'")
         peft_method = "QLoRA Enhanced"
 
-    if err := (validate_path_traversal(model) or validate_path_traversal(output)):
+    # Sentinel: strip whitespace and validate against path traversal.
+    model  = model.strip()  if model  else ""
+    data   = data.strip()   if data   else ""
+    output = output.strip() if output else ""
+
+    if err := (
+        validate_path_traversal(model)
+        or validate_path_traversal(data)
+        or validate_path_traversal(output)
+    ):
         typer.echo(err, err=True)
         raise typer.Exit(code=1)
 
@@ -164,7 +173,16 @@ def reward(
     batch_size: int = typer.Option(4, "--batch-size"),
 ):
     """Train a Reward Model from preference data (FIX 3c: full implementation)."""
-    if err := (validate_path_traversal(model) or validate_path_traversal(output)):
+    # Sentinel: strip whitespace and validate against path traversal.
+    model  = model.strip()  if model  else ""
+    data   = data.strip()   if data   else ""
+    output = output.strip() if output else ""
+
+    if err := (
+        validate_path_traversal(model)
+        or validate_path_traversal(data)
+        or validate_path_traversal(output)
+    ):
         typer.echo(err, err=True)
         raise typer.Exit(code=1)
 
@@ -174,7 +192,7 @@ def reward(
         typer.echo("❌ Install: pip install trl>=0.7.0", err=True)
         raise typer.Exit(code=1)
 
-    # N-4 FIX: Added ftype guard (was missing for reward/orpo/ppo — only train had it).
+    # N-4 FIX: Added ftype_guard (was missing for reward/orpo/ppo — only train had it).
     # Without this, an unsupported extension silently passes ftype=None into
     # load_dataset_from_file, which crashes deep in the stack with
     # "Unsupported file type: None" — confusing for non-technical users.
@@ -235,7 +253,16 @@ def orpo(
     batch_size: int = typer.Option(2, "--batch-size"),
 ):
     """ORPO alignment training (FIX 3c: full implementation)."""
-    if err := (validate_path_traversal(model) or validate_path_traversal(output)):
+    # Sentinel: strip whitespace and validate against path traversal.
+    model  = model.strip()  if model  else ""
+    data   = data.strip()   if data   else ""
+    output = output.strip() if output else ""
+
+    if err := (
+        validate_path_traversal(model)
+        or validate_path_traversal(data)
+        or validate_path_traversal(output)
+    ):
         typer.echo(err, err=True)
         raise typer.Exit(code=1)
 
@@ -245,7 +272,7 @@ def orpo(
         typer.echo("❌ Install: pip install trl>=0.8.0", err=True)
         raise typer.Exit(code=1)
 
-    # N-4 FIX: Added ftype guard (was missing for reward/orpo/ppo — only train had it).
+    # N-4 FIX: Added ftype_guard (was missing for reward/orpo/ppo — only train had it).
     if not os.path.exists(data):
         typer.echo(f"❌ Dataset not found: {data}", err=True)
         raise typer.Exit(code=1)
@@ -300,9 +327,16 @@ def ppo(
                                         help="Max tokens per generated response"),
 ):
     """PPO fine-tuning with a trained reward model (FIX 3c: full implementation)."""
+    # Sentinel: strip whitespace and validate against path traversal.
+    policy_model = policy_model.strip() if policy_model else ""
+    reward_model = reward_model.strip() if reward_model else ""
+    data         = data.strip()         if data         else ""
+    output       = output.strip()       if output       else ""
+
     if err := (
         validate_path_traversal(policy_model)
         or validate_path_traversal(reward_model)
+        or validate_path_traversal(data)
         or validate_path_traversal(output)
     ):
         typer.echo(err, err=True)
@@ -317,7 +351,7 @@ def ppo(
         typer.echo(f"❌ Reward model path invalid: {reward_model}", err=True)
         raise typer.Exit(code=1)
 
-    # N-4 FIX: Added ftype guard (was missing for reward/orpo/ppo — only train had it).
+    # N-4 FIX: Added ftype_guard (was missing for reward/orpo/ppo — only train had it).
     if not os.path.exists(data):
         typer.echo(f"❌ Dataset not found: {data}", err=True)
         raise typer.Exit(code=1)
@@ -378,7 +412,16 @@ def evaluate(
     max_new_tokens: int = typer.Option(150, "--max-new-tokens", help="Tokens to generate"),
 ):
     """Batched BLEU / ROUGE / BERTScore evaluation suite (BOLT OPTIMIZED)."""
-    if err := (validate_path_traversal(model) or validate_path_traversal(lora)):
+    # Sentinel: strip whitespace and validate against path traversal.
+    model = model.strip() if model else ""
+    data  = data.strip()  if data  else ""
+    lora  = lora.strip()  if lora  else ""
+
+    if err := (
+        validate_path_traversal(model)
+        or validate_path_traversal(data)
+        or validate_path_traversal(lora)
+    ):
         typer.echo(err, err=True)
         raise typer.Exit(code=1)
 
