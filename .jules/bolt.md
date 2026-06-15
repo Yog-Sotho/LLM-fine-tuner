@@ -33,3 +33,7 @@
 ## 2026-06-05 - [Vectorized Stats & Parallel Trainer Tokenization]
 **Learning:** Manual list comprehension loops for dataset statistics (average length) in UI handlers are a major bottleneck for 100k+ row datasets. Converting to vectorized Pandas operations via `to_pandas()` and `.str.len().mean()` yields a ~240x-450x speedup. Furthermore, TRL's `DPOTrainer` and `ORPOTrainer` (and HF's `Trainer`) can parallelize internal tokenization if `dataset_num_proc` is passed, which significantly reduces training startup time.
 **Action:** Implemented `get_dataset_stats` in `data/preprocessing.py`. Updated `ui/handlers.py` to use it with a safety fallback. Added `dataset_num_proc=os.cpu_count()` to SFT, DPO, and ORPO trainer constructors with `inspect.signature` guards for backward compatibility.
+
+## 2026-06-07 - [Columnar Dataset Augmentation Reconstruction]
+**Learning:** Reconstructing augmented datasets using row-wise `dict(example)` loops and `Dataset.from_list()` is an O(N) bottleneck that becomes extremely slow as dataset size increases. Transitioning to a fully columnar reconstruction using `dataset.to_dict()` followed by Python's optimized slice assignment (e.g., `interleaved[0::factor] = values`) for interleaving yields a ~13x-18x speedup on 10k+ rows while maintaining exact logic parity and row order.
+**Action:** Refactored `augment_dataset_v27` in `data/augmentation.py` to use `to_dict()` and columnar slice interleaving. Verified with `tests/benchmark_augmentation_reconstruction.py` and existing tests.
