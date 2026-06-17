@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/app/main.py", line 76, in <module>
+    main()
+  File "/app/main.py", line 46, in main
+    from app import build_demo  # noqa: PLC0415
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/ui/app.py", line 27, in <module>
+    from data.augmentation import on_augment_click, on_quality_filter_click
+  File "/app/data/__init__.py", line 1, in <module>
+    from data.loader import detect_file_type, load_dataset_from_file, safe_extract_zip  # noqa: F401
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/data/loader.py", line 21, in <module>
+    from datasets import Dataset
+ModuleNotFoundError: No module named 'datasets'

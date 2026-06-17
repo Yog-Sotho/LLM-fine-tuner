@@ -20,9 +20,11 @@ def build_inference_tab() -> dict:
                 infer_custom = gr.Textbox(label="Or custom model ID",
                                           placeholder="username/my-model",
                                           max_length=512)
+                # Sentinel: max_length=512 mitigates DoS risk from extremely long strings.
                 lora_path    = gr.Textbox(
                     label="PEFT adapter path (auto-filled after training)",
                     interactive=False,
+                    max_length=512,
                 )
                 prompt_in    = gr.Textbox(
                     label="Prompt", lines=4,

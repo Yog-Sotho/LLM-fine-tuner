@@ -1,0 +1,7 @@
+/app/ui/app.py:55: UserWarning: The parameters have been moved from the Blocks constructor to the launch() method in Gradio 6.0: theme, css. Please pass these parameters to launch() instead.
+  with gr.Blocks(
+
+🧠 LLM Fine-Tuner v3.2 — Launching Gradio UI
+============================================================
+✅ Hardware: CPU mode (slow)
+✅ v3.2 Fixes: Small Dataset Guard | PPO Reward Float | CLI --help | QLoRA Checkbox | CUDA dtype
