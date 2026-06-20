@@ -12,7 +12,7 @@ def build_share_tab() -> dict:
             repo_id    = gr.Textbox(label="Repo ID",
                                      placeholder="username/my-finetuned-model",
                                      max_length=512)
-            hf_token   = gr.Textbox(label="HF Token (write access)", type="password")
+            hf_token   = gr.Textbox(label="HF Token (write access)", type="password", max_length=512)
             push_btn   = gr.Button("🚀 Push to Hub", variant="primary")
             push_status = gr.Markdown(" ")
 
@@ -28,7 +28,7 @@ def build_share_tab() -> dict:
                     placeholder="username/my-model-registry",
                     max_length=512,
                 )
-                registry_token    = gr.Textbox(label="HF Token (write access)", type="password")
+                registry_token    = gr.Textbox(label="HF Token (write access)", type="password", max_length=512)
                 registry_version  = gr.Textbox(
                     label="Version Tag", placeholder="e.g. 1.0, 2.0.1, beta-1",
                     max_length=512,
