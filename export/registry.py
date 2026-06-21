@@ -186,8 +186,10 @@ def on_registry_upload(
             "❌ Invalid Hugging Face write token.\n"
             f"Tokens start with '{HF_TOKEN_PREFIX}' and are at least {HF_TOKEN_MIN_LEN} characters long."
         )
-    if not registry_version or ".." in registry_version or "/" in registry_version or "\\" in registry_version:
-        return "❌ Please enter a valid version tag (no '..', '/', or '\\')."
+    from core.state import validate_identifier
+    if err := validate_identifier(registry_version):
+        return err
+
     if not model_path_state or not os.path.isdir(model_path_state):
         return "❌ No trained model found. Train a model first."
 

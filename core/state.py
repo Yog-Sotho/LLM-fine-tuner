@@ -19,13 +19,34 @@ import threading
 
 
 def validate_path_traversal(path: str | None) -> str | None:
-    """Check if the path contains '..' or '\\' (unsafe).
+    """Check if the path contains traversal patterns or null bytes.
+
+    Sentinel: Standardized guard for paths. Blocks '..' and '\\'.
+    Also blocks null bytes (\x00) to prevent OS-level injection.
 
     Returns a standardized error message if unsafe, or None if safe.
     """
     if not path:
         return None
-    if ".." in path or "\\" in path:
+    if ".." in path or "\\" in path or "\x00" in path:
+        return "❌ Path traversal attempt detected."
+    return None
+
+
+def validate_identifier(name: str | None) -> str | None:
+    """Validate a simple identifier (e.g. version tag, quantization string).
+
+    Sentinel: In addition to path traversal patterns, this also blocks
+    forward slashes ('/') to prevent identifiers from being used to
+    create unintended subdirectories or absolute paths in os.path.join.
+
+    Returns a standardized error message if unsafe, or None if safe.
+    """
+    if not name:
+        return None
+    if err := validate_path_traversal(name):
+        return err
+    if "/" in name:
         return "❌ Path traversal attempt detected."
     return None
 
