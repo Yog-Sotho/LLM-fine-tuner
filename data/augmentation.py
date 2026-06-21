@@ -74,7 +74,8 @@ def augment_dataset_v27(
         target_col = COL_TEXT if col_is_text else (COL_INSTRUCTION if COL_INSTRUCTION in dataset.column_names else None)
 
         if target_col:
-            texts_to_aug = [str(x[target_col]) for x in dataset]
+            # BOLT OPTIMIZATION: Use columnar access instead of row-wise iteration.
+            texts_to_aug = list(dataset[target_col])
             all_aug_versions = []
 
             # Generate (augmentation_factor - 1) augmented versions for the entire batch.
@@ -84,31 +85,45 @@ def augment_dataset_v27(
                     aug_results = augmenter.augment(texts_to_aug)
                     if not isinstance(aug_results, list):
                         aug_results = [str(aug_results)]
-                    all_aug_versions.append(aug_results)
+                    # Safeguard: if nlpaug returns fewer items than requested, pad with originals
+                    if len(aug_results) < len(texts_to_aug):
+                        aug_results = list(aug_results) + texts_to_aug[len(aug_results):]
+                    all_aug_versions.append(aug_results[:len(texts_to_aug)])
                 except Exception:
                     # Fallback: if batch fails, use original texts to preserve row count
                     all_aug_versions.append(texts_to_aug)
 
-            augmented_rows = []
-            for idx, example in enumerate(dataset):
-                # 1. Add original example
-                augmented_rows.append(dict(example))
-                # 2. Add each augmented version
-                for version_list in all_aug_versions:
-                    new_example = dict(example)
-                    # Safeguard index in case nlpaug returns fewer items than requested
-                    aug_text = version_list[idx] if idx < len(version_list) else texts_to_aug[idx]
-                    new_example[target_col] = aug_text
-                    augmented_rows.append(new_example)
+            # BOLT OPTIMIZATION: Use dataset.to_dict() and slice-based interleaving
+            # for efficient reconstruction, avoiding millions of Python dict objects.
+            full_data_dict = dataset.to_dict()
+            new_data = {}
+            new_len = len(dataset) * augmentation_factor
+
+            for col_name, values in full_data_dict.items():
+                interleaved = [None] * new_len
+                # 1. Place original values at indices 0, factor, 2*factor...
+                interleaved[0::augmentation_factor] = values
+                if col_name == target_col:
+                    # 2. Place augmented versions at indices 1, 2...
+                    for i, aug_version in enumerate(all_aug_versions):
+                        interleaved[i+1::augmentation_factor] = aug_version
+                else:
+                    # 3. For other columns, repeat the original value
+                    for i in range(1, augmentation_factor):
+                        interleaved[i::augmentation_factor] = values
+                new_data[col_name] = interleaved
+            aug_ds = Dataset.from_dict(new_data)
         else:
             # Fallback for datasets without TEXT or INSTRUCTION columns
-            augmented_rows = []
-            for example in dataset:
-                augmented_rows.append(dict(example))
-                for _ in range(augmentation_factor - 1):
-                    augmented_rows.append(dict(example))
-
-        aug_ds = Dataset.from_list(augmented_rows)
+            full_data_dict = dataset.to_dict()
+            new_data = {}
+            new_len = len(dataset) * augmentation_factor
+            for col_name, values in full_data_dict.items():
+                interleaved = [None] * new_len
+                for i in range(augmentation_factor):
+                    interleaved[i::augmentation_factor] = values
+                new_data[col_name] = interleaved
+            aug_ds = Dataset.from_dict(new_data)
         msg = (
             f"✅ Augmentation complete!\n"
             f"Original: {len(dataset)} examples\n"
