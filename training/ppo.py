@@ -44,6 +44,8 @@ def run_ppo_v27(
     Dataset must contain a 'prompt' column.
     Reward model must have been saved with AutoModelForCausalLMWithValueHead.
 
+    Sentinel: Validate paths and strip whitespace to prevent path traversal.
+
     Returns a status string for display in the UI.
     """
     # Sentinel: strip whitespace and validate against path traversal.
