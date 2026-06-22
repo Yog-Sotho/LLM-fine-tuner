@@ -88,6 +88,9 @@ def on_train_click(
         return err, None, None, []
 
     model_name = custom_model if custom_model else model_choice
+    if err := validate_path_traversal(model_name):
+        return err, None, None, []
+
     device     = "cuda" if torch.cuda.is_available() else "cpu"
     is_dpo     = training_mode == "dpo"
 
@@ -200,6 +203,9 @@ def on_generate(prompt, model_choice, custom_model, lora_path, max_tok, temp, to
         return err
 
     model_name = custom_model if custom_model else model_choice
+    if err := validate_path_traversal(model_name):
+        return err
+
     return generate_text(model_name, lora_path, prompt, int(max_tok), temp, top_p)
 
 
@@ -211,6 +217,9 @@ def on_batch_test(f, model_choice, custom_model, lora_path) -> str:
         return err
 
     model_name = custom_model if custom_model else model_choice
+    if err := validate_path_traversal(model_name):
+        return err
+
     return batch_generate(model_name, lora_path, f)
 
 

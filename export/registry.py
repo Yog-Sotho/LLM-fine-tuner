@@ -19,6 +19,7 @@ import os
 from datetime import datetime
 
 from config.constants import HAS_HUB, HF_TOKEN_PREFIX, HF_TOKEN_MIN_LEN
+from core.state import validate_path_traversal, validate_identifier
 
 
 class ModelRegistry:
@@ -165,11 +166,10 @@ def on_registry_upload(
     registry_version = registry_version.strip() if registry_version else ""
     model_path_state = model_path_state.strip() if model_path_state else ""
 
-    from core.state import validate_path_traversal
     if err := (
         validate_path_traversal(model_path_state)
         or validate_path_traversal(registry_repo_id)
-        or validate_path_traversal(registry_version)
+        or validate_identifier(registry_version)
     ):
         return err
 
@@ -186,8 +186,8 @@ def on_registry_upload(
             "❌ Invalid Hugging Face write token.\n"
             f"Tokens start with '{HF_TOKEN_PREFIX}' and are at least {HF_TOKEN_MIN_LEN} characters long."
         )
-    if not registry_version or ".." in registry_version or "/" in registry_version or "\\" in registry_version:
-        return "❌ Please enter a valid version tag (no '..', '/', or '\\')."
+    if not registry_version:
+        return "❌ Please enter a valid version tag."
     if not model_path_state or not os.path.isdir(model_path_state):
         return "❌ No trained model found. Train a model first."
 
@@ -208,7 +208,6 @@ def on_registry_list(registry_repo_id: str, registry_token: str) -> str:
     registry_repo_id = registry_repo_id.strip() if registry_repo_id else ""
     registry_token   = registry_token.strip()   if registry_token   else ""
 
-    from core.state import validate_path_traversal
     if err := validate_path_traversal(registry_repo_id):
         return err
 
