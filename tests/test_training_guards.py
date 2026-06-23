@@ -87,7 +87,7 @@ def test_early_stopping_added_when_eval_present():
     if eval_ds is not None and early_stop > 0:
         callbacks.append(EarlyStoppingCallback(early_stopping_patience=early_stop))
     assert len(callbacks) == 1
-    assert isinstance(callbacks[0], EarlyStoppingCallback)
+    assert type(callbacks[0]) is EarlyStoppingCallback
 
 
 def test_load_best_model_false_when_no_eval():
