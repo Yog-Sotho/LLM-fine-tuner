@@ -39,12 +39,16 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
     token      = token.strip()      if token      else ""
     model_path = model_path.strip() if model_path else ""
 
+    from core.state import validate_path_traversal
+    if err := (
+        validate_path_traversal(model_path)
+        or validate_path_traversal(repo_id)
+        or validate_path_traversal(token)
+    ):
+        return err
+
     if not model_path or not os.path.isdir(model_path):
         return "❌ No model found. Please train a model first."
-
-    from core.state import validate_path_traversal
-    if err := (validate_path_traversal(model_path) or validate_path_traversal(repo_id)):
-        return err
 
     if not repo_id or "/" not in repo_id:
         return "❌ Invalid Repo ID. Format: `username/model-name`"
