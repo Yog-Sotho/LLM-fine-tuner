@@ -22,3 +22,8 @@
 **Vulnerability:** `validate_path_traversal` only blocks `..` and `\`, allowing forward slashes `/` to bypass security when used in `os.path.join`.
 **Learning:** In identifiers that are used to construct filenames (like quantization types), a leading or embedded forward slash can be used to write files to arbitrary locations or create unintended subdirectories, even if `..` is blocked.
 **Prevention:** For parameters that should be simple identifiers and not paths, explicitly block forward slashes `/` in addition to calling `validate_path_traversal`.
+
+## 2025-05-24 - [Centralized Identifier Hardening & Null-Byte Protection]
+**Vulnerability:** Inconsistent identifier validation and missing null-byte (`\0`) protection in path traversal guards.
+**Learning:** Legacy path traversal guards often focus on `..` and `\`, but neglect null-byte injection which can terminate string processing in underlying C-based OS APIs, potentially bypassing high-level logic. Furthermore, duplicating validation logic for non-path identifiers (like quantization tags) across multiple handlers leads to gaps and maintenance debt.
+**Prevention:** Centralize identifier validation (blocking `/`, `\`, `..`, and `\0`) in a dedicated core helper. Always include null-byte checks in path traversal validation functions to ensure defense-in-depth against terminal character injection.
