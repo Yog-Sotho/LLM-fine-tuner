@@ -22,3 +22,8 @@
 **Vulnerability:** `validate_path_traversal` only blocks `..` and `\`, allowing forward slashes `/` to bypass security when used in `os.path.join`.
 **Learning:** In identifiers that are used to construct filenames (like quantization types), a leading or embedded forward slash can be used to write files to arbitrary locations or create unintended subdirectories, even if `..` is blocked.
 **Prevention:** For parameters that should be simple identifiers and not paths, explicitly block forward slashes `/` in addition to calling `validate_path_traversal`.
+
+## 2025-05-25 - [Centralized Identifier & Null-Byte Hardening]
+**Vulnerability:** Inconsistent path traversal guards across modules and missing null-byte validation in string parameters.
+**Learning:** Security logic must be centralized (e.g., in `core/state.py`) to ensure consistency. Standard path traversal checks must include null-byte (`\0`) protection to prevent truncation-based exploits. Parameters intended as identifiers (not paths) must explicitly block all directory separators (`/`, `\`) to prevent injection into `os.path.join` or subprocess calls.
+**Prevention:** Centralize all validation in `core/state.py` via `validate_path_traversal` and `validate_identifier`. Apply these guards to all user-provided strings in both UI handlers and core training entry points.
