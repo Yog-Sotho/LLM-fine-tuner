@@ -126,6 +126,13 @@ def train_model(
     # v3.0 Fix #1 (Critical): Define is_dpo here — was previously undefined.
     is_dpo = (training_mode == "dpo")
 
+    # Sentinel: defensive path traversal validation on model name and output dir.
+    model_name = model_name.strip() if model_name else ""
+    output_dir = output_dir.strip() if output_dir else ""
+    from core.state import validate_path_traversal
+    if err := (validate_path_traversal(model_name) or validate_path_traversal(output_dir)):
+        raise RuntimeError(err)
+
     app_state.stop_event.clear()
     log_callback = LoggingCallback()
 
