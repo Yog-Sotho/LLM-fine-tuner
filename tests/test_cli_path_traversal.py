@@ -34,3 +34,16 @@ def test_cli_evaluate_path_traversal():
     result = runner.invoke(app, ["evaluate", "--model", "../unsafe", "--data", "dummy.csv"])
     assert result.exit_code == 1
     assert "❌ Path traversal attempt detected." in result.stderr
+
+
+def test_cli_data_path_traversal():
+    """Sentinel: Verify that the --data parameter is also hardened against traversal."""
+    # Test train
+    result = runner.invoke(app, ["train", "--model", "model", "--data", "../secret.csv", "--output", "./out"])
+    assert result.exit_code == 1
+    assert "❌ Path traversal attempt detected." in result.stderr
+
+    # Test evaluate
+    result = runner.invoke(app, ["evaluate", "--model", "model", "--data", "/etc/passwd\0.csv"])
+    assert result.exit_code == 1
+    assert "❌ Path traversal attempt detected." in result.stderr
