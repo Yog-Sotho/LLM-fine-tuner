@@ -21,7 +21,7 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from config.constants import HAS_VLLM
-from core.state import app_state, validate_path_traversal
+from core.state import app_state, validate_path_traversal, validate_identifier
 
 
 def merge_adapter_for_inference(
@@ -171,18 +171,16 @@ def on_vllm_generate(
     vllm_top_p: float,
 ) -> str:
     """Gradio UI handler for the vLLM Generate button."""
-    # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
+    # Sentinel: strip whitespace and validate inputs.
     model_path_state = model_path_state.strip() if model_path_state else ""
     vllm_quant        = vllm_quant.strip()        if vllm_quant        else ""
 
     if err := validate_path_traversal(model_path_state):
         return err
-    if err := validate_path_traversal(vllm_quant):
-        return err
 
-    # Sentinel: block slashes in quantization string to prevent arbitrary file writes.
-    if "/" in vllm_quant:
-        return "❌ Path traversal attempt detected."
+    # Sentinel: ensure quantization is a simple identifier (no separators or traversal).
+    if err := validate_identifier(vllm_quant):
+        return err
 
     if not HAS_VLLM:
         return (
