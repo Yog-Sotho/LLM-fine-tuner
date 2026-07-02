@@ -22,3 +22,8 @@
 **Vulnerability:** `validate_path_traversal` only blocks `..` and `\`, allowing forward slashes `/` to bypass security when used in `os.path.join`.
 **Learning:** In identifiers that are used to construct filenames (like quantization types), a leading or embedded forward slash can be used to write files to arbitrary locations or create unintended subdirectories, even if `..` is blocked.
 **Prevention:** For parameters that should be simple identifiers and not paths, explicitly block forward slashes `/` in addition to calling `validate_path_traversal`.
+
+## 2025-05-24 - [Centralized Identifier Hardening & Null Byte Protection]
+**Vulnerability:** Inconsistent identifier validation and susceptibility to null-byte injection in path construction across GGUF, vLLM, and Registry modules.
+**Learning:** Manual string checks (e.g., `"/" in quantization`) are fragile and often miss null bytes (`\0`) or alternative separators (`\`). Centralizing these checks into `validate_identifier` ensures defense-in-depth and simplifies handler logic. Additionally, tracking resources like `output_dir` *immediately* after creation in UI handlers prevents disk-space DoS if the training process crashes before the final tracking call.
+**Prevention:** Always use `validate_identifier` for non-path strings that influence file system operations. Ensure resource tracking for cleanup is performed as close to resource creation as possible.

@@ -145,6 +145,9 @@ def on_train_click(
         dpo_beta=dpo_beta,
     )
     output_dir = tempfile.mkdtemp()
+    # Sentinel: Track resources IMMEDIATELY after creation so the next run can
+    # clean them up even if the subsequent training process fails or crashes.
+    app_state._last_model_dir = output_dir
 
     # BOLT OPTIMIZATION: Use centralized vectorized stats function for ~450x speedup.
     try:
@@ -173,9 +176,8 @@ def on_train_click(
         )
         zip_path = create_zip_from_folder(output_dir)
 
-        # Sentinel: Track resources so the next run can clean them up.
+        # Sentinel: Track the zip path for future cleanup.
         app_state._last_zip_path = zip_path
-        app_state._last_model_dir = output_dir
 
         full_msg  = msg + "\n" + issues_str
         return full_msg, zip_path, output_dir, log_records
