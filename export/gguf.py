@@ -17,7 +17,7 @@ import subprocess
 import tempfile
 
 from config.constants import HAS_UNSLOTH
-from core.state import app_state, validate_path_traversal
+from core.state import app_state, validate_path_traversal, validate_identifier
 
 
 def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k") -> str:
@@ -136,18 +136,15 @@ def on_export_gguf(model_path: str, quantization: str):
 
     Returns (status_str, gguf_file_path_or_None).
     """
-    # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
+    # Sentinel: strip whitespace and validate inputs.
     model_path = model_path.strip() if model_path else ""
     quantization = quantization.strip() if quantization else ""
 
     if err := validate_path_traversal(model_path):
         return err, None
-    if err := validate_path_traversal(quantization):
+    # Sentinel: quantization is an identifier, not a path.
+    if err := validate_identifier(quantization):
         return err, None
-
-    # Sentinel: block slashes in quantization string to prevent arbitrary file writes.
-    if "/" in quantization:
-        return "❌ Path traversal attempt detected.", None
 
     if not model_path or not os.path.isdir(model_path):
         return "❌ No trained model found. Train first.", None
