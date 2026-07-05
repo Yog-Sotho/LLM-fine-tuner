@@ -19,13 +19,26 @@ import threading
 
 
 def validate_path_traversal(path: str | None) -> str | None:
-    """Check if the path contains '..' or '\\' (unsafe).
+    """Check if the path contains '..', '\\', or null bytes (unsafe).
 
     Returns a standardized error message if unsafe, or None if safe.
     """
     if not path:
         return None
-    if ".." in path or "\\" in path:
+    if ".." in path or "\\" in path or "\0" in path:
+        return "❌ Path traversal attempt detected."
+    return None
+
+
+def validate_identifier(name: str | None) -> str | None:
+    """Check if an identifier contains '/', '..', '\\', or null bytes.
+
+    Identifiers (like version tags or quantization strings) should be simple
+    strings, not paths. This guard prevents them from being used for traversal.
+    """
+    if not name:
+        return None
+    if "/" in name or ".." in name or "\\" in name or "\0" in name:
         return "❌ Path traversal attempt detected."
     return None
 
