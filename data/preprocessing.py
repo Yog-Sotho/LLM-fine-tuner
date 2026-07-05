@@ -162,17 +162,21 @@ def preview_dataset(dataset: Dataset, is_dpo: bool = False) -> pd.DataFrame:
         return pd.DataFrame({"Status": ["⚠️ Dataset is empty after cleaning."]})
 
     if is_dpo:
+        # BOLT OPTIMIZATION: Slicing before column access (dataset[:N][COL])
+        # is significantly faster for large datasets than dataset[COL][:N]
+        # as it avoids loading entire columns into memory.
         return pd.DataFrame({
-            COL_PROMPT:   dataset[COL_PROMPT][:5],
-            COL_CHOSEN:   dataset[COL_CHOSEN][:5],
-            COL_REJECTED: dataset[COL_REJECTED][:5],
+            COL_PROMPT:   dataset[:5][COL_PROMPT],
+            COL_CHOSEN:   dataset[:5][COL_CHOSEN],
+            COL_REJECTED: dataset[:5][COL_REJECTED],
         })
     elif COL_TEXT in dataset.column_names:
-        return pd.DataFrame({COL_TEXT: dataset[COL_TEXT][:10]})
+        return pd.DataFrame({COL_TEXT: dataset[:10][COL_TEXT]})
     else:
         # N-7 FIX: use explicit column_names check instead of dataset.get()
-        inst_data = dataset[COL_INSTRUCTION][:5] if COL_INSTRUCTION in dataset.column_names else []
-        out_data  = dataset[COL_OUTPUT][:5]      if COL_OUTPUT      in dataset.column_names else []
+        # BOLT OPTIMIZATION: Slice before column access.
+        inst_data = dataset[:5][COL_INSTRUCTION] if COL_INSTRUCTION in dataset.column_names else []
+        out_data  = dataset[:5][COL_OUTPUT]      if COL_OUTPUT      in dataset.column_names else []
         return pd.DataFrame({
             COL_INSTRUCTION: inst_data,
             COL_OUTPUT:      out_data,
