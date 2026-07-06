@@ -140,14 +140,11 @@ def on_export_gguf(model_path: str, quantization: str):
     model_path = model_path.strip() if model_path else ""
     quantization = quantization.strip() if quantization else ""
 
+    from core.state import validate_identifier
     if err := validate_path_traversal(model_path):
         return err, None
-    if err := validate_path_traversal(quantization):
+    if err := validate_identifier(quantization):
         return err, None
-
-    # Sentinel: block slashes in quantization string to prevent arbitrary file writes.
-    if "/" in quantization:
-        return "❌ Path traversal attempt detected.", None
 
     if not model_path or not os.path.isdir(model_path):
         return "❌ No trained model found. Train first.", None
