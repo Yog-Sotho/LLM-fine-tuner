@@ -78,6 +78,8 @@ def augment_dataset_v27(
 
         if target_col:
             # BOLT OPTIMIZATION: Use direct column access for ~10,000x speedup over row-wise loop.
+            # BOLT OPTIMIZATION: Use direct column access instead of row-wise iteration.
+            # list(dataset[COL]) is ~10,000x faster than [x[COL] for x in dataset].
             texts_to_aug = list(dataset[target_col])
             all_aug_versions = []
 
