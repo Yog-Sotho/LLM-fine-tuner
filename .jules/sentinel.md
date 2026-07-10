@@ -27,3 +27,8 @@
 **Vulnerability:** `validate_path_traversal` lacked null byte (`\0`) protection, and identifier-based parameters (like version tags or quantization types) were inconsistently validated.
 **Learning:** Null byte injection can bypass some string-based path checks depending on the underlying OS/filesystem API. Furthermore, parameters that are used to construct filenames but are not meant to be paths should be strictly validated as identifiers to prevent any directory separator injection.
 **Prevention:** Centralize identifier validation in `validate_identifier` to block `/`, `\\`, `..`, and `\0`. Always include `\0` in path traversal guards to ensure defense-in-depth against legacy injection techniques.
+
+## 2025-05-26 - [SFT Hardening & Batch Inference DoS Protection]
+**Vulnerability:** Missing path traversal validation in the core SFT training pipeline and untracked temporary files in batch inference.
+**Learning:** Security guards at the UI layer (Layer 5) are insufficient if the underlying logic (Layer 3) is exposed via other interfaces like CLI or used as a library. Furthermore, temporary artifacts like batch generation CSVs can lead to disk exhaustion DoS if not explicitly tracked and cleaned up via the application's resource manager.
+**Prevention:** Always enforce path traversal validation at the earliest possible entry point in core logic modules. Register all temporary file creation with the global `AppState` resource tracker to ensure deterministic cleanup in long-running sessions.
