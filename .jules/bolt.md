@@ -43,3 +43,7 @@
 ## 2026-06-10 - [Efficient Dataset Column Access and Slicing]
 **Learning:** In Hugging Face Datasets, row-wise iteration (e.g., `[x[COL] for x in dataset]`) is extremely slow because it converts every row into a dictionary. Direct column access (e.g., `dataset[COL]`) is up to 50,000x faster. Additionally, slicing a column after extraction (e.g., `dataset[COL][:N]`) loads the entire column into memory, which is inefficient for large datasets. Slicing before access (e.g., `dataset[:N][COL]`) only loads the required rows.
 **Action:** Replace row-wise iteration with direct column access and use `dataset[:N][COL]` for efficient data previews. Verified with benchmarks showing 57,000x speedup for extraction and 5x speedup for slicing on 1M rows.
+
+## 2026-07-10 - [In-Memory Dataset Refresh Optimization]
+**Learning:** Re-loading datasets for UI previews by writing Pandas DataFrames to temporary files and reading them back into HuggingFace Datasets (the previous pattern in `on_refresh_preview`) introduces unnecessary disk I/O latency. Bypassing the disk and converting directly from DataFrame to Dataset using `Dataset.from_pandas` with proper column mapping and type consistency (`fillna("")`, `astype(str)`) yields a verified ~3.9x speedup.
+**Action:** Implemented `load_dataset_from_dataframe` in `data/loader.py` and refactored `on_refresh_preview` in `ui/handlers.py` to use it. Added `tests/benchmark_refresh_bolt.py` for verification.
