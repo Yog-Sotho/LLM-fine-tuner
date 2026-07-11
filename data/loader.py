@@ -147,21 +147,13 @@ def load_dataset_from_file(
 
         # ── JSONL ─────────────────────────────────────────────────────────
         if file_type == "jsonl":
-            data = []
-            with open(path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        data.append(json.loads(line))
-            return Dataset.from_list(data)
+            # BOLT OPTIMIZATION: Use Dataset.from_json for faster, Arrow-backed loading.
+            return Dataset.from_json(str(path))
 
         # ── JSON ──────────────────────────────────────────────────────────
         if file_type == "json":
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if not isinstance(data, list):
-                raise ValueError("JSON file must contain a top-level array of objects.")
-            return Dataset.from_list(data)
+            # BOLT OPTIMIZATION: Use Dataset.from_json for faster, Arrow-backed loading.
+            return Dataset.from_json(str(path))
 
         # ── Plain text ────────────────────────────────────────────────────
         if file_type == "txt":
