@@ -27,3 +27,8 @@
 **Vulnerability:** `validate_path_traversal` lacked null byte (`\0`) protection, and identifier-based parameters (like version tags or quantization types) were inconsistently validated.
 **Learning:** Null byte injection can bypass some string-based path checks depending on the underlying OS/filesystem API. Furthermore, parameters that are used to construct filenames but are not meant to be paths should be strictly validated as identifiers to prevent any directory separator injection.
 **Prevention:** Centralize identifier validation in `validate_identifier` to block `/`, `\\`, `..`, and `\0`. Always include `\0` in path traversal guards to ensure defense-in-depth against legacy injection techniques.
+
+## 2025-05-25 - [Resource Exhaustion DoS Mitigation for Batch & Merge]
+**Vulnerability:** Denial of Service (DoS) risk via disk exhaustion due to untracked temporary files (batch inference CSVs) and merged model directories.
+**Learning:** Transient artifacts generated during inference or model manipulation (like merging) often escape the cleanup logic applied to primary training outputs. Standardizing on `tempfile.mkdtemp` and tracking "last seen" paths in a centralized `AppState` ensures these large resources are reclaimed on subsequent operations.
+**Prevention:** Always track and clean up temporary paths for batch results and merged models at the handler entry point. Prefer `tempfile.mkdtemp` for unique, permission-restricted directory creation over predictable path suffixes.

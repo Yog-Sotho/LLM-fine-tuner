@@ -210,8 +210,17 @@ def on_batch_test(f, model_choice, custom_model, lora_path) -> str:
     if err := (validate_path_traversal(custom_model) or validate_path_traversal(lora_path)):
         return err
 
+    # Sentinel: Clean up previous batch results to prevent disk exhaustion (DoS).
+    app_state.cleanup_resource("_last_batch_path")
+
     model_name = custom_model if custom_model else model_choice
-    return batch_generate(model_name, lora_path, f)
+    result_path = batch_generate(model_name, lora_path, f)
+
+    # Sentinel: Track the result file for future cleanup if it's a valid path.
+    if result_path and os.path.isfile(result_path):
+        app_state._last_batch_path = result_path
+
+    return result_path
 
 
 # ── Hub ────────────────────────────────────────────────────────────────────
