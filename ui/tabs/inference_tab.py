@@ -23,6 +23,7 @@ def build_inference_tab() -> dict:
                 lora_path    = gr.Textbox(
                     label="PEFT adapter path (auto-filled after training)",
                     interactive=False,
+                    max_length=512,  # Sentinel: defense-in-depth against DoS
                 )
                 prompt_in    = gr.Textbox(
                     label="Prompt", lines=4,
