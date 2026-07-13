@@ -79,7 +79,7 @@ from config.constants import (
 )
 from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
 from core.hardware import get_lora_targets, is_unsloth_supported
-from core.state import app_state
+from core.state import app_state, validate_path_traversal
 from data.preprocessing import preprocess_function
 
 
@@ -121,6 +121,13 @@ def train_model(
     -------
     (summary_str, log_records_list)
     """
+    # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
+    model_name = model_name.strip() if model_name else ""
+    output_dir = output_dir.strip() if output_dir else ""
+
+    if err := (validate_path_traversal(model_name) or validate_path_traversal(output_dir)):
+        raise ValueError(err)
+
     # v2.9 Major Fix #2: Derive QLoRA Enhanced solely from peft_method.
     use_qlora_enhanced = (peft_method == "QLoRA Enhanced")
     # v3.0 Fix #1 (Critical): Define is_dpo here — was previously undefined.
@@ -573,6 +580,11 @@ def load_qlora_model_v27(model_name: str, use_flash_attn: bool = False):
     logic is inlined inside run_ppo_v27() and train_model(). Retained for
     potential future use or external callers.
     """
+    # Sentinel: strip whitespace and validate against path traversal.
+    model_name = model_name.strip() if model_name else ""
+    if err := validate_path_traversal(model_name):
+        raise ValueError(err)
+
     try:
         bnb_kwargs = dict(QLORA_ENHANCED_BNB_KWARGS)
         if not (torch.cuda.is_available() and torch.cuda.is_bf16_supported()):
