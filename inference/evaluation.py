@@ -214,7 +214,7 @@ def llm_judge_evaluate(
         if torch.cuda.is_available():
             inputs = {k: v.cuda() for k, v in inputs.items()}
 
-        with torch.no_grad():
+        with torch.inference_mode():
             outputs = model.generate(
                 **inputs,
                 max_new_tokens=max_new_tokens,
@@ -490,7 +490,7 @@ def on_evaluate_click(
             )
             if torch.cuda.is_available():
                 inputs = {k: v.cuda() for k, v in inputs.items()}
-            with torch.no_grad():
+            with torch.inference_mode():
                 outputs = model.generate(
                     **inputs,
                     max_new_tokens=int(eval_max_new_tokens),
