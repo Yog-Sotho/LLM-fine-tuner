@@ -37,3 +37,8 @@
 **Vulnerability:** Core training modules (`training/sft.py`) relied on UI-level sanitization for model paths and output directories, creating a security gap if called directly via the CLI or external scripts.
 **Learning:** Security boundaries must be enforced at the lowest possible entry point in the core logic, not just in the UI handlers. Hardening the `train_model` and `load_qlora_model_v27` functions ensures that path traversal attempts are blocked regardless of how the training pipeline is invoked.
 **Prevention:** Always re-validate and strip whitespace from user-provided paths (like `model_name` and `output_dir`) inside core logic functions, even if they are already validated by UI handlers.
+
+## 2026-07-20 - [CLI and Token Input Hardening]
+**Vulnerability:** Missing path traversal validation for CLI `--data` arguments and HuggingFace tokens.
+**Learning:** Hardening efforts often focus on "explicit" path arguments like model names, while ignoring secondary path arguments like dataset files in CLI tools. Additionally, tokens used in API calls should be guarded against null-byte injection as a defense-in-depth measure, ensuring they cannot be misused if passed to lower-level filesystem or shell operations.
+**Prevention:** Apply centralized security guards (`validate_path_traversal`) to ALL user-provided strings in CLI commands and sensitive export handlers, regardless of whether they are primary path arguments.
