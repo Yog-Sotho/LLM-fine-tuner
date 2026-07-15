@@ -410,7 +410,9 @@ def evaluate(
             )
             if torch.cuda.is_available():
                 inputs = {k: v.cuda() for k, v in inputs.items()}
-            with torch.no_grad():
+            # BOLT OPTIMIZATION: Use torch.inference_mode() for faster inference
+            # by disabling view tracking and reducing autograd overhead.
+            with torch.inference_mode():
                 outputs = model_obj.generate(
                     **inputs, max_new_tokens=max_new_tokens,
                     do_sample=True, temperature=0.7, top_p=0.9,
