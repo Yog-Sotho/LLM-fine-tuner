@@ -169,6 +169,7 @@ def on_registry_upload(
     if err := (
         validate_path_traversal(model_path_state)
         or validate_path_traversal(registry_repo_id)
+        or validate_path_traversal(registry_token)
         or validate_identifier(registry_version)
     ):
         return err
@@ -210,7 +211,10 @@ def on_registry_list(registry_repo_id: str, registry_token: str) -> str:
     registry_token   = registry_token.strip()   if registry_token   else ""
 
     from core.state import validate_path_traversal
-    if err := validate_path_traversal(registry_repo_id):
+    if err := (
+        validate_path_traversal(registry_repo_id)
+        or validate_path_traversal(registry_token)
+    ):
         return err
 
     if not registry_repo_id or "/" not in registry_repo_id:
