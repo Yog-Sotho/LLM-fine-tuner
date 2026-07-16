@@ -119,7 +119,8 @@ def generate_text(
         inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048)
         if torch.cuda.is_available():
             inputs = {k: v.cuda() for k, v in inputs.items()}
-        with torch.no_grad():
+        # BOLT OPTIMIZATION: inference_mode() is faster than no_grad() for inference.
+        with torch.inference_mode():
             out = model.generate(
                 **inputs,
                 max_new_tokens=max_new_tokens,
@@ -188,7 +189,8 @@ def batch_generate(
             )
             if torch.cuda.is_available():
                 inputs = {k: v.cuda() for k, v in inputs.items()}
-            with torch.no_grad():
+            # BOLT OPTIMIZATION: inference_mode() is faster than no_grad() for inference.
+            with torch.inference_mode():
                 outputs = model.generate(
                     **inputs,
                     max_new_tokens=max_new_tokens,

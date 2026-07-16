@@ -211,7 +211,8 @@ def run_ppo_v27(
 
                 # BOLT OPTIMIZATION: Process reward computation in a single batch forward pass.
                 # v3.2 Fix #2 (Medium): ensure reward values are plain Python floats.
-                with torch.no_grad():
+                # BOLT OPTIMIZATION: inference_mode() is faster than no_grad() for reward computation.
+                with torch.inference_mode():
                     full_texts = [p + r for p, r in zip(batch_prompts, decoded_responses)]
                     inputs = tokenizer(
                         full_texts,
