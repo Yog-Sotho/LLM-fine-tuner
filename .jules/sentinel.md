@@ -37,3 +37,8 @@
 **Vulnerability:** Core training modules (`training/sft.py`) relied on UI-level sanitization for model paths and output directories, creating a security gap if called directly via the CLI or external scripts.
 **Learning:** Security boundaries must be enforced at the lowest possible entry point in the core logic, not just in the UI handlers. Hardening the `train_model` and `load_qlora_model_v27` functions ensures that path traversal attempts are blocked regardless of how the training pipeline is invoked.
 **Prevention:** Always re-validate and strip whitespace from user-provided paths (like `model_name` and `output_dir`) inside core logic functions, even if they are already validated by UI handlers.
+
+## 2026-07-14 - [Ubiquitous Input Hardening across CLI & Credentials]
+**Vulnerability:** CLI arguments (`--data`) and sensitive credentials (HF tokens) escaped traversal and null-byte validation, despite these checks being present for other path parameters.
+**Learning:** Security debt often persists in "secondary" entry points like CLI commands or non-path parameters that can still carry injection payloads (e.g., null bytes in tokens). Standardized guards should be applied ubiquitously to all user-controlled strings that interact with the filesystem or external APIs.
+**Prevention:** Audit all command-line options and credential fields to ensure they utilize the centralized `validate_path_traversal` guard, ensuring defense-in-depth even for alphanumeric fields to prevent legacy injection techniques.
