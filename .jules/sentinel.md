@@ -42,3 +42,7 @@
 **Vulnerability:** HuggingFace tokens in `push_to_hub` and `ModelRegistry` were validated for format (prefix/length) but not for dangerous characters (null bytes, path traversal), potentially leading to injection in downstream logs or library calls.
 **Learning:** Security validation must be exhaustive even for "opaque" strings like API tokens. If a string is passed from user input to any internal API, it should be checked against common injection patterns (`\0`, `..`, `\`) regardless of its intended use.
 **Prevention:** Apply the centralized `validate_path_traversal` guard to all user-provided strings, including credentials and identifiers, before processing them.
+## 2026-07-14 - [Ubiquitous Input Hardening across CLI & Credentials]
+**Vulnerability:** CLI arguments (`--data`) and sensitive credentials (HF tokens) escaped traversal and null-byte validation, despite these checks being present for other path parameters.
+**Learning:** Security debt often persists in "secondary" entry points like CLI commands or non-path parameters that can still carry injection payloads (e.g., null bytes in tokens). Standardized guards should be applied ubiquitously to all user-controlled strings that interact with the filesystem or external APIs.
+**Prevention:** Audit all command-line options and credential fields to ensure they utilize the centralized `validate_path_traversal` guard, ensuring defense-in-depth even for alphanumeric fields to prevent legacy injection techniques.
