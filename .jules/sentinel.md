@@ -38,6 +38,10 @@
 **Learning:** Security boundaries must be enforced at the lowest possible entry point in the core logic, not just in the UI handlers. Hardening the `train_model` and `load_qlora_model_v27` functions ensures that path traversal attempts are blocked regardless of how the training pipeline is invoked.
 **Prevention:** Always re-validate and strip whitespace from user-provided paths (like `model_name` and `output_dir`) inside core logic functions, even if they are already validated by UI handlers.
 
+## 2026-07-16 - [Credential Input Hardening]
+**Vulnerability:** HuggingFace tokens in `push_to_hub` and `ModelRegistry` were validated for format (prefix/length) but not for dangerous characters (null bytes, path traversal), potentially leading to injection in downstream logs or library calls.
+**Learning:** Security validation must be exhaustive even for "opaque" strings like API tokens. If a string is passed from user input to any internal API, it should be checked against common injection patterns (`\0`, `..`, `\`) regardless of its intended use.
+**Prevention:** Apply the centralized `validate_path_traversal` guard to all user-provided strings, including credentials and identifiers, before processing them.
 ## 2026-07-14 - [Ubiquitous Input Hardening across CLI & Credentials]
 **Vulnerability:** CLI arguments (`--data`) and sensitive credentials (HF tokens) escaped traversal and null-byte validation, despite these checks being present for other path parameters.
 **Learning:** Security debt often persists in "secondary" entry points like CLI commands or non-path parameters that can still carry injection payloads (e.g., null bytes in tokens). Standardized guards should be applied ubiquitously to all user-controlled strings that interact with the filesystem or external APIs.
