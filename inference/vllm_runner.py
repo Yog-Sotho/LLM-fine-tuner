@@ -95,7 +95,15 @@ def on_merge_adapter_click(
             gr.update(),
         )
 
-    merged_dir = adapter.rstrip("/\\") + "_merged"
+    # Sentinel: Clean up previous merged models to prevent disk exhaustion (DoS).
+    app_state.cleanup_resource("_last_merged_dir")
+
+    import tempfile
+    merged_dir = tempfile.mkdtemp(prefix="merged_model_")
+
+    # Sentinel: Track the new merged directory for future cleanup.
+    app_state._last_merged_dir = merged_dir
+
     result = merge_adapter_for_inference(base, adapter, merged_dir)
 
     if "✅" in result:

@@ -12,6 +12,7 @@ The module-level singleton `app_state` is the single source of truth for:
   • _last_gguf_dir   — path of last GGUF export directory (Sentinel fix)
   • _last_peft_dir   — path of last PEFT extraction directory (Sentinel fix)
   • _last_batch_path — path of last batch inference CSV (Sentinel fix)
+  • _last_merged_dir — path of last merged model directory (Sentinel fix)
 """
 
 import os
@@ -72,6 +73,7 @@ class AppState:
         self._last_gguf_dir: str | None = None
         self._last_peft_dir: str | None = None
         self._last_batch_path: str | None = None
+        self._last_merged_dir: str | None = None
 
     def cleanup_resource(self, attr_name: str, new_value: str | None = None) -> None:
         """Safely delete a file or directory tracked by an attribute and update it.

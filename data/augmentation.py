@@ -14,6 +14,7 @@ on_quality_filter_click    — Gradio UI handler for the Quality Filter button
 """
 
 import gradio as gr
+import pandas as pd
 from datasets import Dataset
 
 from config.constants import (
@@ -141,7 +142,10 @@ def quality_filter_v27(
     is_dpo: bool = False,
 ) -> tuple:
     """Filter examples by character-length bounds.
-    BOLT OPTIMIZATION: Uses batched filtering to significantly speed up processing.
+
+    BOLT OPTIMIZATION: Uses batched filtering with vectorized Pandas logic
+    for character-length calculations, yielding a significant speedup while
+    remaining memory-safe for very large datasets.
 
     Parameters
     ----------
@@ -153,35 +157,50 @@ def quality_filter_v27(
     (filtered_dataset, status_message)
     """
     original_len = len(dataset)
-    try:
-        if is_dpo:
-            def filter_dpo(batch):
-                col_p = batch.get(COL_PROMPT, [""] * len(next(iter(batch.values()))))
-                col_c = batch.get(COL_CHOSEN, [""] * len(col_p))
-                col_r = batch.get(COL_REJECTED, [""] * len(col_p))
-                return [
-                    (min_length <= len(str(p)) <= max_length
-                     and min_length <= len(str(c)) <= max_length
-                     and min_length <= len(str(r)) <= max_length)
-                    for p, c, r in zip(col_p, col_c, col_r)
-                ]
-            dataset = dataset.filter(filter_dpo, batched=True)
-        elif COL_TEXT in dataset.column_names:
-            def filter_text(batch):
-                return [min_length <= len(str(t)) <= max_length for t in batch[COL_TEXT]]
-            dataset = dataset.filter(filter_text, batched=True)
-        elif COL_INSTRUCTION in dataset.column_names:
-            # v3.1 Fix #6: Combined instruction+output length checked against
-            # max_length * 2 because both fields are concatenated during tokenisation.
-            def filter_inst(batch):
-                col_i = batch.get(COL_INSTRUCTION, [""] * len(next(iter(batch.values()))))
-                col_o = batch.get(COL_OUTPUT, [""] * len(col_i))
-                return [
-                    min_length <= (len(str(i)) + len(str(o))) <= max_length * 2
-                    for i, o in zip(col_i, col_o)
-                ]
-            dataset = dataset.filter(filter_inst, batched=True)
+    if original_len == 0:
+        return dataset, "✅ Dataset is already empty."
 
+    def filter_batch(batch):
+        """Vectorized filter function for a single batch."""
+        if is_dpo or (COL_PROMPT in batch and COL_CHOSEN in batch):
+            # DPO / Preference branch
+            p = pd.Series(batch.get(COL_PROMPT, [])).astype(str).str.len()
+            c = pd.Series(batch.get(COL_CHOSEN, [])).astype(str).str.len()
+            r = pd.Series(batch.get(COL_REJECTED, [])).astype(str).str.len()
+
+            # Handle missing columns gracefully with defaults that pass the filter
+            if p.empty: p = pd.Series([min_length] * len(next(iter(batch.values()))))
+            if c.empty: c = pd.Series([min_length] * len(p))
+            if r.empty: r = pd.Series([min_length] * len(p))
+
+            mask = (p >= min_length) & (p <= max_length) & \
+                   (c >= min_length) & (c <= max_length) & \
+                   (r >= min_length) & (r <= max_length)
+            return mask.tolist()
+
+        elif COL_TEXT in batch:
+            # Single text field branch
+            t = pd.Series(batch[COL_TEXT]).astype(str).str.len()
+            mask = (t >= min_length) & (t <= max_length)
+            return mask.tolist()
+
+        elif COL_INSTRUCTION in batch:
+            # Instruction-Response branch
+            inst = pd.Series(batch[COL_INSTRUCTION]).astype(str).str.len()
+            out  = pd.Series(batch.get(COL_OUTPUT, [])).astype(str).str.len()
+            if out.empty: out = pd.Series([0] * len(inst))
+
+            # v3.1 Fix #6: Combined length check
+            combined = inst + out
+            mask = (combined >= min_length) & (combined <= max_length * 2)
+            return mask.tolist()
+
+        return [True] * len(next(iter(batch.values())))
+
+    try:
+        # Use batched=True to process in chunks (memory-safe)
+        # Using a large batch_size (10k) balances overhead and vectorization speed.
+        dataset = dataset.filter(filter_batch, batched=True, batch_size=10000)
         removed = original_len - len(dataset)
         msg = (
             f"✅ Quality filter applied!\n"

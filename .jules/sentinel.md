@@ -32,3 +32,21 @@
 **Vulnerability:** Missing path traversal validation in the core SFT training pipeline and untracked temporary files in batch inference.
 **Learning:** Security guards at the UI layer (Layer 5) are insufficient if the underlying logic (Layer 3) is exposed via other interfaces like CLI or used as a library. Furthermore, temporary artifacts like batch generation CSVs can lead to disk exhaustion DoS if not explicitly tracked and cleaned up via the application's resource manager.
 **Prevention:** Always enforce path traversal validation at the earliest possible entry point in core logic modules. Register all temporary file creation with the global `AppState` resource tracker to ensure deterministic cleanup in long-running sessions.
+## 2025-05-25 - [Resource Exhaustion DoS Mitigation for Batch & Merge]
+**Vulnerability:** Denial of Service (DoS) risk via disk exhaustion due to untracked temporary files (batch inference CSVs) and merged model directories.
+**Learning:** Transient artifacts generated during inference or model manipulation (like merging) often escape the cleanup logic applied to primary training outputs. Standardizing on `tempfile.mkdtemp` and tracking "last seen" paths in a centralized `AppState` ensures these large resources are reclaimed on subsequent operations.
+**Prevention:** Always track and clean up temporary paths for batch results and merged models at the handler entry point. Prefer `tempfile.mkdtemp` for unique, permission-restricted directory creation over predictable path suffixes.
+
+## 2026-07-13 - [Defense-in-Depth Path Traversal Hardening]
+**Vulnerability:** Core training modules (`training/sft.py`) relied on UI-level sanitization for model paths and output directories, creating a security gap if called directly via the CLI or external scripts.
+**Learning:** Security boundaries must be enforced at the lowest possible entry point in the core logic, not just in the UI handlers. Hardening the `train_model` and `load_qlora_model_v27` functions ensures that path traversal attempts are blocked regardless of how the training pipeline is invoked.
+**Prevention:** Always re-validate and strip whitespace from user-provided paths (like `model_name` and `output_dir`) inside core logic functions, even if they are already validated by UI handlers.
+
+## 2026-07-16 - [Credential Input Hardening]
+**Vulnerability:** HuggingFace tokens in `push_to_hub` and `ModelRegistry` were validated for format (prefix/length) but not for dangerous characters (null bytes, path traversal), potentially leading to injection in downstream logs or library calls.
+**Learning:** Security validation must be exhaustive even for "opaque" strings like API tokens. If a string is passed from user input to any internal API, it should be checked against common injection patterns (`\0`, `..`, `\`) regardless of its intended use.
+**Prevention:** Apply the centralized `validate_path_traversal` guard to all user-provided strings, including credentials and identifiers, before processing them.
+## 2026-07-14 - [Ubiquitous Input Hardening across CLI & Credentials]
+**Vulnerability:** CLI arguments (`--data`) and sensitive credentials (HF tokens) escaped traversal and null-byte validation, despite these checks being present for other path parameters.
+**Learning:** Security debt often persists in "secondary" entry points like CLI commands or non-path parameters that can still carry injection payloads (e.g., null bytes in tokens). Standardized guards should be applied ubiquitously to all user-controlled strings that interact with the filesystem or external APIs.
+**Prevention:** Audit all command-line options and credential fields to ensure they utilize the centralized `validate_path_traversal` guard, ensuring defense-in-depth even for alphanumeric fields to prevent legacy injection techniques.

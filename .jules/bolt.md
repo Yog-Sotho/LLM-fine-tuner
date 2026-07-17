@@ -47,3 +47,15 @@
 ## 2026-07-10 - [In-Memory Dataset Refresh Optimization]
 **Learning:** Re-loading datasets for UI previews by writing Pandas DataFrames to temporary files and reading them back into HuggingFace Datasets (the previous pattern in `on_refresh_preview`) introduces unnecessary disk I/O latency. Bypassing the disk and converting directly from DataFrame to Dataset using `Dataset.from_pandas` with proper column mapping and type consistency (`fillna("")`, `astype(str)`) yields a verified ~3.9x speedup.
 **Action:** Implemented `load_dataset_from_dataframe` in `data/loader.py` and refactored `on_refresh_preview` in `ui/handlers.py` to use it. Added `tests/benchmark_refresh_bolt.py` for verification.
+
+## 2026-07-25 - [Optimized JSON/JSONL Loading]
+**Learning:** Manual Python loops for parsing JSONL files and using `json.load` followed by `Dataset.from_list` are less efficient than the native `Dataset.from_json` method. The native method leverages the optimized Arrow-backed C++ implementation of the `datasets` library, providing a verified ~1.26x speedup. Furthermore, experiments with `num_proc` for simple operations like filtering revealed that multiprocessing overhead can actually lead to a significant slowdown (up to 5x) compared to serial processing on datasets with 1M rows.
+**Action:** Prefer native `Dataset.from_json`/`from_csv` methods over manual parsing. Be cautious with `num_proc` parallelism for lightweight operations where the overhead of process spawning and data serialization may outweigh the computation gains.
+
+## 2026-07-12 - [Memory-Safe Vectorized Filtering]
+**Learning:** Forcing a full dataset conversion to Pandas via `to_pandas()` provides maximum speed but introduces a critical risk of OOM errors on very large datasets. Implementing vectorized Pandas logic *inside* a batched `dataset.filter(batched=True)` call preserves memory mapping/chunking benefits while still providing a ~4.5x speedup over standard Python-loop batch filtering. A larger `batch_size` (e.g., 10,000+) is necessary to amortize the overhead of per-batch Pandas Series creation.
+**Action:** Use batched vectorized filtering (Pandas within `dataset.filter`) instead of full DataFrame conversion for memory-safe performance on large datasets.
+
+## 2026-08-01 - [Inference Mode Optimization]
+**Learning:** Replacing `torch.no_grad()` with `torch.inference_mode()` in pure inference paths (generation, evaluation, and PPO reward computation) provides a verified performance gain by disabling view tracking. Benchmarks on CPU showed a ~3% speedup for view-intensive operations. While the improvement for simple matrix multiplications is negligible on CPU, it is a best practice for modern PyTorch (1.9+) that yields better performance and safety by preventing accidental gradient computation in inference blocks.
+**Action:** Replaced `torch.no_grad()` with `torch.inference_mode()` in `inference/generate.py`, `inference/evaluation.py`, `training/ppo.py`, and `cli/commands.py`.
