@@ -72,6 +72,55 @@ def extract_text_from_pdf(pdf_path: str) -> str:
     return "\n".join(text)
 
 
+def load_dataset_from_dataframe(
+    df: pd.DataFrame,
+    column_mapping: dict | None = None,
+    is_dpo: bool = False,
+) -> Dataset:
+    """Convert a Pandas DataFrame directly to a HuggingFace Dataset.
+
+    BOLT OPTIMIZATION: This function avoids redundant I/O by bypassing the
+    need to write the DataFrame to a temporary file and reading it back
+    during dataset preview refreshes.
+    """
+    try:
+        # v3.1 Fix #4 (Major): Only rename columns that actually exist in
+        # the DataFrame.
+        if column_mapping:
+            valid_mapping = {k: v for k, v in column_mapping.items() if k in df.columns}
+            ignored = {k: v for k, v in column_mapping.items() if k not in df.columns}
+            if ignored:
+                print(
+                    f"⚠️ Column mapping: the following source columns were not "
+                    f"found and are ignored: {list(ignored.keys())}"
+                )
+            df = df.rename(columns=valid_mapping)
+
+        # ── DPO branch ────────────────────────────────────────────────────
+        if is_dpo:
+            if not all(col in df.columns for col in [COL_PROMPT, COL_CHOSEN, COL_REJECTED]):
+                raise ValueError("DPO requires columns: prompt, chosen, rejected")
+            return Dataset.from_pandas(
+                df[[COL_PROMPT, COL_CHOSEN, COL_REJECTED]].fillna("").astype(str)
+            )
+
+        # ── SFT branch ────────────────────────────────────────────────────
+        if COL_INSTRUCTION in df.columns and COL_OUTPUT in df.columns:
+            return Dataset.from_pandas(
+                df[[COL_INSTRUCTION, COL_OUTPUT]].fillna("").astype(str)
+            )
+        elif COL_TEXT in df.columns:
+            return Dataset.from_pandas(df[[COL_TEXT]].fillna("").astype(str))
+        else:
+            raise ValueError(
+                f"Cannot determine columns automatically. "
+                f"Available: {list(df.columns)}. "
+                f"Please use the column mapping dropdowns above."
+            )
+    except Exception as e:
+        raise RuntimeError(f"Failed to load dataset from DataFrame: {e}")
+
+
 def load_dataset_from_file(
     file,
     file_type: str,
@@ -98,21 +147,13 @@ def load_dataset_from_file(
 
         # ── JSONL ─────────────────────────────────────────────────────────
         if file_type == "jsonl":
-            data = []
-            with open(path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        data.append(json.loads(line))
-            return Dataset.from_list(data)
+            # BOLT OPTIMIZATION: Use Dataset.from_json for faster, Arrow-backed loading.
+            return Dataset.from_json(str(path))
 
         # ── JSON ──────────────────────────────────────────────────────────
         if file_type == "json":
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if not isinstance(data, list):
-                raise ValueError("JSON file must contain a top-level array of objects.")
-            return Dataset.from_list(data)
+            # BOLT OPTIMIZATION: Use Dataset.from_json for faster, Arrow-backed loading.
+            return Dataset.from_json(str(path))
 
         # ── Plain text ────────────────────────────────────────────────────
         if file_type == "txt":

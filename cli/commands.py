@@ -90,7 +90,11 @@ def train(
             typer.echo(f"⚠️  --qlora-enhanced overrides --peft '{peft_method}' → 'QLoRA Enhanced'")
         peft_method = "QLoRA Enhanced"
 
-    if err := (validate_path_traversal(model) or validate_path_traversal(output)):
+    if err := (
+        validate_path_traversal(model)
+        or validate_path_traversal(data)
+        or validate_path_traversal(output)
+    ):
         typer.echo(err, err=True)
         raise typer.Exit(code=1)
 
@@ -164,7 +168,11 @@ def reward(
     batch_size: int = typer.Option(4, "--batch-size"),
 ):
     """Train a Reward Model from preference data (FIX 3c: full implementation)."""
-    if err := (validate_path_traversal(model) or validate_path_traversal(output)):
+    if err := (
+        validate_path_traversal(model)
+        or validate_path_traversal(data)
+        or validate_path_traversal(output)
+    ):
         typer.echo(err, err=True)
         raise typer.Exit(code=1)
 
@@ -235,7 +243,11 @@ def orpo(
     batch_size: int = typer.Option(2, "--batch-size"),
 ):
     """ORPO alignment training (FIX 3c: full implementation)."""
-    if err := (validate_path_traversal(model) or validate_path_traversal(output)):
+    if err := (
+        validate_path_traversal(model)
+        or validate_path_traversal(data)
+        or validate_path_traversal(output)
+    ):
         typer.echo(err, err=True)
         raise typer.Exit(code=1)
 
@@ -303,6 +315,7 @@ def ppo(
     if err := (
         validate_path_traversal(policy_model)
         or validate_path_traversal(reward_model)
+        or validate_path_traversal(data)
         or validate_path_traversal(output)
     ):
         typer.echo(err, err=True)
@@ -378,7 +391,11 @@ def evaluate(
     max_new_tokens: int = typer.Option(150, "--max-new-tokens", help="Tokens to generate"),
 ):
     """Batched BLEU / ROUGE / BERTScore evaluation suite (BOLT OPTIMIZED)."""
-    if err := (validate_path_traversal(model) or validate_path_traversal(lora)):
+    if err := (
+        validate_path_traversal(model)
+        or validate_path_traversal(data)
+        or validate_path_traversal(lora)
+    ):
         typer.echo(err, err=True)
         raise typer.Exit(code=1)
 
@@ -410,7 +427,7 @@ def evaluate(
             )
             if torch.cuda.is_available():
                 inputs = {k: v.cuda() for k, v in inputs.items()}
-            with torch.no_grad():
+            with torch.inference_mode():
                 outputs = model_obj.generate(
                     **inputs, max_new_tokens=max_new_tokens,
                     do_sample=True, temperature=0.7, top_p=0.9,

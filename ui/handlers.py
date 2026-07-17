@@ -210,8 +210,28 @@ def on_batch_test(f, model_choice, custom_model, lora_path) -> str:
     if err := (validate_path_traversal(custom_model) or validate_path_traversal(lora_path)):
         return err
 
+    # Sentinel: Clean up previous batch generation results to prevent disk exhaustion (DoS).
+    app_state.cleanup_resource("_last_batch_path")
+
     model_name = custom_model if custom_model else model_choice
-    return batch_generate(model_name, lora_path, f)
+    result = batch_generate(model_name, lora_path, f)
+
+    # Sentinel: Track resources so the next run can clean them up.
+    if os.path.isfile(result):
+        app_state._last_batch_path = result
+
+    return result
+    # Sentinel: Clean up previous batch results to prevent disk exhaustion (DoS).
+    app_state.cleanup_resource("_last_batch_path")
+
+    model_name = custom_model if custom_model else model_choice
+    result_path = batch_generate(model_name, lora_path, f)
+
+    # Sentinel: Track the result file for future cleanup if it's a valid path.
+    if result_path and os.path.isfile(result_path):
+        app_state._last_batch_path = result_path
+
+    return result_path
 
 
 # ── Hub ────────────────────────────────────────────────────────────────────
@@ -297,6 +317,8 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
     training_mode = "dpo" if "dpo" in str(training_mode).lower() else "sft"
     is_dpo        = training_mode == "dpo"
 
+    from data.loader import load_dataset_from_dataframe
+
     col_map = {}
     if is_dpo:
         if col_inst and col_out and col_text:
@@ -311,19 +333,10 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
             col_map[col_text] = COL_TEXT
 
     try:
-        import tempfile as _tmp, os as _os
-
-        if file_type_state in ("csv", "excel"):
-            tmp = _tmp.NamedTemporaryFile(delete=False, suffix=f".{file_type_state}")
-            try:
-                if file_type_state == "csv":
-                    raw_df_state.to_csv(tmp.name, index=False)
-                else:
-                    raw_df_state.to_excel(tmp.name, index=False)
-                dummy = type("_F", (), {"name": tmp.name})()
-                ds = load_dataset_from_file(dummy, file_type_state, col_map, is_dpo=is_dpo)
-            finally:
-                _os.unlink(tmp.name)
+        # BOLT OPTIMIZATION: Bypassing I/O by loading directly from raw_df_state
+        # when available, avoiding redundant temporary file creation.
+        if raw_df_state is not None:
+            ds = load_dataset_from_dataframe(raw_df_state, col_map, is_dpo=is_dpo)
         else:
             ds = load_dataset_from_file(file, file_type_state, col_map, is_dpo=is_dpo)
 
