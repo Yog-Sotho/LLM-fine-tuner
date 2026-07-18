@@ -1,3 +1,8 @@
+## 2026-07-18 - [Centralized Ingestion Path Traversal Hardening]
+**Vulnerability:** The centralized ingestion loader (`load_dataset_from_file` in `data/loader.py`) accepted any file object and resolved its `name` attribute directly without path traversal or null byte validation.
+**Learning:** While CLI and UI layers had validation guards for path traversal parameters, secondary input fields or API routes (like library calls or direct handler invocation) could bypass those boundaries and read arbitrary system files during parsing if the shared ingestion layer itself was not validated.
+**Prevention:** Always apply centralized traversal guards (`validate_path_traversal`) directly at the entry point of the shared ingestion/loading logic (`load_dataset_from_file`) for complete defense-in-depth coverage.
+
 ## 2025-05-15 - [Credential Validation & XSS Prevention]
 **Vulnerability:** Weak HuggingFace token validation in the Model Registry and incomplete HTML escaping in the evaluation preview.
 **Learning:** Legacy components (`export/registry.py`) often lag behind more recently hardened ones (`export/hub.py`) in credential validation logic. Additionally, manual HTML escaping functions frequently miss the single quote (`'`), which is essential for preventing XSS in attribute-based injection scenarios.
