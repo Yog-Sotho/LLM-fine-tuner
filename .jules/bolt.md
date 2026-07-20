@@ -62,3 +62,7 @@
 ## 2026-08-01 - [Inference Mode Optimization]
 **Learning:** Replacing `torch.no_grad()` with `torch.inference_mode()` in pure inference paths (generation, evaluation, and PPO reward computation) provides a verified performance gain by disabling view tracking. Benchmarks on CPU showed a ~3% speedup for view-intensive operations. While the improvement for simple matrix multiplications is negligible on CPU, it is a best practice for modern PyTorch (1.9+) that yields better performance and safety by preventing accidental gradient computation in inference blocks.
 **Action:** Replaced `torch.no_grad()` with `torch.inference_mode()` in `inference/generate.py`, `inference/evaluation.py`, `training/ppo.py`, and `cli/commands.py`.
+
+## 2026-08-05 - [nlpaug NLTK Dependency Failure Recovery]
+**Learning:** Synonym-based text augmentations using nlpaug's SynonymAug silently fail and fall back to unaugmented original strings if the underlying nltk resources ('averaged_perceptron_tagger_eng' and 'wordnet') are not fully downloaded and initialized. This silently leads to zero-augmented output and fails correctness tests without raising explicit runtime errors.
+**Action:** Always ensure target NLTK packages are programmatically downloaded and imported properly before running nlpaug tests or during execution startup.
