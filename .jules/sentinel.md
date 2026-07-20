@@ -50,3 +50,8 @@
 **Vulnerability:** CLI arguments (`--data`) and sensitive credentials (HF tokens) escaped traversal and null-byte validation, despite these checks being present for other path parameters.
 **Learning:** Security debt often persists in "secondary" entry points like CLI commands or non-path parameters that can still carry injection payloads (e.g., null bytes in tokens). Standardized guards should be applied ubiquitously to all user-controlled strings that interact with the filesystem or external APIs.
 **Prevention:** Audit all command-line options and credential fields to ensure they utilize the centralized `validate_path_traversal` guard, ensuring defense-in-depth even for alphanumeric fields to prevent legacy injection techniques.
+
+## 2026-07-18 - [Centralized Inference Path Traversal Hardening]
+**Vulnerability:** Core model loader (`_load_for_inference` in `inference/generate.py`) relied on top-level UI/CLI layers for input validation of model names and lora paths, enabling potential traversal bypasses if dropdowns were spoofed or future UI/CLI code changes omitted validation.
+**Learning:** Defense-in-depth dictates that critical functions interacting with the filesystem or loading models must perform input validation locally at the function entry point, rather than assuming upper application layers have sanitized them.
+**Prevention:** Always validate model identifiers and path inputs inside core loading or execution functions (like `_load_for_inference`) to act as a robust security checkpoint regardless of caller context.

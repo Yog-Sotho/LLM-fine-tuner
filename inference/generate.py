@@ -47,7 +47,16 @@ def _load_for_inference(model_name: str, lora_path: str | None):
     `return app_state.inference_cache[key]` read, causing a KeyError crash.
     The fix returns the locally-held (model, tokenizer) tuple directly instead
     of re-reading from the shared dict after releasing the lock.
+
+    Sentinel: Validate both inputs against path traversal before proceeding.
     """
+    model_name = model_name.strip() if model_name else ""
+    lora_path = lora_path.strip() if lora_path else ""
+
+    from core.state import validate_path_traversal
+    if err := (validate_path_traversal(model_name) or validate_path_traversal(lora_path)):
+        raise ValueError(err)
+
     key = (model_name, lora_path)
 
     # Fast path: return cached entry under lock
