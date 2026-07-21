@@ -164,30 +164,30 @@ def preview_dataset(dataset: Dataset, is_dpo: bool = False) -> pd.DataFrame:
     # providing a ~5-15x speedup for large datasets.
     if is_dpo:
         # BOLT OPTIMIZATION: Slice first, then access columns from the dict subset.
+        # We slice exactly ONCE (avoiding redundant dataset[:5] calls) and use direct
+        # dict lookup conditional on the column name presence to avoid multiple .get() calls.
         subset = dataset[:5]
-        # BOLT OPTIMIZATION: Slicing before column access (dataset[:N][COL])
-        # is significantly faster for large datasets than dataset[COL][:N]
-        # as it avoids loading entire columns into memory.
-        batch = dataset[:5]
+        prompt_data = subset[COL_PROMPT] if COL_PROMPT in dataset.column_names else []
+        chosen_data = subset[COL_CHOSEN] if COL_CHOSEN in dataset.column_names else []
+        rejected_data = subset[COL_REJECTED] if COL_REJECTED in dataset.column_names else []
         return pd.DataFrame({
-            COL_PROMPT:   subset.get(COL_PROMPT, []),
-            COL_CHOSEN:   subset.get(COL_CHOSEN, []),
-            COL_REJECTED: subset.get(COL_REJECTED, []),
+            COL_PROMPT:   prompt_data,
+            COL_CHOSEN:   chosen_data,
+            COL_REJECTED: rejected_data,
         })
     elif COL_TEXT in dataset.column_names:
         # BOLT OPTIMIZATION: Efficient slicing pattern
         return pd.DataFrame({COL_TEXT: dataset[:10][COL_TEXT]})
     else:
         # BOLT OPTIMIZATION: Slice first, then access columns
+        # We slice exactly ONCE (avoiding redundant dataset[:5] calls) and retrieve
+        # columns via direct dict key access with a column_names check.
         subset = dataset[:5]
-        # N-7 FIX: use explicit column_names check instead of dataset.get()
-        # BOLT OPTIMIZATION: Slice before column access.
-        batch = dataset[:5]
-        inst_data = batch[COL_INSTRUCTION] if COL_INSTRUCTION in dataset.column_names else []
-        out_data  = batch[COL_OUTPUT]      if COL_OUTPUT      in dataset.column_names else []
+        inst_data = subset[COL_INSTRUCTION] if COL_INSTRUCTION in dataset.column_names else []
+        out_data  = subset[COL_OUTPUT]      if COL_OUTPUT      in dataset.column_names else []
         return pd.DataFrame({
-            COL_INSTRUCTION: subset.get(COL_INSTRUCTION, []),
-            COL_OUTPUT:      subset.get(COL_OUTPUT, []),
+            COL_INSTRUCTION: inst_data,
+            COL_OUTPUT:      out_data,
         })
 
 
