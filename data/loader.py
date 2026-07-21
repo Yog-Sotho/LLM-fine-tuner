@@ -141,6 +141,11 @@ def load_dataset_from_file(
     RuntimeError — wraps any internal exception with a user-friendly message
     """
     try:
+        if file and hasattr(file, "name") and file.name:
+            from core.state import validate_path_traversal
+            if err := validate_path_traversal(file.name):
+                raise ValueError(err)
+
         path = Path(file.name).resolve()
         if not path.is_file():
             raise ValueError("Invalid file path")

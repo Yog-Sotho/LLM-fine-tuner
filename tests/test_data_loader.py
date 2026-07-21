@@ -173,3 +173,21 @@ def test_safe_extract_zip_absolute_path_blocked():
             zf.writestr(info, "pwned")
         with pytest.raises(Exception, match="Path traversal"):
             safe_extract_zip(zip_path, extract_dir)
+
+
+def test_load_dataset_from_file_path_traversal_blocked():
+    """Verify that load_dataset_from_file blocks path traversal and null bytes in filenames."""
+    # Test relative path traversal (..)
+    with pytest.raises(RuntimeError) as exc_info:
+        load_dataset_from_file(DummyFile("../secret.csv"), "csv")
+    assert "❌ Path traversal attempt detected." in str(exc_info.value)
+
+    # Test backslash traversal (\)
+    with pytest.raises(RuntimeError) as exc_info:
+        load_dataset_from_file(DummyFile("data\\..\\secret.csv"), "csv")
+    assert "❌ Path traversal attempt detected." in str(exc_info.value)
+
+    # Test null byte injection (\0)
+    with pytest.raises(RuntimeError) as exc_info:
+        load_dataset_from_file(DummyFile("data\0secret.csv"), "csv")
+    assert "❌ Path traversal attempt detected." in str(exc_info.value)
