@@ -41,3 +41,11 @@ def test_on_registry_list_token_security():
     # Test with traversal sequence in token
     result = on_registry_list("user/repo", "hf_valid_token..")
     assert "❌ Path traversal attempt detected." in result
+
+def test_push_to_hub_model_path_security_no_mock():
+    # Verify that model_path path traversal is rejected immediately without os.path.isdir mock
+    result = push_to_hub("../evil_path", "user/repo", "hf_valid_token")
+    assert "❌ Path traversal attempt detected." in result
+
+    result = push_to_hub("model_dir/\0", "user/repo", "hf_valid_token")
+    assert "❌ Path traversal attempt detected." in result
