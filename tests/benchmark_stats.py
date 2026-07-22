@@ -1,8 +1,9 @@
 import time
 import pandas as pd
 import numpy as np
+import pyarrow as pa
+import pyarrow.compute as pc
 from datasets import Dataset
-import os
 
 # Mock constants
 COL_PROMPT = "prompt"
@@ -51,6 +52,29 @@ def get_stats_vectorized(ds):
 
     return float(lengths.mean()) if not lengths.empty else 0.0
 
+def get_stats_arrow(ds):
+    table = ds.data
+    col_names = ds.column_names
+    if (COL_PROMPT in col_names and COL_CHOSEN in col_names):
+        p_len = pc.fill_null(pc.utf8_length(pc.cast(table[COL_PROMPT], pa.string())), 0)
+        c_len = pc.fill_null(pc.utf8_length(pc.cast(table[COL_CHOSEN], pa.string())), 0)
+        r_len = pc.fill_null(pc.utf8_length(pc.cast(table[COL_REJECTED], pa.string())), 0)
+        lengths = pc.add(pc.add(p_len, c_len), r_len)
+    elif COL_TEXT in col_names:
+        lengths = pc.fill_null(pc.utf8_length(pc.cast(table[COL_TEXT], pa.string())), 0)
+    elif COL_INSTRUCTION in col_names and COL_OUTPUT in col_names:
+        i_len = pc.fill_null(pc.utf8_length(pc.cast(table[COL_INSTRUCTION], pa.string())), 0)
+        o_len = pc.fill_null(pc.utf8_length(pc.cast(table[COL_OUTPUT], pa.string())), 0)
+        lengths = pc.add(i_len, o_len)
+    else:
+        first_col = col_names[0] if col_names else None
+        if first_col:
+            lengths = pc.fill_null(pc.utf8_length(pc.cast(table[first_col], pa.string())), 0)
+        else:
+            return 0.0
+    mean_length = pc.mean(lengths).as_py()
+    return float(mean_length) if mean_length is not None else 0.0
+
 if __name__ == "__main__":
     # Create a large dataset
     N = 100_000
@@ -72,6 +96,13 @@ if __name__ == "__main__":
     avg_vec = get_stats_vectorized(ds)
     t1 = time.time()
     vec_time = t1 - t0
-    print(f"Vectorized took: {vec_time:.4f}s, avg: {avg_vec}")
+    print(f"Vectorized Pandas took: {vec_time:.4f}s, avg: {avg_vec}")
 
-    print(f"Speedup: {loop_time/vec_time:.2f}x")
+    t0 = time.time()
+    avg_arrow = get_stats_arrow(ds)
+    t1 = time.time()
+    arrow_time = t1 - t0
+    print(f"Vectorized Arrow took: {arrow_time:.4f}s, avg: {avg_arrow}")
+
+    print(f"Arrow Speedup over Loop: {loop_time/arrow_time:.2f}x")
+    print(f"Arrow Speedup over Pandas: {vec_time/arrow_time:.2f}x")
