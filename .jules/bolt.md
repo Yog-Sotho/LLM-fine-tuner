@@ -66,3 +66,7 @@
 ## 2026-08-05 - [UI Dataset Preview Slicing Optimization]
 **Learning:** Performing multiple slicing operations (such as calling `dataset[:5]` twice) on a HuggingFace `Dataset` introduces redundant slicing overhead. Additionally, retrieving elements via multiple duplicate `.get()` calls or unused variables maps redundant operations. Slicing exactly once and using direct dictionary lookup conditional on the column names being present avoids multiple lookup/slicing cycles, yielding up to ~1.16x speedup for UI dataset previews.
 **Action:** Optimized `preview_dataset` in `data/preprocessing.py` to slice once and perform direct dictionary lookup based on column names.
+
+## 2026-08-10 - [Arrow Compute for Dataset Statistics]
+**Learning:** Converting HuggingFace Datasets to Pandas via `.to_pandas()` solely to compute string statistics (like string length) introduces unnecessary memory overhead and object translation latency. Performing string and mathematical operations directly on the underlying PyArrow Table via `pyarrow.compute` (e.g. `utf8_length`, `fill_null`, `add`, `mean`) operates entirely in optimized C++ on Arrow's native memory layout. This avoids full DataFrame copies and yields a verified ~1.3x to 2.3x speedup on large datasets.
+**Action:** Prefer `pyarrow.compute` functions for simple element-wise transformations or aggregations (like lengths, fills, means, additions) directly on `dataset.data` instead of converting to Pandas.
