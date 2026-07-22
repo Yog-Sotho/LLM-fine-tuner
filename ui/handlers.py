@@ -210,6 +210,10 @@ def on_batch_test(f, model_choice, custom_model, lora_path) -> str:
     if err := (validate_path_traversal(custom_model) or validate_path_traversal(lora_path)):
         return err
 
+    if f and hasattr(f, "name") and f.name:
+        if err := validate_path_traversal(f.name):
+            return err
+
     # Sentinel: Clean up previous batch generation results to prevent disk exhaustion (DoS).
     app_state.cleanup_resource("_last_batch_path")
 

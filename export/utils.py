@@ -151,6 +151,11 @@ def on_peft_zip_upload(zip_file) -> tuple:
     if zip_file is None:
         return " ", "No file uploaded.", " "
 
+    if hasattr(zip_file, "name") and zip_file.name:
+        from core.state import validate_path_traversal
+        if err := validate_path_traversal(zip_file.name):
+            return " ", err, " "
+
     # Sentinel: Clean up the previous PEFT extraction directory to prevent disk exhaustion (DoS).
     app_state.cleanup_resource("_last_peft_dir")
 
