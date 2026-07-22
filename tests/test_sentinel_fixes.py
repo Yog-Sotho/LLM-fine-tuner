@@ -43,3 +43,24 @@ def test_cli_data_path_traversal():
     # Test evaluate command
     result = runner.invoke(app, ["evaluate", "--model", "gpt2", "--data", "/absolute/../path.csv"])
     assert "❌ Path traversal attempt detected." in result.stderr
+
+def test_on_peft_zip_upload_traversal():
+    from export.utils import on_peft_zip_upload
+    mock_file = MagicMock()
+    mock_file.name = "unsafe_../file.zip"
+    _, status, _ = on_peft_zip_upload(mock_file)
+    assert "❌ Path traversal attempt detected." in status
+
+def test_on_batch_test_file_traversal():
+    from ui.handlers import on_batch_test
+    mock_file = MagicMock()
+    mock_file.name = "unsafe_\\..\\file.csv"
+    status = on_batch_test(mock_file, "gpt2", "", "")
+    assert "❌ Path traversal attempt detected." in status
+
+def test_on_evaluate_click_file_traversal():
+    from inference.evaluation import on_evaluate_click
+    mock_file = MagicMock()
+    mock_file.name = "unsafe_\0_file.csv"
+    status, _, _ = on_evaluate_click("gpt2", "", "", mock_file, False, False, "", "")
+    assert "❌ Path traversal attempt detected." in status

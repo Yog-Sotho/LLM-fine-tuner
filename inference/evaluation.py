@@ -49,7 +49,7 @@ from config.constants import (
     HAS_NLTK,
     HAS_ROUGE,
 )
-from core.state import app_state
+from core.state import app_state, validate_path_traversal
 from inference.generate import _load_for_inference
 
 # ── HTML escaping helper ───────────────────────────────────────────────────
@@ -425,13 +425,16 @@ def on_evaluate_click(
     eval_lora_path    = eval_lora_path.strip()    if eval_lora_path    else ""
     judge_model_name  = judge_model_name.strip()  if judge_model_name  else ""
 
-    from core.state import validate_path_traversal
     if err := (
         validate_path_traversal(eval_custom_model)
         or validate_path_traversal(eval_lora_path)
         or validate_path_traversal(judge_model_name)
     ):
         return err, pd.DataFrame(), ""
+
+    if eval_file and hasattr(eval_file, "name") and eval_file.name:
+        if err := validate_path_traversal(eval_file.name):
+            return err, pd.DataFrame(), ""
 
     model_name = eval_custom_model if eval_custom_model else eval_model_name
     if not model_name:

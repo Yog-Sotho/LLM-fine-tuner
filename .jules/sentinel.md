@@ -60,3 +60,8 @@
 **Vulnerability:** Security checks via `validate_path_traversal` in `push_to_hub` were executed after a standard directory check (`os.path.isdir`), exposing the application to potentially unsafe filesystem checks on raw/unsanitized user input.
 **Learning:** Performing filesystem operations (like existence or directory checks) before input validation violates the security-by-design principle of defense in depth, allowing potentially malicious paths to be queried against the system's files before validation.
 **Prevention:** Always place validation guards (e.g., `validate_path_traversal`) at the absolute top of the function body, preceding any filesystem checks, directory lookups, or API calls on the untrusted path inputs.
+
+## 2026-07-22 - [Secondary File Upload Path Traversal Gaps]
+**Vulnerability:** Gradio handlers accepting file uploads directly (PEFT zip, batch test file, evaluation file) processed filename attributes (`file.name`) without invoking path traversal or null-byte guards, bypassing central ingestion validation.
+**Learning:** Hardening shared ingestion layers (`load_dataset_from_file`) is insufficient if secondary entry points directly read from or construct temporary paths using raw, unvalidated upload filenames.
+**Prevention:** Always apply the centralized `validate_path_traversal` guard to `.name` attributes of all uploaded file objects at the absolute handler-level entry points.
