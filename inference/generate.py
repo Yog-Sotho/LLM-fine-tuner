@@ -21,7 +21,7 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from config.constants import FILE_EXT_CSV
-from core.state import app_state
+from core.state import app_state, validate_path_traversal
 
 # H-8 FIX: Thread-safe model cache. Gradio runs in multi-threaded mode; without
 # this lock, concurrent requests could simultaneously evict the cache and trigger
@@ -48,6 +48,13 @@ def _load_for_inference(model_name: str, lora_path: str | None):
     The fix returns the locally-held (model, tokenizer) tuple directly instead
     of re-reading from the shared dict after releasing the lock.
     """
+    # Sentinel: strip whitespace and validate against path traversal / null-byte injection.
+    model_name = model_name.strip() if model_name else ""
+    lora_path = lora_path.strip() if lora_path else None
+
+    if err := (validate_path_traversal(model_name) or validate_path_traversal(lora_path)):
+        raise ValueError(err)
+
     key = (model_name, lora_path)
 
     # Fast path: return cached entry under lock

@@ -65,3 +65,8 @@
 **Vulnerability:** Gradio handlers accepting file uploads directly (PEFT zip, batch test file, evaluation file) processed filename attributes (`file.name`) without invoking path traversal or null-byte guards, bypassing central ingestion validation.
 **Learning:** Hardening shared ingestion layers (`load_dataset_from_file`) is insufficient if secondary entry points directly read from or construct temporary paths using raw, unvalidated upload filenames.
 **Prevention:** Always apply the centralized `validate_path_traversal` guard to `.name` attributes of all uploaded file objects at the absolute handler-level entry points.
+
+## 2026-07-23 - [Model Loading Path Traversal & Null Byte Hardening]
+**Vulnerability:** The core model loader `_load_for_inference` in `inference/generate.py` loaded base model weights and LoRA adapters directly from string paths without path traversal or null-byte validation, exposing the system to arbitrary local file reads.
+**Learning:** Securing the UI boundaries (Layer 4/5 handlers) is not sufficient for robust defense-in-depth, because internal functions can be invoked directly from other parts of the app (such as automated evaluation or LLM-as-judge routines) bypassing the sanitization on handlers.
+**Prevention:** Always place centralized path traversal guards and whitespace stripping directly inside core utility loaders (`_load_for_inference`) before passing parameters to Hugging Face or PEFT load APIs.
