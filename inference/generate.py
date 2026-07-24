@@ -48,6 +48,18 @@ def _load_for_inference(model_name: str, lora_path: str | None):
     The fix returns the locally-held (model, tokenizer) tuple directly instead
     of re-reading from the shared dict after releasing the lock.
     """
+    # Strip whitespace and validate against path traversal or null bytes
+    model_name = model_name.strip() if model_name else ""
+    if lora_path:
+        lora_path = lora_path.strip()
+
+    from core.state import validate_path_traversal
+    if err := validate_path_traversal(model_name):
+        raise ValueError(err)
+    if lora_path:
+        if err := validate_path_traversal(lora_path):
+            raise ValueError(err)
+
     key = (model_name, lora_path)
 
     # Fast path: return cached entry under lock

@@ -64,3 +64,15 @@ def test_on_evaluate_click_file_traversal():
     mock_file.name = "unsafe_\0_file.csv"
     status, _, _ = on_evaluate_click("gpt2", "", "", mock_file, False, False, "", "")
     assert "❌ Path traversal attempt detected." in status
+
+def test_load_for_inference_security():
+    from inference.generate import _load_for_inference
+
+    with pytest.raises(ValueError, match="Path traversal attempt detected"):
+        _load_for_inference("../unsafe_model", None)
+
+    with pytest.raises(ValueError, match="Path traversal attempt detected"):
+        _load_for_inference("safe_model", "unsafe_../path")
+
+    with pytest.raises(ValueError, match="Path traversal attempt detected"):
+        _load_for_inference("safe_model\0", None)
