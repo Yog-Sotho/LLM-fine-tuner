@@ -142,3 +142,15 @@ def test_preview_dpo_dataset():
     df = preview_dataset(ds, is_dpo=True)
     assert isinstance(df, pd.DataFrame)
     assert len(df) <= 10
+
+
+def test_validate_and_clean_dpo_duplicates():
+    """Verify that exact duplicate (prompt, chosen, rejected) pairs in preference datasets (DPO) are removed and reported."""
+    ds = _make_dpo_ds([
+        {COL_PROMPT: "P1", COL_CHOSEN: "C1", COL_REJECTED: "R1"},
+        {COL_PROMPT: "P1", COL_CHOSEN: "C1", COL_REJECTED: "R1"},  # duplicate
+        {COL_PROMPT: "P2", COL_CHOSEN: "C2", COL_REJECTED: "R2"},
+    ])
+    clean, issues = validate_and_clean_dataset(ds, is_dpo=True)
+    assert len(clean) == 2
+    assert any("duplicate" in i.lower() for i in issues)
