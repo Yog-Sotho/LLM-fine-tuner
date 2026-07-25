@@ -64,3 +64,36 @@ def test_on_evaluate_click_file_traversal():
     mock_file.name = "unsafe_\0_file.csv"
     status, _, _ = on_evaluate_click("gpt2", "", "", mock_file, False, False, "", "")
     assert "❌ Path traversal attempt detected." in status
+
+def test_load_for_inference_security():
+    from inference.generate import _load_for_inference
+
+    # Test with traversal sequence in model_name
+    with pytest.raises(ValueError) as exc_info:
+        _load_for_inference("../secret", None)
+    assert "❌ Path traversal attempt detected." in str(exc_info.value)
+
+    # Test with null byte in model_name
+    with pytest.raises(ValueError) as exc_info:
+        _load_for_inference("model\0name", None)
+    assert "❌ Path traversal attempt detected." in str(exc_info.value)
+
+    # Test with backslash in model_name
+    with pytest.raises(ValueError) as exc_info:
+        _load_for_inference("model\\name", None)
+    assert "❌ Path traversal attempt detected." in str(exc_info.value)
+
+    # Test with traversal sequence in lora_path
+    with pytest.raises(ValueError) as exc_info:
+        _load_for_inference("gpt2", "../secret_lora")
+    assert "❌ Path traversal attempt detected." in str(exc_info.value)
+
+    # Test with null byte in lora_path
+    with pytest.raises(ValueError) as exc_info:
+        _load_for_inference("gpt2", "lora\0path")
+    assert "❌ Path traversal attempt detected." in str(exc_info.value)
+
+    # Test with backslash in lora_path
+    with pytest.raises(ValueError) as exc_info:
+        _load_for_inference("gpt2", "lora\\path")
+    assert "❌ Path traversal attempt detected." in str(exc_info.value)
