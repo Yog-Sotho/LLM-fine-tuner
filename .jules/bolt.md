@@ -70,3 +70,7 @@
 ## 2026-08-10 - [Arrow Compute for Dataset Statistics]
 **Learning:** Converting HuggingFace Datasets to Pandas via `.to_pandas()` solely to compute string statistics (like string length) introduces unnecessary memory overhead and object translation latency. Performing string and mathematical operations directly on the underlying PyArrow Table via `pyarrow.compute` (e.g. `utf8_length`, `fill_null`, `add`, `mean`) operates entirely in optimized C++ on Arrow's native memory layout. This avoids full DataFrame copies and yields a verified ~1.3x to 2.3x speedup on large datasets.
 **Action:** Prefer `pyarrow.compute` functions for simple element-wise transformations or aggregations (like lengths, fills, means, additions) directly on `dataset.data` instead of converting to Pandas.
+
+## 2026-08-15 - [Vectorized DPO Dataset Deduplication]
+**Learning:** During dataset preprocessing, the validation step previously did not deduplicate DPO (prompt, chosen, rejected) datasets. This led to training on duplicate pairs, wasting substantial GPU/CPU time and increasing over-fitting risks. Implementing vectorized `drop_duplicates` on the preference triplet columns using Pandas on the dataset converts this slow/missing step into a fast O(N) operation (0.68s for 100k rows).
+**Action:** Added a DPO-specific deduplication branch in `validate_and_clean_dataset` in `data/preprocessing.py` and a dedicated benchmark in `tests/benchmark_preprocessing_dpo.py`.

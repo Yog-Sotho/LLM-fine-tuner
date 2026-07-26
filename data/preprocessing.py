@@ -142,6 +142,11 @@ def validate_and_clean_dataset(
         df = df.drop_duplicates(subset=[COL_INSTRUCTION, COL_OUTPUT], keep='first')
         lengths = lengths.loc[df.index].reset_index(drop=True)
         df = df.reset_index(drop=True)
+    elif is_dpo or (COL_PROMPT in df.columns and COL_CHOSEN in df.columns and COL_REJECTED in df.columns):
+        # deduplicate based on prompt, chosen, and rejected columns
+        df = df.drop_duplicates(subset=[COL_PROMPT, COL_CHOSEN, COL_REJECTED], keep='first')
+        lengths = lengths.loc[df.index].reset_index(drop=True)
+        df = df.reset_index(drop=True)
 
     n_dups = pre_dup_len - len(df)
     if n_dups > 0:
