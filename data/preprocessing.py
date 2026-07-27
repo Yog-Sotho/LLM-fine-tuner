@@ -133,7 +133,11 @@ def validate_and_clean_dataset(
     # ── Duplicate detection AND removal (M4 FIX) ──────────────────────────
     # BOLT OPTIMIZATION: Use Pandas drop_duplicates for efficient O(N) deduplication.
     pre_dup_len = len(df)
-    if COL_TEXT in df.columns:
+    if is_dpo or (COL_PROMPT in df.columns and COL_CHOSEN in df.columns and COL_REJECTED in df.columns):
+        df = df.drop_duplicates(subset=[COL_PROMPT, COL_CHOSEN, COL_REJECTED], keep='first')
+        lengths = lengths.loc[df.index].reset_index(drop=True)
+        df = df.reset_index(drop=True)
+    elif COL_TEXT in df.columns:
         # preserve order and keep first occurrence
         df = df.drop_duplicates(subset=[COL_TEXT], keep='first')
         lengths = lengths.loc[df.index].reset_index(drop=True)
