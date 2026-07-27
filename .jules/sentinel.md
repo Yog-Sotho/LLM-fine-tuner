@@ -65,3 +65,8 @@
 **Vulnerability:** Gradio handlers accepting file uploads directly (PEFT zip, batch test file, evaluation file) processed filename attributes (`file.name`) without invoking path traversal or null-byte guards, bypassing central ingestion validation.
 **Learning:** Hardening shared ingestion layers (`load_dataset_from_file`) is insufficient if secondary entry points directly read from or construct temporary paths using raw, unvalidated upload filenames.
 **Prevention:** Always apply the centralized `validate_path_traversal` guard to `.name` attributes of all uploaded file objects at the absolute handler-level entry points.
+
+## 2026-07-23 - [Internal Inference Load Path Traversal Hardening]
+**Vulnerability:** The internal core model/tokenizer loading function (`_load_for_inference` in `inference/generate.py`) loaded models directly from `model_name` and `lora_path` arguments without whitespace stripping, null-byte validation, or path traversal checks.
+**Learning:** Hardening UI handlers and CLI commands is insufficient for complete security, as internal functions (e.g. called via APIs, custom scripts, or secondary entrypoints) can still receive raw user-controlled paths. Applying validation at the shared boundary layer ensures uniform defense-in-depth.
+**Prevention:** Always strip whitespace and apply centralized path traversal/null-byte validation guards directly at the entry points of internal resource loading helpers.
