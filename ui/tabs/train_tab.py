@@ -42,6 +42,7 @@ def build_train_tab() -> dict:
                 custom_model  = gr.Textbox(
                     label="Or enter any HuggingFace model ID",
                     placeholder="e.g., meta-llama/Llama-2-7b-hf",
+                    info="If specified, this model ID will override the 'Base Model' dropdown selection above.",
                     max_length=512,
                 )
                 model_info_md = gr.Markdown(get_model_info(recommended_model))
@@ -50,7 +51,7 @@ def build_train_tab() -> dict:
                 training_mode = gr.Radio(
                     choices=["SFT (Supervised Fine-Tuning)", "DPO (Alignment)"],
                     value="SFT (Supervised Fine-Tuning)",
-                    label="",
+                    label="Fine-Tuning Mode",
                 )
                 dpo_beta = gr.Slider(0.01, 1.0, value=0.1, step=0.01,
                                      label="DPO Beta (used only in DPO mode)")
@@ -88,7 +89,7 @@ def build_train_tab() -> dict:
                     choices=["Full Fine-tuning", "Auto", "LoRA", "QLoRA Enhanced",
                              "Prefix Tuning", "Prompt Tuning", "Adapters"],
                     value="Auto",
-                    label="",
+                    label="PEFT Adapter Method",
                 )
 
                 gr.Markdown("### Training preset")
@@ -96,7 +97,7 @@ def build_train_tab() -> dict:
                     choices=["Quick (1 epoch)", "Balanced (3 epochs)",
                              "Accurate (5 epochs)", "Advanced"],
                     value="Balanced (3 epochs)",
-                    label=" ",
+                    label="Training Config Preset",
                 )
 
                 with gr.Accordion("⚙️ Advanced hyperparameters", open=False):
@@ -145,7 +146,7 @@ def build_train_tab() -> dict:
             with gr.Column(scale=3):
                 gr.Markdown("### Training log")
                 log_output = gr.Textbox(
-                    label=" ", lines=14, interactive=False,
+                    label="Consolidated Training Logs", lines=14, interactive=False,
                     placeholder="Training output will appear here…",
                 )
                 with gr.Column(elem_id="loss-chart-wrap"):
@@ -158,7 +159,7 @@ def build_train_tab() -> dict:
                     # the ETA string column to NaN, making it invisible.
                     # Gradio infers the correct schema from the DataFrame at render time.
                     loss_df = gr.Dataframe(
-                        label=" ", interactive=False,
+                        label="Loss History & ETA metrics", interactive=False,
                     )
                 clear_gpu_btn = gr.Button("🧹 Clear GPU Cache", variant="secondary")
 
