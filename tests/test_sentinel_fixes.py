@@ -1,9 +1,11 @@
 
-import pytest
 from unittest.mock import MagicMock, patch
-import os
+
+import pytest
+
 from export.hub import push_to_hub
-from export.registry import on_registry_upload, on_registry_list
+from export.registry import on_registry_list, on_registry_upload
+
 
 def test_push_to_hub_token_traversal():
     with patch("os.path.isdir", return_value=True):
@@ -19,8 +21,9 @@ def test_on_registry_list_token_traversal():
     assert "❌ Path traversal attempt detected." in status
 
 def test_cli_data_path_traversal():
-    from cli.commands import app
     from typer.testing import CliRunner
+
+    from cli.commands import app
 
     runner = CliRunner()
 
@@ -82,3 +85,22 @@ def test_load_for_inference_security():
     # Test null byte injection in lora_path
     with pytest.raises(ValueError, match="❌ Path traversal attempt detected."):
         _load_for_inference("gpt2", "lora_path\0")
+
+def test_batch_generate_security():
+    from inference.generate import batch_generate
+    mock_file = MagicMock()
+
+    # Test path traversal pattern
+    mock_file.name = "unsafe_../file.csv"
+    result = batch_generate("gpt2", None, mock_file)
+    assert "❌ Path traversal attempt detected." in result
+
+    # Test backslash traversal pattern
+    mock_file.name = "unsafe_\\..\\file.csv"
+    result = batch_generate("gpt2", None, mock_file)
+    assert "❌ Path traversal attempt detected." in result
+
+    # Test null byte injection
+    mock_file.name = "unsafe_\0_file.csv"
+    result = batch_generate("gpt2", None, mock_file)
+    assert "❌ Path traversal attempt detected." in result

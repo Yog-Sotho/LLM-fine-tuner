@@ -168,6 +168,11 @@ def batch_generate(
     Added an early-exit guard that returns a clear user-facing error message.
     """
     try:
+        if prompts_file and hasattr(prompts_file, "name") and prompts_file.name:
+            from core.state import validate_path_traversal
+            if err := validate_path_traversal(prompts_file.name):
+                return err
+
         if prompts_file.name.endswith(FILE_EXT_CSV):
             df = pd.read_csv(prompts_file.name)
             if "prompt" not in df.columns:
