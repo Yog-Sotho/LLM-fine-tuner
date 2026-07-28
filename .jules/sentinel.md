@@ -1,3 +1,8 @@
+## 2026-07-24 - [Internal Inference Batch Processing Path Traversal Hardening]
+**Vulnerability:** The internal core batched inference function (`batch_generate` in `inference/generate.py`) loaded and read files directly from the `prompts_file.name` argument without invoking path traversal or null-byte guards.
+**Learning:** Even if the UI handler wraps the file upload parameter in a security check, the underlying shared core inference service must independently enforce security validation bounds to protect against direct library integration exploitation or command injection.
+**Prevention:** Always apply the centralized `validate_path_traversal` guard directly at the entry points of internal processing or inference functions that read or write file paths.
+
 ## 2026-07-18 - [Centralized Ingestion Path Traversal Hardening]
 **Vulnerability:** The centralized ingestion loader (`load_dataset_from_file` in `data/loader.py`) accepted any file object and resolved its `name` attribute directly without path traversal or null byte validation.
 **Learning:** While CLI and UI layers had validation guards for path traversal parameters, secondary input fields or API routes (like library calls or direct handler invocation) could bypass those boundaries and read arbitrary system files during parsing if the shared ingestion layer itself was not validated.
