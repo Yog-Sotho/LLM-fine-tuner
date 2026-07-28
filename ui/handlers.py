@@ -30,23 +30,25 @@ Patch log
 import os
 import tempfile
 
-import numpy as np
-import pandas as pd
 import gradio as gr
+import pandas as pd
 import torch
 
 from config.constants import (
-    COL_INSTRUCTION, COL_OUTPUT, COL_TEXT,
-    COL_PROMPT, COL_CHOSEN, COL_REJECTED,
+    COL_CHOSEN,
+    COL_INSTRUCTION,
+    COL_OUTPUT,
+    COL_PROMPT,
+    COL_REJECTED,
+    COL_TEXT,
 )
 from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
-from data.preprocessing import validate_and_clean_dataset, preview_dataset, get_dataset_stats
+from data.preprocessing import get_dataset_stats, preview_dataset, validate_and_clean_dataset
 from export.hub import push_to_hub
-from export.utils import create_zip_from_folder, create_model_card
-from inference.generate import generate_text, batch_generate
+from export.utils import create_model_card, create_zip_from_folder
+from inference.generate import batch_generate, generate_text
 from training.sft import train_model
-
 
 # ── Training ───────────────────────────────────────────────────────────────
 
@@ -263,6 +265,15 @@ def on_file_upload(file, training_mode="sft"):
             pd.DataFrame(), " ", None, None,
         )
 
+    # Sentinel: validate path traversal on file upload
+    if file and hasattr(file, "name") and file.name:
+        if err := validate_path_traversal(file.name):
+            return (
+                f"❌ {err}",
+                gr.update(visible=False), gr.update(visible=False), gr.update(visible=False),
+                pd.DataFrame(), " ", None, None,
+            )
+
     ftype = detect_file_type(file)
     if ftype is None:
         return (
@@ -272,15 +283,23 @@ def on_file_upload(file, training_mode="sft"):
         )
 
     try:
-        ds = load_dataset_from_file(file, ftype, is_dpo=is_dpo)
+        # BOLT OPTIMIZATION: Bypassing duplicate disk read/parsing for CSV and Excel files.
+        # We load raw_df from the file exactly once, and use direct in-memory conversion
+        # via load_dataset_from_dataframe instead of loading the dataset from the file again.
+        raw_df = None
+        if ftype in ("csv", "excel"):
+            import pandas as _pd
+            raw_df = _pd.read_csv(file.name) if ftype == "csv" else _pd.read_excel(file.name, engine="openpyxl")
+            from data.loader import load_dataset_from_dataframe
+            ds = load_dataset_from_dataframe(raw_df, is_dpo=is_dpo)
+        else:
+            ds = load_dataset_from_file(file, ftype, is_dpo=is_dpo)
+
         ds, issues = validate_and_clean_dataset(ds, is_dpo=is_dpo)
         preview_df  = preview_dataset(ds, is_dpo=is_dpo)
         issues_txt  = "\n".join(issues) if issues else "✅ No issues."
-        raw_df      = None
 
         if ftype in ("csv", "excel"):
-            import pandas as _pd
-            raw_df = _pd.read_csv(file.name) if ftype == "csv" else _pd.read_excel(file.name)
             cols   = list(raw_df.columns)
 
             if is_dpo:
