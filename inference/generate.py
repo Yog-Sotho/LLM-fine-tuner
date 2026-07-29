@@ -174,9 +174,12 @@ def batch_generate(
                 return err
 
         if prompts_file.name.endswith(FILE_EXT_CSV):
-            df = pd.read_csv(prompts_file.name)
-            if "prompt" not in df.columns:
+            # BOLT OPTIMIZATION: Only read the 'prompt' column to avoid loading other large
+            # unused columns in wide or heavy CSV files, saving memory and processing time.
+            header_cols = pd.read_csv(prompts_file.name, nrows=0).columns.tolist()
+            if "prompt" not in header_cols:
                 return "❌ CSV must have a 'prompt' column."
+            df = pd.read_csv(prompts_file.name, usecols=["prompt"])
             prompts = df["prompt"].tolist()
         else:
             with open(prompts_file.name, encoding="utf-8") as f:

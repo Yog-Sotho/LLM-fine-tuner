@@ -408,10 +408,22 @@ def evaluate(
     try:
         import pandas as pd
 
-        df = pd.read_csv(data) if data.endswith(".csv") else pd.read_json(data, lines=True)
-        if "prompt" not in df.columns:
-            typer.echo("❌ Dataset requires 'prompt' column", err=True)
-            raise typer.Exit(code=1)
+        if data.endswith(".csv"):
+            # BOLT OPTIMIZATION: Only read the required 'prompt' and 'reference' columns
+            # to save memory and parsing overhead, especially with large datasets.
+            header_cols = pd.read_csv(data, nrows=0).columns.tolist()
+            if "prompt" not in header_cols:
+                typer.echo("❌ Dataset requires 'prompt' column", err=True)
+                raise typer.Exit(code=1)
+            usecols = ["prompt"]
+            if "reference" in header_cols:
+                usecols.append("reference")
+            df = pd.read_csv(data, usecols=usecols)
+        else:
+            df = pd.read_json(data, lines=True)
+            if "prompt" not in df.columns:
+                typer.echo("❌ Dataset requires 'prompt' column", err=True)
+                raise typer.Exit(code=1)
 
         prompts    = df["prompt"].astype(str).tolist()
         references = df["reference"].astype(str).tolist() if "reference" in df.columns else []

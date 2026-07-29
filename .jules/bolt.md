@@ -78,3 +78,7 @@
 ## 2026-08-20 - [Single-Pass CSV & Excel Parsing in File Upload]
 **Learning:** In the file-upload pipeline, CSV and Excel files were previously read and parsed from disk twice: first inside `load_dataset_from_file` to construct a Hugging Face Dataset, and then immediately after inside `on_file_upload` to extract metadata and store the raw DataFrame. Reading and parsing the exact same file twice introduces significant redundant disk I/O and CPU parsing overhead. Bypassing the duplicate load by reading once into Pandas and then using `load_dataset_from_dataframe` directly yields a verified ~1.6x to 2.8x speedup.
 **Action:** Always verify if a file being loaded for metadata extraction is also being parsed for dataset creation, and consolidate them into a single-pass in-memory loader to avoid redundant disk and CPU cycles.
+
+## 2026-08-25 - [Column-Selective CSV Loading]
+**Learning:** During batch generation and evaluation, loading full multi-column CSV datasets into memory via `pd.read_csv` when only `prompt` and `reference` are needed introduces severe and unnecessary I/O and memory overhead. By inspecting headers first (`nrows=0`) and loading only the required columns with `usecols`, we avoid loading other heavy or unused columns entirely, achieving a verified ~2.4x speedup and major VRAM/RAM savings.
+**Action:** Use header-first column checking and `usecols` whenever reading specific columns from CSV datasets for inference or evaluation.

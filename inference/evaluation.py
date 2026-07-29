@@ -449,19 +449,30 @@ def on_evaluate_click(
     try:
         progress(0, desc="Loading evaluation dataset…")
         if eval_file.name.endswith(".csv"):
-            eval_df = pd.read_csv(eval_file.name)
+            # BOLT OPTIMIZATION: Only read the required 'prompt' and 'reference' columns
+            # to save memory and parsing overhead, especially with large datasets.
+            header_cols = pd.read_csv(eval_file.name, nrows=0).columns.tolist()
+            if "prompt" not in header_cols:
+                return (
+                    f"❌ Dataset must have a 'prompt' column. Found: {header_cols}",
+                    pd.DataFrame(),
+                    "",
+                )
+            usecols = ["prompt"]
+            if "reference" in header_cols:
+                usecols.append("reference")
+            eval_df = pd.read_csv(eval_file.name, usecols=usecols)
         elif eval_file.name.endswith(".jsonl"):
             eval_df = pd.read_json(eval_file.name, lines=True)
+            if "prompt" not in eval_df.columns:
+                return (
+                    f"❌ Dataset must have a 'prompt' column. Found: {list(eval_df.columns)}",
+                    pd.DataFrame(),
+                    "",
+                )
         else:
             return (
                 "❌ Evaluation dataset must be CSV or JSONL with 'prompt' and 'reference' columns.",
-                pd.DataFrame(),
-                "",
-            )
-
-        if "prompt" not in eval_df.columns:
-            return (
-                f"❌ Dataset must have a 'prompt' column. Found: {list(eval_df.columns)}",
                 pd.DataFrame(),
                 "",
             )
