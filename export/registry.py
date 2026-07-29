@@ -32,6 +32,15 @@ class ModelRegistry:
     def __init__(self, repo_id: str, token: str):
         if not HAS_HUB:
             raise ImportError("huggingface_hub not installed. Run: pip install huggingface-hub")
+
+        # Sentinel: strip and validate repo_id and token for Defense-in-Depth
+        repo_id = repo_id.strip() if repo_id else ""
+        token = token.strip() if token else ""
+
+        from core.state import validate_path_traversal
+        if err := (validate_path_traversal(repo_id) or validate_path_traversal(token)):
+            raise ValueError(err)
+
         from huggingface_hub import HfApi, create_repo  # lazy
 
         self._create_repo = create_repo
@@ -60,6 +69,14 @@ class ModelRegistry:
 
         Returns a status string.
         """
+        # Sentinel: strip and validate model_path and version for Defense-in-Depth
+        model_path = model_path.strip() if model_path else ""
+        version = version.strip() if version else ""
+
+        from core.state import validate_path_traversal, validate_identifier
+        if err := (validate_path_traversal(model_path) or validate_identifier(version)):
+            return err
+
         if not model_path or not os.path.isdir(model_path):
             return "❌ Invalid model path."
 

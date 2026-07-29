@@ -104,3 +104,45 @@ def test_batch_generate_security():
     mock_file.name = "unsafe_\0_file.csv"
     result = batch_generate("gpt2", None, mock_file)
     assert "❌ Path traversal attempt detected." in result
+
+
+def test_model_registry_class_security():
+    from export.registry import ModelRegistry
+    # Test path traversal in __init__ repo_id
+    with pytest.raises(ValueError, match="❌ Path traversal attempt detected."):
+        ModelRegistry("../unsafe_repo", "hf_valid_token_36_characters_minimum_length")
+
+    # Test path traversal in __init__ token
+    with pytest.raises(ValueError, match="❌ Path traversal attempt detected."):
+        ModelRegistry("user/repo", "hf_unsafe_../token_value")
+
+    # Test null byte injection in upload_model model_path
+    reg = ModelRegistry("user/repo", "hf_valid_token_36_characters_minimum_length")
+    res = reg.upload_model("unsafe_\0_path", "v1.0", {})
+    assert "❌ Path traversal attempt detected." in res
+
+    # Test path traversal / injection in upload_model version tag
+    res = reg.upload_model("model_dir", "v1../0", {})
+    assert "❌ Path traversal attempt detected." in res
+
+
+def test_vllm_runner_security():
+    from inference.vllm_runner import merge_adapter_for_inference, vllm_generate_v27
+
+    # Test merge_adapter_for_inference with path traversal
+    res = merge_adapter_for_inference("../unsafe_base", "adapter_dir", "output_dir")
+    assert "❌ Path traversal attempt detected." in res
+
+    res = merge_adapter_for_inference("gpt2", "../../unsafe_adapter", "output_dir")
+    assert "❌ Path traversal attempt detected." in res
+
+    res = merge_adapter_for_inference("gpt2", "adapter_dir", "output_\0_dir")
+    assert "❌ Path traversal attempt detected." in res
+
+    # Test vllm_generate_v27 with path traversal / null byte / identifier injection
+    with patch("config.constants.HAS_VLLM", True):
+        with pytest.raises(ValueError, match="❌ Path traversal attempt detected."):
+            vllm_generate_v27("../unsafe_path", ["prompt"])
+
+        with pytest.raises(ValueError, match="❌ Path traversal attempt detected."):
+            vllm_generate_v27("gpt2", ["prompt"], vllm_quantization="awq/../")
