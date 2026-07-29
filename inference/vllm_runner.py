@@ -39,7 +39,20 @@ def merge_adapter_for_inference(
 
     Returns a status string for display in the UI.
     """
-    if not base_model_name or not base_model_name.strip():
+    # Sentinel: strip and validate inputs for Defense-in-Depth
+    base_model_name = base_model_name.strip() if base_model_name else ""
+    adapter_path = adapter_path.strip() if adapter_path else ""
+    merged_output_dir = merged_output_dir.strip() if merged_output_dir else ""
+
+    from core.state import validate_path_traversal
+    if err := (
+        validate_path_traversal(base_model_name)
+        or validate_path_traversal(adapter_path)
+        or validate_path_traversal(merged_output_dir)
+    ):
+        return err
+
+    if not base_model_name:
         return "❌ Please provide the base model ID used during training."
     if not adapter_path or not os.path.isdir(adapter_path):
         return "❌ Adapter path is invalid or does not exist. Provide the training output directory."
@@ -135,6 +148,15 @@ def vllm_generate_v27(
 
     Raises ImportError when vLLM is not installed.
     """
+    # Sentinel: strip and validate inputs for Defense-in-Depth
+    model_path = model_path.strip() if model_path else ""
+    vllm_quantization = vllm_quantization.strip() if vllm_quantization else ""
+
+    from core.state import validate_path_traversal, validate_identifier
+    if err := validate_path_traversal(model_path):
+        raise ValueError(err)
+    if err := validate_identifier(vllm_quantization):
+        raise ValueError(err)
     if not HAS_VLLM:
         raise ImportError("vLLM not installed. Run: pip install vllm>=0.2.0")
 

@@ -1,3 +1,8 @@
+## 2026-07-28 - [Defense-in-Depth Hardening for ModelRegistry and vLLM Runner]
+**Vulnerability:** Core model registration and adapter-merging functions (`ModelRegistry` in `export/registry.py` and vLLM runners in `inference/vllm_runner.py`) relied entirely on handler-level or UI-level validation. If accessed programmatically as a library or via direct API calls, these layers had no self-contained path traversal or null-byte protection.
+**Learning:** Security controls must be redundant and encapsulated inside class initializers and core functional interfaces (Layer 4/5) to ensure defense-in-depth, protecting core system APIs from execution context bypass.
+**Prevention:** Always bundle path traversal and identifier guards (`validate_path_traversal` and `validate_identifier`) inside core API constructor hooks and low-level processing/merging entry points.
+
 ## 2026-07-24 - [Internal Inference Batch Processing Path Traversal Hardening]
 **Vulnerability:** The internal core batched inference function (`batch_generate` in `inference/generate.py`) loaded and read files directly from the `prompts_file.name` argument without invoking path traversal or null-byte guards.
 **Learning:** Even if the UI handler wraps the file upload parameter in a security check, the underlying shared core inference service must independently enforce security validation bounds to protect against direct library integration exploitation or command injection.
