@@ -82,3 +82,11 @@
 ## 2026-08-25 - [Column-Selective CSV Loading]
 **Learning:** During batch generation and evaluation, loading full multi-column CSV datasets into memory via `pd.read_csv` when only `prompt` and `reference` are needed introduces severe and unnecessary I/O and memory overhead. By inspecting headers first (`nrows=0`) and loading only the required columns with `usecols`, we avoid loading other heavy or unused columns entirely, achieving a verified ~2.4x speedup and major VRAM/RAM savings.
 **Action:** Use header-first column checking and `usecols` whenever reading specific columns from CSV datasets for inference or evaluation.
+
+## 2026-08-30 - [Post-Cleaning Sequence Length Computation]
+**Learning:** In dataset cleaning pipelines, calculating character lengths for truncation warnings prior to row filtering and deduplication leads to redundant string computations on dropped rows. Deferring length calculation until *after* filtering and deduplication eliminates wasted CPU cycles and avoids expensive pandas index realignment (`.loc[df.index]`).
+**Action:** Compute sequence lengths only on the final, unique, cleaned DataFrame rows.
+
+## 2026-08-30 - [Explicit Fast Tokenizer Force for Inference]
+**Learning:** Hugging Face `AutoTokenizer.from_pretrained` might load the slow Python-only tokenizer unless `use_fast=True` is explicitly specified. Forcing the fast Rust-backed tokenizer reduces CPU tokenization and batch decoding overhead during inference and automated evaluation. However, wrapping `BatchEncoding` to copy keys to devices via custom dict comprehension is slightly faster than native `.to()` on CPU due to the overhead of HF input validation wrapper functions.
+**Action:** Always explicitly specify `use_fast=True` for AutoTokenizers. Keep simple dictionary comprehensions for moving tokenized batch tensors to device on CPU.
