@@ -108,23 +108,18 @@ def validate_and_clean_dataset(
         c_stripped = df[COL_CHOSEN].astype(str).str.strip()
         r_stripped = df[COL_REJECTED].astype(str).str.strip()
         mask = (p_stripped != "") & (c_stripped != "") & (r_stripped != "")
-        # Lengths calculated on stripped strings to match original behavior
-        lengths = p_stripped.str.len() + c_stripped.str.len() + r_stripped.str.len()
     elif COL_TEXT in df.columns:
         t_stripped = df[COL_TEXT].astype(str).str.strip()
         mask = t_stripped != ""
-        lengths = t_stripped.str.len()
     elif COL_INSTRUCTION in df.columns and COL_OUTPUT in df.columns:
         i_stripped = df[COL_INSTRUCTION].astype(str).str.strip()
         o_stripped = df[COL_OUTPUT].astype(str).str.strip()
         mask = (i_stripped != "") & (o_stripped != "")
-        lengths = i_stripped.str.len() + o_stripped.str.len()
     else:
         return dataset, ["⚠️ Unknown column structure — cannot validate."]
 
-    # Filter rows and lengths
+    # Filter rows
     df = df[mask].reset_index(drop=True)
-    lengths = lengths[mask].reset_index(drop=True)
 
     empty = original_len - len(df)
     if empty:
@@ -134,25 +129,34 @@ def validate_and_clean_dataset(
     # BOLT OPTIMIZATION: Use Pandas drop_duplicates for efficient O(N) deduplication.
     pre_dup_len = len(df)
     if is_dpo or (COL_PROMPT in df.columns and COL_CHOSEN in df.columns and COL_REJECTED in df.columns):
-        df = df.drop_duplicates(subset=[COL_PROMPT, COL_CHOSEN, COL_REJECTED], keep='first')
-        lengths = lengths.loc[df.index].reset_index(drop=True)
-        df = df.reset_index(drop=True)
+        df = df.drop_duplicates(subset=[COL_PROMPT, COL_CHOSEN, COL_REJECTED], keep='first').reset_index(drop=True)
     elif COL_TEXT in df.columns:
         # preserve order and keep first occurrence
-        df = df.drop_duplicates(subset=[COL_TEXT], keep='first')
-        lengths = lengths.loc[df.index].reset_index(drop=True)
-        df = df.reset_index(drop=True)
+        df = df.drop_duplicates(subset=[COL_TEXT], keep='first').reset_index(drop=True)
     elif COL_INSTRUCTION in df.columns and COL_OUTPUT in df.columns:
-        df = df.drop_duplicates(subset=[COL_INSTRUCTION, COL_OUTPUT], keep='first')
-        lengths = lengths.loc[df.index].reset_index(drop=True)
-        df = df.reset_index(drop=True)
+        df = df.drop_duplicates(subset=[COL_INSTRUCTION, COL_OUTPUT], keep='first').reset_index(drop=True)
 
     n_dups = pre_dup_len - len(df)
     if n_dups > 0:
         issues.append(f"⚠️ {n_dups} duplicate examples removed. ")
 
     # ── Report long examples (will be truncated by tokeniser) ─────────────
-    # BOLT OPTIMIZATION: Reuse pre-calculated vectorized lengths.
+    # BOLT OPTIMIZATION: Calculate character lengths ONLY on clean, unique, final rows to avoid redundant computation and slow index realignment.
+    if len(df) > 0:
+        if is_dpo or (COL_PROMPT in df.columns and COL_CHOSEN in df.columns and COL_REJECTED in df.columns):
+            lengths = df[COL_PROMPT].astype(str).str.strip().str.len() + \
+                      df[COL_CHOSEN].astype(str).str.strip().str.len() + \
+                      df[COL_REJECTED].astype(str).str.strip().str.len()
+        elif COL_TEXT in df.columns:
+            lengths = df[COL_TEXT].astype(str).str.strip().str.len()
+        elif COL_INSTRUCTION in df.columns and COL_OUTPUT in df.columns:
+            lengths = df[COL_INSTRUCTION].astype(str).str.strip().str.len() + \
+                      df[COL_OUTPUT].astype(str).str.strip().str.len()
+        else:
+            lengths = pd.Series(dtype=int)
+    else:
+        lengths = pd.Series(dtype=int)
+
     long_count = (lengths > 2048).sum()
     if long_count > 0:
         issues.append(f"⚠️ {long_count} examples exceed 2048 chars — they will be truncated. ")

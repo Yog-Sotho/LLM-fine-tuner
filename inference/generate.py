@@ -67,7 +67,8 @@ def _load_for_inference(model_name: str, lora_path: str | None):
 
     # Slow path: load model outside the lock to avoid blocking other threads
     # during the (potentially long) download/load.
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    # BOLT OPTIMIZATION: Force fast tokenizer for significantly faster text processing and encoding.
+    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
     # Ensure eos/pad tokens are set
     if tokenizer.eos_token is None:
         if hasattr(tokenizer, "bos_token") and tokenizer.bos_token:
