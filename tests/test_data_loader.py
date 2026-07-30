@@ -191,3 +191,50 @@ def test_load_dataset_from_file_path_traversal_blocked():
     with pytest.raises(RuntimeError) as exc_info:
         load_dataset_from_file(DummyFile("data\0secret.csv"), "csv")
     assert "❌ Path traversal attempt detected." in str(exc_info.value)
+
+
+def test_safe_extract_zip_bomb_too_many_files():
+    """Ensure safe_extract_zip raises ValueError if there are too many files in the ZIP."""
+    from unittest.mock import MagicMock, patch
+
+    mock_zip = MagicMock()
+    mock_zip.__enter__.return_value = mock_zip
+    mock_zip.infolist.return_value = [MagicMock() for _ in range(501)]
+
+    with patch("data.loader.zipfile.ZipFile", return_value=mock_zip):
+        with pytest.raises(ValueError, match="❌ Zip Bomb attempt detected: too many files"):
+            safe_extract_zip("dummy.zip", "dummy_dir")
+
+
+def test_safe_extract_zip_bomb_too_large():
+    """Ensure safe_extract_zip raises ValueError if the uncompressed size exceeds safety limits."""
+    from unittest.mock import MagicMock, patch
+
+    mock_zip = MagicMock()
+    mock_zip.__enter__.return_value = mock_zip
+    mock_info = MagicMock()
+    mock_info.file_size = 501 * 1024 * 1024  # 501 MB
+    mock_info.compress_size = 1000
+    mock_info.filename = "large_file.txt"
+    mock_zip.infolist.return_value = [mock_info]
+
+    with patch("data.loader.zipfile.ZipFile", return_value=mock_zip):
+        with pytest.raises(ValueError, match="❌ Zip Bomb attempt detected: total uncompressed size"):
+            safe_extract_zip("dummy.zip", "dummy_dir")
+
+
+def test_safe_extract_zip_bomb_high_ratio():
+    """Ensure safe_extract_zip raises ValueError if a file has an excessively high decompression ratio."""
+    from unittest.mock import MagicMock, patch
+
+    mock_zip = MagicMock()
+    mock_zip.__enter__.return_value = mock_zip
+    mock_info = MagicMock()
+    mock_info.file_size = 11 * 1024 * 1024  # 11 MB
+    mock_info.compress_size = 1000          # extremely compressed
+    mock_info.filename = "ratio_bomb.txt"
+    mock_zip.infolist.return_value = [mock_info]
+
+    with patch("data.loader.zipfile.ZipFile", return_value=mock_zip):
+        with pytest.raises(ValueError, match="❌ Zip Bomb attempt detected: high compression ratio"):
+            safe_extract_zip("dummy.zip", "dummy_dir")

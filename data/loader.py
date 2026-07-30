@@ -222,20 +222,54 @@ def load_dataset_from_file(
 
 
 def safe_extract_zip(zip_path: str, extract_dir: str) -> str:
-    """Extract a ZIP archive with complete path-traversal protection.
+    """Extract a ZIP archive with complete path-traversal and ZIP Bomb protection.
 
     H-1 FIX: The previous check only blocked paths starting with '../' or '..\\'
     but did not catch absolute paths (e.g. '/etc/passwd') or normalised traversal
     paths. The fix resolves every target path with os.path.realpath and verifies
     it is inside the extract directory before extracting.
 
-    Raises ValueError if any entry attempts to escape extract_dir.
+    Sentinel: Enforces decompression limits (max 500 MB total uncompressed size,
+    max 500 files, and max 100x decompression ratio on individual files > 10 MB)
+    to mitigate Zip Bomb / Decompression Bomb Denial of Service (DoS) risks.
+
+    Raises ValueError if any entry attempts to escape extract_dir or violates
+    the decompression safety limits.
     Returns extract_dir on success.
     """
     abs_extract_dir = os.path.realpath(extract_dir)
 
+    max_total_size = 500 * 1024 * 1024  # 500 MB
+    max_file_count = 500
+    max_ratio = 100
+
+    total_size = 0
+
     with zipfile.ZipFile(zip_path, "r") as zf:
-        for file_info in zf.infolist():
+        infolist = zf.infolist()
+
+        if len(infolist) > max_file_count:
+            raise ValueError(
+                f"❌ Zip Bomb attempt detected: too many files ({len(infolist)}). "
+                f"Max allowed is {max_file_count}."
+            )
+
+        for file_info in infolist:
+            total_size += file_info.file_size
+            if total_size > max_total_size:
+                raise ValueError(
+                    f"❌ Zip Bomb attempt detected: total uncompressed size ({total_size / (1024 * 1024):.1f} MB) "
+                    f"exceeds safety limit of {max_total_size // (1024 * 1024)} MB."
+                )
+
+            if file_info.compress_size > 0:
+                ratio = file_info.file_size / file_info.compress_size
+                if ratio > max_ratio and file_info.file_size > 10 * 1024 * 1024:
+                    raise ValueError(
+                        f"❌ Zip Bomb attempt detected: high compression ratio ({ratio:.1f}x) "
+                        f"on file {file_info.filename!r}."
+                    )
+
             # Resolve the full absolute target path
             target = os.path.realpath(
                 os.path.join(abs_extract_dir, file_info.filename)

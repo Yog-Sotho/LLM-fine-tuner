@@ -1,3 +1,8 @@
+## 2026-07-30 - [ZIP Bomb and Decompression DoS Hardening for safe_extract_zip]
+**Vulnerability:** The PEFT adapter extraction process in `safe_extract_zip` extracted files from user-uploaded ZIP archives without limits on total file count, total uncompressed size, or individual file decompression ratio. This exposed the server to Denial of Service (DoS) attacks via disk space exhaustion from decompression bombs (Zip Bombs).
+**Learning:** Validating paths for traversal is not enough when handling archive files; the decompression payload size and complexity must also be bounded at the parsing layer to prevent resource exhaustion attacks.
+**Prevention:** Always enforce strict safety thresholds on file count, total uncompressed size, and decompression ratio at the entry level of archive extraction functions.
+
 ## 2026-07-28 - [Defense-in-Depth Hardening for ModelRegistry and vLLM Runner]
 **Vulnerability:** Core model registration and adapter-merging functions (`ModelRegistry` in `export/registry.py` and vLLM runners in `inference/vllm_runner.py`) relied entirely on handler-level or UI-level validation. If accessed programmatically as a library or via direct API calls, these layers had no self-contained path traversal or null-byte protection.
 **Learning:** Security controls must be redundant and encapsulated inside class initializers and core functional interfaces (Layer 4/5) to ensure defense-in-depth, protecting core system APIs from execution context bypass.
