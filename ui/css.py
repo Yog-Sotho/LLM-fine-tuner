@@ -58,7 +58,21 @@ body, .gradio-container {
     border-radius: var(--radius);
     padding: 14px 18px;
     font-size: 0.88rem;
-    color: var(--text-muted);
+    color: var(--text-main) !important;
+}
+#hw-info ul, #hw-info li, #hw-info p, #hw-info span {
+    color: var(--text-main) !important;
+}
+#hw-info ul {
+    margin: 0 !important;
+    padding-left: 20px !important;
+}
+#hw-info li {
+    margin-bottom: 4px !important;
+    line-height: 1.4;
+}
+#hw-info li:last-child {
+    margin-bottom: 0 !important;
 }
 /* ── Tab bar ───────────────────────────────── */
 .tab-nav button {
@@ -188,5 +202,14 @@ input[type="range"] {
     border-radius: 8px !important;
     font-weight: 700 !important;
     box-shadow: 0 4px 15px rgba(14, 165, 233, 0.35) !important;
+}
+/* ── Keyboard Focus Indicators (Accessibility) ── */
+button:focus-visible,
+.tab-nav button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 2px solid var(--accent-lt) !important;
+    outline-offset: 2px !important;
 }
 """
