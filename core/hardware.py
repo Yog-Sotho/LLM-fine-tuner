@@ -47,9 +47,9 @@ def get_hardware_summary() -> str:
         name = torch.cuda.get_device_name(0)
         # L6 FIX: binary GiB (1024**3), not decimal GB (1e9).
         vram_gib = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
-        lines.append(f"🟢  GPU:  {name}  |  VRAM: {vram_gib:.1f} GiB ")
+        lines.append(f"- 🟢 **GPU:** {name} &nbsp;|&nbsp; **VRAM:** {vram_gib:.1f} GiB")
     else:
-        lines.append("🟡  GPU:  Not available — training will use CPU (slow) ")
+        lines.append("- 🟡 **GPU:** Not available &mdash; training will use CPU (slow)")
 
     # System RAM
     if HAS_PSUTIL:
@@ -57,24 +57,24 @@ def get_hardware_summary() -> str:
             import psutil
             # L6 FIX: binary GiB.
             ram_gib = psutil.virtual_memory().total / (1024 ** 3)
-            lines.append(f"💾  System RAM:  {ram_gib:.1f} GiB ")
+            lines.append(f"- 💾 **System RAM:** {ram_gib:.1f} GiB")
         except Exception:
-            lines.append("💾  System RAM:  unavailable ")
+            lines.append("- 💾 **System RAM:** Unavailable")
     else:
-        lines.append("💾  System RAM:  install `psutil` to see this ")
+        lines.append("- 💾 **System RAM:** Install `psutil` to see this")
 
     # PyTorch version
-    lines.append(f"🐍  PyTorch:  {torch.__version__} ")
+    lines.append(f"- 🐍 **PyTorch:** {torch.__version__}")
 
     # Core optional deps
     deps = []
-    deps.append("openpyxl ✓ "              if HAS_OPENPYXL else "openpyxl ✗ (no Excel) ")
-    deps.append("PyPDF2 ✓ "               if HAS_PDF      else "PyPDF2 ✗ (no PDF) ")
-    deps.append("huggingface_hub ✓ "      if HAS_HUB      else "huggingface_hub ✗ (no Hub push) ")
-    deps.append("psutil ✓ "               if HAS_PSUTIL   else "psutil ✗ ")
-    deps.append("unsloth ✓ "              if HAS_UNSLOTH  else "unsloth ✗ (install for 2-5× speed) ")
-    deps.append("trl ✓ (DPO + SFT ready)" if HAS_TRL      else "trl ✗ (pip install trl for DPO) ")
-    lines.append("📦  Optional deps: " + " | ".join(deps))
+    deps.append("openpyxl ✓"              if HAS_OPENPYXL else "openpyxl ✗ (no Excel)")
+    deps.append("PyPDF2 ✓"               if HAS_PDF      else "PyPDF2 ✗ (no PDF)")
+    deps.append("huggingface_hub ✓"      if HAS_HUB      else "huggingface_hub ✗ (no Hub push)")
+    deps.append("psutil ✓"               if HAS_PSUTIL   else "psutil ✗")
+    deps.append("unsloth ✓"              if HAS_UNSLOTH  else "unsloth ✗ (install for 2-5× speed)")
+    deps.append("trl ✓ (DPO + SFT ready)" if HAS_TRL      else "trl ✗ (pip install trl for DPO)")
+    lines.append("- 📦 **Optional deps:** " + " &nbsp;|&nbsp; ".join(deps))
 
     # v2.7 RLHF / eval deps
     v27 = []
@@ -86,7 +86,7 @@ def get_hardware_summary() -> str:
     v27.append("nltk ✓"          if HAS_NLTK           else "nltk ✗")
     v27.append("nlpaug ✓"        if HAS_NLPAUG         else "nlpaug ✗")
     v27.append("vLLM ✓ (cached)" if HAS_VLLM           else "vLLM ✗")
-    lines.append("🆕  v2.7 deps: " + " | ".join(v27))
+    lines.append("- 🆕 **v2.7 deps:** " + " &nbsp;|&nbsp; ".join(v27))
 
     return "\n".join(lines)
 
