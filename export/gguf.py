@@ -36,6 +36,18 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
 
     Returns a status string for display in the UI.
     """
+    # Sentinel: strip whitespace and validate inputs for defense-in-depth API level security
+    model_path = model_path.strip() if model_path else ""
+    output_dir = output_dir.strip() if output_dir else ""
+    quantization = quantization.strip() if quantization else ""
+
+    if err := (validate_path_traversal(model_path) or validate_path_traversal(output_dir)):
+        return f"❌ {err.lstrip('❌ ')}"
+
+    from core.state import validate_identifier
+    if err := validate_identifier(quantization):
+        return f"❌ {err.lstrip('❌ ')}"
+
     try:
         os.makedirs(output_dir, exist_ok=True)
 

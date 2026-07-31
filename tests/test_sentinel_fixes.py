@@ -146,3 +146,19 @@ def test_vllm_runner_security():
 
         with pytest.raises(ValueError, match="❌ Path traversal attempt detected."):
             vllm_generate_v27("gpt2", ["prompt"], vllm_quantization="awq/../")
+
+
+def test_export_to_gguf_security():
+    from export.gguf import export_to_gguf
+
+    # Test path traversal in model_path
+    res = export_to_gguf("../unsafe_model", "output_dir")
+    assert "❌ Path traversal attempt detected." in res
+
+    # Test path traversal in output_dir
+    res = export_to_gguf("gpt2", "../../unsafe_output")
+    assert "❌ Path traversal attempt detected." in res
+
+    # Test path traversal / injection in quantization
+    res = export_to_gguf("gpt2", "output_dir", "q4_../k_m")
+    assert "❌ Path traversal attempt detected." in res
