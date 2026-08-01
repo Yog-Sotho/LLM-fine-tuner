@@ -79,4 +79,7 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
         )
         return f"✅ Pushed to https://huggingface.co/{repo_id}"
     except Exception as e:
-        return f"❌ Push failed: {e}"
+        err_msg = str(e)
+        if token and token in err_msg:
+            err_msg = err_msg.replace(token, "[REDACTED]")
+        return f"❌ Push failed: {err_msg}"
