@@ -90,3 +90,11 @@
 ## 2026-08-30 - [Explicit Fast Tokenizer Force for Inference]
 **Learning:** Hugging Face `AutoTokenizer.from_pretrained` might load the slow Python-only tokenizer unless `use_fast=True` is explicitly specified. Forcing the fast Rust-backed tokenizer reduces CPU tokenization and batch decoding overhead during inference and automated evaluation. However, wrapping `BatchEncoding` to copy keys to devices via custom dict comprehension is slightly faster than native `.to()` on CPU due to the overhead of HF input validation wrapper functions.
 **Action:** Always explicitly specify `use_fast=True` for AutoTokenizers. Keep simple dictionary comprehensions for moving tokenized batch tensors to device on CPU.
+
+## 2026-09-05 - [In-place Casting and Stripping in Preprocessing]
+**Learning:** Performing string casting and stripping operations inline to construct masks and then repeating those same conversions later during sequence character length checks introduces significant redundant CPU and memory overhead. Doing cast and strip operations on the DataFrame columns in-place right at the entry point of `validate_and_clean_dataset` completely avoids redundant overhead, enables fast direct `.str.len()` for length checking (~1.31x speedup on 100k rows), and ensures the cleaned Dataset returned has proper data hygiene (stripped whitespace) for training.
+**Action:** Cast and strip dataset columns in-place using Pandas vectorization on entry, and use direct column properties (like `.str.len()`) subsequently without redundant conversion calls.
+
+## 2026-09-05 - [GIL and Threading Overhead in Nlpaug Concurrency]
+**Learning:** Passing `num_thread=os.cpu_count()` to `nlpaug.augmenter.word.SynonymAug.augment` actually slows down augmentation on small-to-medium datasets (e.g., taking ~1.5x longer) compared to single-threaded execution. This is because Python's Global Interpreter Lock (GIL) prevents true thread-level CPU parallelism for pure Python/NLTK logic, and the thread pools/queues overhead inside `nlpaug` dominates the total execution time.
+**Action:** Avoid micro-optimizations using multi-threading for Python packages unless verified with benchmarks to actually improve throughput.

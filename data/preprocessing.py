@@ -32,12 +32,12 @@ import pyarrow.compute as pc
 from datasets import Dataset
 
 from config.constants import (
+    COL_CHOSEN,
     COL_INSTRUCTION,
     COL_OUTPUT,
-    COL_TEXT,
     COL_PROMPT,
-    COL_CHOSEN,
     COL_REJECTED,
+    COL_TEXT,
 )
 
 
@@ -78,7 +78,7 @@ def get_dataset_stats(dataset: Dataset, is_dpo: bool = False) -> dict:
     mean_length = pc.mean(lengths).as_py()
     return {
         "num_examples": len(dataset),
-        "avg_length": float(mean_length) if mean_length is not None else 0.0
+        "avg_length": float(mean_length) if mean_length is not None else 0.0,
     }
 
 
@@ -102,19 +102,21 @@ def validate_and_clean_dataset(
     original_len = len(df)
 
     # ── Single-pass validation and filtering ──────────────────────────────
+    # BOLT OPTIMIZATION: Cast and strip text columns in-place.
+    # This cleans the dataset in-place (improving downstream training data hygiene)
+    # and completely avoids redundant .astype(str).str.strip() overhead later.
     if is_dpo:
-        # Vectorized strip and empty check for DPO
-        p_stripped = df[COL_PROMPT].astype(str).str.strip()
-        c_stripped = df[COL_CHOSEN].astype(str).str.strip()
-        r_stripped = df[COL_REJECTED].astype(str).str.strip()
-        mask = (p_stripped != "") & (c_stripped != "") & (r_stripped != "")
+        df[COL_PROMPT] = df[COL_PROMPT].astype(str).str.strip()
+        df[COL_CHOSEN] = df[COL_CHOSEN].astype(str).str.strip()
+        df[COL_REJECTED] = df[COL_REJECTED].astype(str).str.strip()
+        mask = (df[COL_PROMPT] != "") & (df[COL_CHOSEN] != "") & (df[COL_REJECTED] != "")
     elif COL_TEXT in df.columns:
-        t_stripped = df[COL_TEXT].astype(str).str.strip()
-        mask = t_stripped != ""
+        df[COL_TEXT] = df[COL_TEXT].astype(str).str.strip()
+        mask = df[COL_TEXT] != ""
     elif COL_INSTRUCTION in df.columns and COL_OUTPUT in df.columns:
-        i_stripped = df[COL_INSTRUCTION].astype(str).str.strip()
-        o_stripped = df[COL_OUTPUT].astype(str).str.strip()
-        mask = (i_stripped != "") & (o_stripped != "")
+        df[COL_INSTRUCTION] = df[COL_INSTRUCTION].astype(str).str.strip()
+        df[COL_OUTPUT] = df[COL_OUTPUT].astype(str).str.strip()
+        mask = (df[COL_INSTRUCTION] != "") & (df[COL_OUTPUT] != "")
     else:
         return dataset, ["⚠️ Unknown column structure — cannot validate."]
 
@@ -128,30 +130,39 @@ def validate_and_clean_dataset(
     # ── Duplicate detection AND removal (M4 FIX) ──────────────────────────
     # BOLT OPTIMIZATION: Use Pandas drop_duplicates for efficient O(N) deduplication.
     pre_dup_len = len(df)
-    if is_dpo or (COL_PROMPT in df.columns and COL_CHOSEN in df.columns and COL_REJECTED in df.columns):
-        df = df.drop_duplicates(subset=[COL_PROMPT, COL_CHOSEN, COL_REJECTED], keep='first').reset_index(drop=True)
+    if is_dpo or (
+        COL_PROMPT in df.columns and COL_CHOSEN in df.columns and COL_REJECTED in df.columns
+    ):
+        df = df.drop_duplicates(
+            subset=[COL_PROMPT, COL_CHOSEN, COL_REJECTED], keep="first"
+        ).reset_index(drop=True)
     elif COL_TEXT in df.columns:
         # preserve order and keep first occurrence
-        df = df.drop_duplicates(subset=[COL_TEXT], keep='first').reset_index(drop=True)
+        df = df.drop_duplicates(subset=[COL_TEXT], keep="first").reset_index(drop=True)
     elif COL_INSTRUCTION in df.columns and COL_OUTPUT in df.columns:
-        df = df.drop_duplicates(subset=[COL_INSTRUCTION, COL_OUTPUT], keep='first').reset_index(drop=True)
+        df = df.drop_duplicates(subset=[COL_INSTRUCTION, COL_OUTPUT], keep="first").reset_index(
+            drop=True
+        )
 
     n_dups = pre_dup_len - len(df)
     if n_dups > 0:
         issues.append(f"⚠️ {n_dups} duplicate examples removed. ")
 
     # ── Report long examples (will be truncated by tokeniser) ─────────────
-    # BOLT OPTIMIZATION: Calculate character lengths ONLY on clean, unique, final rows to avoid redundant computation and slow index realignment.
+    # BOLT OPTIMIZATION: Since columns were cast and stripped in-place during the
+    # first pass, we can calculate character lengths using fast, direct .str.len()
+    # on final unique rows, entirely bypassing redundant CPU and memory overhead.
     if len(df) > 0:
-        if is_dpo or (COL_PROMPT in df.columns and COL_CHOSEN in df.columns and COL_REJECTED in df.columns):
-            lengths = df[COL_PROMPT].astype(str).str.strip().str.len() + \
-                      df[COL_CHOSEN].astype(str).str.strip().str.len() + \
-                      df[COL_REJECTED].astype(str).str.strip().str.len()
+        if is_dpo or (
+            COL_PROMPT in df.columns and COL_CHOSEN in df.columns and COL_REJECTED in df.columns
+        ):
+            lengths = (
+                df[COL_PROMPT].str.len() + df[COL_CHOSEN].str.len() + df[COL_REJECTED].str.len()
+            )
         elif COL_TEXT in df.columns:
-            lengths = df[COL_TEXT].astype(str).str.strip().str.len()
+            lengths = df[COL_TEXT].str.len()
         elif COL_INSTRUCTION in df.columns and COL_OUTPUT in df.columns:
-            lengths = df[COL_INSTRUCTION].astype(str).str.strip().str.len() + \
-                      df[COL_OUTPUT].astype(str).str.strip().str.len()
+            lengths = df[COL_INSTRUCTION].str.len() + df[COL_OUTPUT].str.len()
         else:
             lengths = pd.Series(dtype=int)
     else:
@@ -189,11 +200,13 @@ def preview_dataset(dataset: Dataset, is_dpo: bool = False) -> pd.DataFrame:
         prompt_data = subset[COL_PROMPT] if COL_PROMPT in dataset.column_names else []
         chosen_data = subset[COL_CHOSEN] if COL_CHOSEN in dataset.column_names else []
         rejected_data = subset[COL_REJECTED] if COL_REJECTED in dataset.column_names else []
-        return pd.DataFrame({
-            COL_PROMPT:   prompt_data,
-            COL_CHOSEN:   chosen_data,
-            COL_REJECTED: rejected_data,
-        })
+        return pd.DataFrame(
+            {
+                COL_PROMPT: prompt_data,
+                COL_CHOSEN: chosen_data,
+                COL_REJECTED: rejected_data,
+            }
+        )
     elif COL_TEXT in dataset.column_names:
         # BOLT OPTIMIZATION: Efficient slicing pattern
         return pd.DataFrame({COL_TEXT: dataset[:10][COL_TEXT]})
@@ -203,11 +216,13 @@ def preview_dataset(dataset: Dataset, is_dpo: bool = False) -> pd.DataFrame:
         # columns via direct dict key access with a column_names check.
         subset = dataset[:5]
         inst_data = subset[COL_INSTRUCTION] if COL_INSTRUCTION in dataset.column_names else []
-        out_data  = subset[COL_OUTPUT]      if COL_OUTPUT      in dataset.column_names else []
-        return pd.DataFrame({
-            COL_INSTRUCTION: inst_data,
-            COL_OUTPUT:      out_data,
-        })
+        out_data = subset[COL_OUTPUT] if COL_OUTPUT in dataset.column_names else []
+        return pd.DataFrame(
+            {
+                COL_INSTRUCTION: inst_data,
+                COL_OUTPUT: out_data,
+            }
+        )
 
 
 def preprocess_function(
@@ -231,8 +246,8 @@ def preprocess_function(
         if task_type == COL_INSTRUCTION:
             for inst, out in zip(examples[COL_INSTRUCTION], examples[COL_OUTPUT]):
                 messages = [
-                    {"role": "system",    "content": system_prompt},
-                    {"role": "user",      "content": inst},
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": inst},
                     {"role": "assistant", "content": out},
                 ]
                 texts.append(
@@ -298,8 +313,8 @@ def tokenize_reward_function(
         return_attention_mask=True,
     )
     return {
-        "input_ids_chosen":        chosen_tok["input_ids"],
-        "attention_mask_chosen":   chosen_tok["attention_mask"],
-        "input_ids_rejected":      rejected_tok["input_ids"],
+        "input_ids_chosen": chosen_tok["input_ids"],
+        "attention_mask_chosen": chosen_tok["attention_mask"],
+        "input_ids_rejected": rejected_tok["input_ids"],
         "attention_mask_rejected": rejected_tok["attention_mask"],
     }
