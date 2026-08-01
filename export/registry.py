@@ -58,7 +58,10 @@ class ModelRegistry:
                 repo_type="model",
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to create repo: {e}")
+            err_msg = str(e)
+            if self.token and self.token in err_msg:
+                err_msg = err_msg.replace(self.token, "[REDACTED]")
+            raise RuntimeError(f"Failed to create repo: {err_msg}")
 
     def upload_model(self, model_path: str, version: str, metadata: dict) -> str:
         """Upload model files and a versioned metadata sidecar to the registry.
@@ -129,7 +132,10 @@ class ModelRegistry:
             )
 
         except Exception as e:
-            return f"❌ Upload failed: {e}"
+            err_msg = str(e)
+            if self.token and self.token in err_msg:
+                err_msg = err_msg.replace(self.token, "[REDACTED]")
+            return f"❌ Upload failed: {err_msg}"
 
     def list_versions(self) -> str:
         """Return a formatted string listing all versioned uploads in the repo."""
@@ -163,7 +169,10 @@ class ModelRegistry:
             return "Versions found:\n" + "\n".join(versions_info)
 
         except Exception as e:
-            return f"❌ Could not list versions: {e}"
+            err_msg = str(e)
+            if self.token and self.token in err_msg:
+                err_msg = err_msg.replace(self.token, "[REDACTED]")
+            return f"❌ Could not list versions: {err_msg}"
 
 
 # ── Gradio UI handlers ─────────────────────────────────────────────────────
@@ -218,7 +227,10 @@ def on_registry_upload(
         }
         return reg.upload_model(model_path_state, registry_version, metadata)
     except Exception as e:
-        return f"❌ Registry upload failed: {e}"
+        err_msg = str(e)
+        if registry_token and registry_token in err_msg:
+            err_msg = err_msg.replace(registry_token, "[REDACTED]")
+        return f"❌ Registry upload failed: {err_msg}"
 
 
 def on_registry_list(registry_repo_id: str, registry_token: str) -> str:
@@ -252,4 +264,7 @@ def on_registry_list(registry_repo_id: str, registry_token: str) -> str:
         reg = ModelRegistry(registry_repo_id, registry_token)
         return reg.list_versions()
     except Exception as e:
-        return f"❌ {e}"
+        err_msg = str(e)
+        if registry_token and registry_token in err_msg:
+            err_msg = err_msg.replace(registry_token, "[REDACTED]")
+        return f"❌ {err_msg}"

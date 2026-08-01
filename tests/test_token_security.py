@@ -49,3 +49,34 @@ def test_push_to_hub_model_path_security_no_mock():
 
     result = push_to_hub("model_dir/\0", "user/repo", "hf_valid_token")
     assert "❌ Path traversal attempt detected." in result
+
+def test_push_to_hub_token_redaction_in_exceptions():
+    # Mock HfApi to raise an exception containing the token
+    with patch("os.path.isdir", return_value=True):
+        with patch("huggingface_hub.HfApi") as MockApi:
+            mock_api_instance = MockApi.return_value
+            # Make upload_folder raise an exception containing the sensitive token
+            mock_api_instance.upload_folder.side_effect = Exception("Failed with token hf_valid_token_36_characters_minimum_len")
+
+            result = push_to_hub("model_dir", "user/repo", "hf_valid_token_36_characters_minimum_len")
+            assert "[REDACTED]" in result
+            assert "hf_valid_token_36_characters_minimum_len" not in result
+
+def test_on_registry_upload_token_redaction_in_exceptions():
+    with patch("os.path.isdir", return_value=True):
+        with patch("export.registry.ModelRegistry") as MockRegistry:
+            mock_registry_instance = MockRegistry.return_value
+            mock_registry_instance.upload_model.side_effect = Exception("Upload error for token hf_valid_token_36_characters_minimum_len")
+
+            result = on_registry_upload("model_dir", "user/repo", "hf_valid_token_36_characters_minimum_len", "v1.0", "notes")
+            assert "[REDACTED]" in result
+            assert "hf_valid_token_36_characters_minimum_len" not in result
+
+def test_on_registry_list_token_redaction_in_exceptions():
+    with patch("export.registry.ModelRegistry") as MockRegistry:
+        mock_registry_instance = MockRegistry.return_value
+        mock_registry_instance.list_versions.side_effect = Exception("List error with hf_valid_token_36_characters_minimum_len")
+
+        result = on_registry_list("user/repo", "hf_valid_token_36_characters_minimum_len")
+        assert "[REDACTED]" in result
+        assert "hf_valid_token_36_characters_minimum_len" not in result

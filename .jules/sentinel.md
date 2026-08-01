@@ -1,3 +1,8 @@
+## 2026-08-01 - [Sensitive Token Redaction in Hub and Model Registry Exceptions]
+**Vulnerability:** Raw exception messages from Hugging Face Hub APIs or connection errors could contain the sensitive user-supplied API write token, which was subsequently returned and displayed directly in the Gradio UI error panels or written to application logs, exposing user credentials.
+**Learning:** Checking credentials for format constraints and path traversal is not enough. If downstream library calls fail, they may include credentials in their output strings, connection details, or exception representations. Exceptions must be intercepted and sanitized before they cross boundaries to the UI or logs.
+**Prevention:** Always scan error/exception messages for sensitive inputs (like API keys, tokens, or passwords) and replace them with `[REDACTED]` before presenting or logging the error.
+
 ## 2026-07-30 - [ZIP Bomb and Decompression DoS Hardening for safe_extract_zip]
 **Vulnerability:** The PEFT adapter extraction process in `safe_extract_zip` extracted files from user-uploaded ZIP archives without limits on total file count, total uncompressed size, or individual file decompression ratio. This exposed the server to Denial of Service (DoS) attacks via disk space exhaustion from decompression bombs (Zip Bombs).
 **Learning:** Validating paths for traversal is not enough when handling archive files; the decompression payload size and complexity must also be bounded at the parsing layer to prevent resource exhaustion attacks.
