@@ -21,8 +21,10 @@ def build_inference_tab() -> dict:
                                           placeholder="username/my-model",
                                           max_length=512)
                 lora_path    = gr.Textbox(
-                    label="PEFT adapter path (auto-filled after training)",
-                    interactive=False,
+                    label="PEFT Adapter Path",
+                    placeholder="e.g. ./output (auto-filled after training, or enter custom path)",
+                    interactive=True,
+                    max_length=512,
                 )
                 prompt_in    = gr.Textbox(
                     label="Prompt", lines=4,
