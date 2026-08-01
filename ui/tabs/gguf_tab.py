@@ -10,7 +10,10 @@ def build_gguf_tab() -> dict:
         with gr.Row():
             with gr.Column():
                 export_model_path = gr.Textbox(
-                    label="Model Path (auto-filled after training)", interactive=False
+                    label="Model Path (auto-filled after training)",
+                    interactive=True,
+                    placeholder="./output or leave blank to use last trained model path",
+                    info="You can manually enter or paste a custom model directory path here.",
                 )
                 quantization = gr.Dropdown(
                     choices=list(GGUF_QUANT_PRESETS.keys()),
