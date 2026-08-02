@@ -9,3 +9,7 @@ This journal documents critical UX and accessibility (a11y) learnings discovered
 ## 2025-07-29 - [Avoid Non-Interactive Input Locked Fields for Shared States]
 **Learning:** Automatically-populated text boxes (such as PEFT adapters or exported GGUF model paths) in multi-stage workflows should not be set to `interactive=False` when users may want to bypass earlier stages in future sessions. Locking inputs entirely prevents keyboard focus, manual pasting, and keyboard navigation, breaking basic accessibility and workflow resumption.
 **Action:** Keep output path fields interactive but use placeholder text to clarify that they are both auto-filled and editable.
+
+## 2025-07-30 - [Keep Model Resource Estimations Synced Dynamically]
+**Learning:** Displaying static resource estimations based solely on dropdown selections when custom text override fields exist causes a disconnect between user input and interface feedback. Automatically syncing both events to update parameter/VRAM estimates ensures consistent user expectations and prevents confusion.
+**Action:** Always bind the change events of both override inputs and baseline choices to update shared status blocks, with proper fallback logic for empty or whitespace-only strings.
