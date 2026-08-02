@@ -129,9 +129,19 @@ def build_demo() -> gr.Blocks:
         )
 
         # ── Training Tab ───────────────────────────────────────────────────
+        def _get_active_model_info(custom, choice):
+            custom_stripped = (custom or "").strip()
+            active_model = custom_stripped if custom_stripped else choice
+            return get_model_info(active_model)
+
         tt["model_choice"].change(
-            fn=get_model_info,
-            inputs=[tt["model_choice"]],
+            fn=_get_active_model_info,
+            inputs=[tt["custom_model"], tt["model_choice"]],
+            outputs=[tt["model_info_md"]],
+        )
+        tt["custom_model"].change(
+            fn=_get_active_model_info,
+            inputs=[tt["custom_model"], tt["model_choice"]],
             outputs=[tt["model_info_md"]],
         )
 
