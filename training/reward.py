@@ -193,4 +193,6 @@ def train_reward_model_v27(
         )
 
     except Exception as e:
-        return f"❌ Reward model training failed: {e}"
+        from core.state import redact_sensitive_info
+        err_msg = redact_sensitive_info(str(e))
+        return f"❌ Reward model training failed: {err_msg}"

@@ -119,7 +119,8 @@ def on_train_click(
         try:
             ds = load_dataset_from_file(file, ftype, col_map, is_dpo=is_dpo)
         except Exception as e:
-            return str(e), None, None, []
+            from core.state import redact_sensitive_info
+            return redact_sensitive_info(str(e)), None, None, []
 
         ds, issues = validate_and_clean_dataset(ds, is_dpo=is_dpo)
         if len(ds) == 0:
@@ -183,7 +184,9 @@ def on_train_click(
         return full_msg, zip_path, output_dir, log_records
 
     except Exception as e:
-        return f"❌ Training failed: {e}\n{issues_str}", None, None, []
+        from core.state import redact_sensitive_info
+        err_msg = redact_sensitive_info(str(e))
+        return f"❌ Training failed: {err_msg}\n{issues_str}", None, None, []
 
 
 def on_stop() -> str:
@@ -325,8 +328,10 @@ def on_file_upload(file, training_mode="sft"):
         )
 
     except Exception as e:
+        from core.state import redact_sensitive_info
+        err_msg = redact_sensitive_info(str(e))
         return (
-            f"❌ Error: {e}",
+            f"❌ Error: {err_msg}",
             gr.update(visible=False), gr.update(visible=False), gr.update(visible=False),
             pd.DataFrame(), " ", None, None,
         )
@@ -370,7 +375,9 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
         return preview_df, stats
 
     except Exception as e:
-        return pd.DataFrame(), f"❌ Preview refresh failed: {e}"
+        from core.state import redact_sensitive_info
+        err_msg = redact_sensitive_info(str(e))
+        return pd.DataFrame(), f"❌ Preview refresh failed: {err_msg}"
 
 
 # ── Loss chart ─────────────────────────────────────────────────────────────

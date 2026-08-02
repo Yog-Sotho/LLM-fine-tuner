@@ -208,4 +208,6 @@ def train_orpo_v27(
         )
 
     except Exception as e:
-        return f"❌ ORPO training failed: {e}"
+        from core.state import redact_sensitive_info
+        err_msg = redact_sensitive_info(str(e))
+        return f"❌ ORPO training failed: {err_msg}"

@@ -254,4 +254,6 @@ def run_ppo_v27(
         )
 
     except Exception as e:
-        return f"❌ PPO training failed: {e}"
+        from core.state import redact_sensitive_info
+        err_msg = redact_sensitive_info(str(e))
+        return f"❌ PPO training failed: {err_msg}"

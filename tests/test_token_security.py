@@ -80,3 +80,39 @@ def test_on_registry_list_token_redaction_in_exceptions():
         result = on_registry_list("user/repo", "hf_valid_token_36_characters_minimum_len")
         assert "[REDACTED]" in result
         assert "hf_valid_token_36_characters_minimum_len" not in result
+
+
+def test_redact_sensitive_info_utility():
+    from core.state import redact_sensitive_info
+
+    # Test standard token redaction
+    assert redact_sensitive_info("error hf_AbCdEfGhIjKlMnOpQrStUvWxYz12345678") == "error [REDACTED]"
+    # Test shorter non-tokens are not redacted
+    assert redact_sensitive_info("error hf_abc123") == "error hf_abc123"
+    # Test none or empty string handling
+    assert redact_sensitive_info("") == ""
+    assert redact_sensitive_info(None) is None
+
+    # Test environment variable HF_TOKEN redaction
+    with patch.dict(os.environ, {"HF_TOKEN": "my_secret_token_123456"}):
+        assert redact_sensitive_info("failed to authenticate with my_secret_token_123456") == "failed to authenticate with [REDACTED]"
+
+
+def test_handlers_on_train_click_redacts_tokens():
+    from ui.handlers import on_train_click
+
+    # If loading file throws an exception containing a token, it should be redacted
+    mock_file = MagicMock()
+    mock_file.name = "valid_name.csv"
+
+    # We patch detect_file_type and load_dataset_from_file to raise an exception containing a token
+    with patch("ui.handlers.detect_file_type", return_value="csv"):
+        with patch("ui.handlers.load_dataset_from_file", side_effect=Exception("Failed to access HF with hf_AbCdEfGhIjKlMnOpQrStUvWxYz12345678")):
+            res, _, _, _ = on_train_click(
+                mock_file, "gpt2", "", "Quick (1 epoch)", "LoRA",
+                True, 8, 16, 30, 512, 2, 20, 16, 1.4e-5, 1, 1, 1, 256, 100,
+                3, "cosine", True, False, "col_inst", "col_out", "col_text",
+                False, False, "System prompt", "sft", 0.1, False
+            )
+            assert "[REDACTED]" in res
+            assert "hf_AbCdEfGhIjKlMnOpQrStUvWxYz12345678" not in res

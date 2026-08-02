@@ -570,7 +570,9 @@ def train_model(
         return summary, log_callback.records
 
     except Exception as e:
-        raise RuntimeError(f"Training failed: {e}")
+        from core.state import redact_sensitive_info
+        err_msg = redact_sensitive_info(str(e))
+        raise RuntimeError(f"Training failed: {err_msg}")
 
 
 def load_qlora_model_v27(model_name: str, use_flash_attn: bool = False):

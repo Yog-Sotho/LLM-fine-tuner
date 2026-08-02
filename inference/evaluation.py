@@ -577,4 +577,6 @@ def on_evaluate_click(
         return metrics_str, pd.DataFrame(result_data), preview_html
 
     except Exception as e:
-        return f"❌ Evaluation failed: {e}", pd.DataFrame(), ""
+        from core.state import redact_sensitive_info
+        err_msg = redact_sensitive_info(str(e))
+        return f"❌ Evaluation failed: {err_msg}", pd.DataFrame(), ""

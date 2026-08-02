@@ -16,8 +16,26 @@ The module-level singleton `app_state` is the single source of truth for:
 """
 
 import os
+import re
 import shutil
 import threading
+
+
+def redact_sensitive_info(text: str) -> str:
+    """Scan the text for sensitive patterns (like Hugging Face tokens) and redact them.
+
+    Sentinel: General-purpose defense-in-depth token redactor to prevent accidental
+    leakage of credentials in exception messages displayed to the UI or logs.
+    """
+    if not text:
+        return text
+    # Redact Hugging Face tokens matching 'hf_' followed by at least 33 alphanumeric characters
+    text = re.sub(r'hf_[a-zA-Z0-9]{33,}', '[REDACTED]', text)
+    # Also redact if there's any HF_TOKEN from the environment
+    hf_token_env = os.environ.get("HF_TOKEN")
+    if hf_token_env and len(hf_token_env) >= 12:
+        text = text.replace(hf_token_env, "[REDACTED]")
+    return text
 
 
 def validate_path_traversal(path: str | None) -> str | None:

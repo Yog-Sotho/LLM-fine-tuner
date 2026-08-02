@@ -151,7 +151,9 @@ def train(
     except typer.Exit:
         raise
     except Exception as e:
-        typer.echo(f"\n❌ Training failed: {e}", err=True)
+        from core.state import redact_sensitive_info
+        err_msg = redact_sensitive_info(str(e))
+        typer.echo(f"\n❌ Training failed: {err_msg}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -224,7 +226,9 @@ def reward(
     except typer.Exit:
         raise
     except Exception as e:
-        typer.echo(f"\n❌ Reward training failed: {e}", err=True)
+        from core.state import redact_sensitive_info
+        err_msg = redact_sensitive_info(str(e))
+        typer.echo(f"\n❌ Reward training failed: {err_msg}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -292,7 +296,9 @@ def orpo(
     except typer.Exit:
         raise
     except Exception as e:
-        typer.echo(f"\n❌ ORPO training failed: {e}", err=True)
+        from core.state import redact_sensitive_info
+        err_msg = redact_sensitive_info(str(e))
+        typer.echo(f"\n❌ ORPO training failed: {err_msg}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -375,7 +381,9 @@ def ppo(
     except typer.Exit:
         raise
     except Exception as e:
-        typer.echo(f"\n❌ PPO training failed: {e}", err=True)
+        from core.state import redact_sensitive_info
+        err_msg = redact_sensitive_info(str(e))
+        typer.echo(f"\n❌ PPO training failed: {err_msg}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -477,7 +485,9 @@ def evaluate(
     except typer.Exit:
         raise
     except Exception as e:
-        typer.echo(f"\n❌ Evaluation failed: {e}", err=True)
+        from core.state import redact_sensitive_info
+        err_msg = redact_sensitive_info(str(e))
+        typer.echo(f"\n❌ Evaluation failed: {err_msg}", err=True)
         raise typer.Exit(code=1)
 
 
