@@ -80,3 +80,19 @@ def test_on_registry_list_token_redaction_in_exceptions():
         result = on_registry_list("user/repo", "hf_valid_token_36_characters_minimum_len")
         assert "[REDACTED]" in result
         assert "hf_valid_token_36_characters_minimum_len" not in result
+
+def test_redact_sensitive_info():
+    from core.state import redact_sensitive_info
+
+    # Test that regex-based standard hf tokens are redacted
+    msg = "Error: Invalid credentials for token hf_abc123456789012345678901234567890abc"
+    redacted = redact_sensitive_info(msg)
+    assert "[REDACTED]" in redacted
+    assert "hf_abc123456789012345678901234567890abc" not in redacted
+
+    # Test that environment HF_TOKEN is redacted
+    with patch.dict(os.environ, {"HF_TOKEN": "my_secret_hf_token_value_123"}):
+        msg_env = "Failed to connect using my_secret_hf_token_value_123"
+        redacted_env = redact_sensitive_info(msg_env)
+        assert "[REDACTED]" in redacted_env
+        assert "my_secret_hf_token_value_123" not in redacted_env

@@ -1,3 +1,8 @@
+## 2026-08-02 - [Centralized Regex and Environment-Based Token Redaction]
+**Vulnerability:** Scattered try-except blocks manually called `.replace(token, "[REDACTED]")` on user-supplied tokens. This was prone to gaps, was not regex-hardened for generic tokens, didn't cover environment variables (`HF_TOKEN`) automatically, and could miss leaks in secondary logs/UI failure screens.
+**Learning:** Hardening individual exception strings is brittle. Regex search patterns must support standard alphanumeric tokens as well as mock tokens with special characters like underscores (`_`). Centralizing security scrubbing in `core/state.py` ensures all layers (Hub, Registry, UI handlers, etc.) consistently apply defense-in-depth protection.
+**Prevention:** Establish a unified `redact_sensitive_info` utility combining regex rules and environment variable extraction, and wrap all outbound user-facing or log-facing errors inside it.
+
 ## 2026-08-01 - [Sensitive Token Redaction in Hub and Model Registry Exceptions]
 **Vulnerability:** Raw exception messages from Hugging Face Hub APIs or connection errors could contain the sensitive user-supplied API write token, which was subsequently returned and displayed directly in the Gradio UI error panels or written to application logs, exposing user credentials.
 **Learning:** Checking credentials for format constraints and path traversal is not enough. If downstream library calls fail, they may include credentials in their output strings, connection details, or exception representations. Exceptions must be intercepted and sanitized before they cross boundaries to the UI or logs.

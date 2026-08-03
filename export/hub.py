@@ -39,7 +39,7 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
     token      = token.strip()      if token      else ""
     model_path = model_path.strip() if model_path else ""
 
-    from core.state import validate_path_traversal
+    from core.state import validate_path_traversal, redact_sensitive_info
     if err := (
         validate_path_traversal(model_path)
         or validate_path_traversal(repo_id)
@@ -79,7 +79,5 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
         )
         return f"✅ Pushed to https://huggingface.co/{repo_id}"
     except Exception as e:
-        err_msg = str(e)
-        if token and token in err_msg:
-            err_msg = err_msg.replace(token, "[REDACTED]")
+        err_msg = redact_sensitive_info(str(e))
         return f"❌ Push failed: {err_msg}"
