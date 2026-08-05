@@ -183,7 +183,8 @@ def on_train_click(
         return full_msg, zip_path, output_dir, log_records
 
     except Exception as e:
-        return f"❌ Training failed: {e}\n{issues_str}", None, None, []
+        from core.state import redact_sensitive_info
+        return f"❌ Training failed: {redact_sensitive_info(str(e))}\n{issues_str}", None, None, []
 
 
 def on_stop() -> str:
@@ -325,8 +326,9 @@ def on_file_upload(file, training_mode="sft"):
         )
 
     except Exception as e:
+        from core.state import redact_sensitive_info
         return (
-            f"❌ Error: {e}",
+            f"❌ Error: {redact_sensitive_info(str(e))}",
             gr.update(visible=False), gr.update(visible=False), gr.update(visible=False),
             pd.DataFrame(), " ", None, None,
         )
@@ -370,7 +372,8 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
         return preview_df, stats
 
     except Exception as e:
-        return pd.DataFrame(), f"❌ Preview refresh failed: {e}"
+        from core.state import redact_sensitive_info
+        return pd.DataFrame(), f"❌ Preview refresh failed: {redact_sensitive_info(str(e))}"
 
 
 # ── Loss chart ─────────────────────────────────────────────────────────────

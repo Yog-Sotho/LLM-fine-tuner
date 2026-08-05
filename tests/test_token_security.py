@@ -1,10 +1,10 @@
 
-import pytest
-from unittest.mock import MagicMock, patch
 import os
+from unittest.mock import patch
 
 from export.hub import push_to_hub
-from export.registry import on_registry_upload, on_registry_list
+from export.registry import on_registry_list, on_registry_upload
+
 
 def test_push_to_hub_token_security():
     # Test with null byte in token
@@ -80,3 +80,23 @@ def test_on_registry_list_token_redaction_in_exceptions():
         result = on_registry_list("user/repo", "hf_valid_token_36_characters_minimum_len")
         assert "[REDACTED]" in result
         assert "hf_valid_token_36_characters_minimum_len" not in result
+
+def test_redact_sensitive_info_utility():
+    from core.state import redact_sensitive_info
+
+    # 1. Test redacting valid-looking Hugging Face token in string
+    sample_text = "Connection failed with token hf_abc123xyz789012345678901234567890abc"
+    redacted = redact_sensitive_info(sample_text)
+    assert "[REDACTED]" in redacted
+    assert "hf_abc123xyz789012345678901234567890abc" not in redacted
+
+    # 2. Test redacting environment HF_TOKEN
+    with patch.dict(os.environ, {"HF_TOKEN": "my_secret_env_token_value_xyz"}):
+        sample_text_2 = "Error uploading to repo using token my_secret_env_token_value_xyz"
+        redacted_2 = redact_sensitive_info(sample_text_2)
+        assert "[REDACTED]" in redacted_2
+        assert "my_secret_env_token_value_xyz" not in redacted_2
+
+    # 3. Test handling None or empty strings
+    assert redact_sensitive_info(None) == ""
+    assert redact_sensitive_info("") == ""

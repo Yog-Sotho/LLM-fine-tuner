@@ -45,6 +45,24 @@ def validate_identifier(identifier: str | None) -> str | None:
     return None
 
 
+def redact_sensitive_info(text: str | None) -> str:
+    """Redact Hugging Face API tokens and any environment HF_TOKEN from a string.
+
+    Uses a robust regex pattern to match 'hf_' followed by at least 30 alphanumeric
+    characters/underscores, and also redacts any explicit token defined in the environment.
+    """
+    if not text:
+        return ""
+    import re
+    # 1. Redact Hugging Face tokens matching the standard pattern hf_...
+    text = re.sub(r"\bhf_[a-zA-Z0-9_]{30,}\b", "[REDACTED]", text)
+    # 2. Redact any explicit token present in the HF_TOKEN environment variable
+    env_token = os.environ.get("HF_TOKEN", "")
+    if env_token and len(env_token) >= 8:
+        text = text.replace(env_token, "[REDACTED]")
+    return text
+
+
 class AppState:
     def __init__(self) -> None:
         # Training stop signal

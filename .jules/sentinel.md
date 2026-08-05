@@ -1,3 +1,8 @@
+## 2026-08-02 - [Centralized Token Redaction Utility for Defense-in-Depth]
+**Vulnerability:** Scattered manual token redaction checks were prone to omissions across various training pipelines (e.g., SFT, DPO, ORPO, PPO, Reward modeling), UI handlers, and Typer CLI exception boundaries, potentially leading to credentials (like HuggingFace API tokens) leaking via connection errors, missing environment-based redactions, or verbose framework stack traces.
+**Learning:** Hardcoding token `.replace()` logic inside isolated module catch blocks is not maintainable or secure. A single centralized redaction function utilizing robust regex parsing and checking active environment variables (like `HF_TOKEN`) provides uniform defense-in-depth across training, evaluation, export, CLI, and UI layers.
+**Prevention:** Centralize all sensitive information redaction logic into a dedicated core security utility, and systematically wrap all raw exception messages crossing boundaries (UI panels, logs, CLI outputs) with it.
+
 ## 2026-08-01 - [Sensitive Token Redaction in Hub and Model Registry Exceptions]
 **Vulnerability:** Raw exception messages from Hugging Face Hub APIs or connection errors could contain the sensitive user-supplied API write token, which was subsequently returned and displayed directly in the Gradio UI error panels or written to application logs, exposing user credentials.
 **Learning:** Checking credentials for format constraints and path traversal is not enough. If downstream library calls fail, they may include credentials in their output strings, connection details, or exception representations. Exceptions must be intercepted and sanitized before they cross boundaries to the UI or logs.
