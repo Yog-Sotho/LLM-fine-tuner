@@ -74,6 +74,57 @@ def _esc(s: str) -> str:
 
 # ── BLEU + ROUGE ───────────────────────────────────────────────────────────
 
+def _eval_chunk_worker(chunk: list[tuple[str, str]], has_nltk: bool, has_rouge: bool) -> tuple[list[float], list[float], list[float], list[float]]:
+    """Worker function for multiprocessing BLEU and ROUGE scoring.
+
+    Processes a list of (prediction, reference) pairs.
+    """
+    bleu_scores = []
+    r1_scores = []
+    r2_scores = []
+    rl_scores = []
+
+    # Import lazily inside worker to prevent load/import serialization issues
+    if has_nltk:
+        from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu  # noqa: PLC0415
+        smoothing = SmoothingFunction().method4
+    if has_rouge:
+        from rouge_score import rouge_scorer as rouge_scorer_lib  # noqa: PLC0415
+        scorer = rouge_scorer_lib.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True)
+
+    for pred, ref in chunk:
+        if has_nltk:
+            pred_tokens = pred.split()
+            ref_tokens = [ref.split()]
+            if pred_tokens:
+                try:
+                    score = sentence_bleu(ref_tokens, pred_tokens, smoothing_function=smoothing)
+                    bleu_scores.append(score)
+                except Exception:
+                    bleu_scores.append(0.0)
+            else:
+                bleu_scores.append(0.0)
+        else:
+            bleu_scores.append(0.0)
+
+        if has_rouge:
+            try:
+                scores = scorer.score(ref, pred)
+                r1_scores.append(scores["rouge1"].fmeasure)
+                r2_scores.append(scores["rouge2"].fmeasure)
+                rl_scores.append(scores["rougeL"].fmeasure)
+            except Exception:
+                r1_scores.append(0.0)
+                r2_scores.append(0.0)
+                rl_scores.append(0.0)
+        else:
+            r1_scores.append(0.0)
+            r2_scores.append(0.0)
+            rl_scores.append(0.0)
+
+    return bleu_scores, r1_scores, r2_scores, rl_scores
+
+
 def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
     """Compute BLEU-1, ROUGE-1, ROUGE-2, ROUGE-L over paired lists.
 
@@ -81,7 +132,66 @@ def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
     """
     # numpy is imported at the top of the module (M-5 FIX)
     results = {}
+    num_items = len(predictions)
 
+    if not predictions or not references:
+        results["BLEU-1"] = 0.0 if HAS_NLTK else "nltk not installed"
+        results["ROUGE-1"] = results["ROUGE-2"] = results["ROUGE-L"] = 0.0 if HAS_ROUGE else "rouge_score not installed"
+        return results
+
+    # BOLT OPTIMIZATION: Use multiprocessing when inputs are 100 or more items
+    # and multiple CPU cores are available.
+    import os
+    num_cores = os.cpu_count() or 1
+
+    if num_items >= 100 and num_cores > 1 and (HAS_NLTK or HAS_ROUGE):
+        import multiprocessing
+        from concurrent.futures import ProcessPoolExecutor
+
+        try:
+            num_workers = min(num_cores, 8)
+            chunk_size = (num_items + num_workers - 1) // num_workers
+            chunks = []
+            for i in range(0, num_items, chunk_size):
+                chunks.append(list(zip(predictions[i:i + chunk_size], references[i:i + chunk_size])))
+
+            bleu_scores = []
+            r1_scores = []
+            r2_scores = []
+            rl_scores = []
+
+            # Prioritize 'fork' context on Unix to avoid overhead of re-importing heavy libraries
+            ctx = multiprocessing.get_context("fork") if "fork" in multiprocessing.get_all_start_methods() else multiprocessing.get_context("spawn")
+            with ProcessPoolExecutor(mp_context=ctx, max_workers=num_workers) as executor:
+                futures = [
+                    executor.submit(_eval_chunk_worker, chunk, HAS_NLTK, HAS_ROUGE)
+                    for chunk in chunks
+                ]
+                for fut in futures:
+                    b, r1, r2, rl = fut.result()
+                    bleu_scores.extend(b)
+                    r1_scores.extend(r1)
+                    r2_scores.extend(r2)
+                    rl_scores.extend(rl)
+
+            if HAS_NLTK:
+                results["BLEU-1"] = round(float(np.mean(bleu_scores)), 4) if bleu_scores else 0.0
+            else:
+                results["BLEU-1"] = "nltk not installed"
+
+            if HAS_ROUGE:
+                results["ROUGE-1"] = round(float(np.mean(r1_scores)), 4) if r1_scores else 0.0
+                results["ROUGE-2"] = round(float(np.mean(r2_scores)), 4) if r2_scores else 0.0
+                results["ROUGE-L"] = round(float(np.mean(rl_scores)), 4) if rl_scores else 0.0
+            else:
+                results["ROUGE-1"] = results["ROUGE-2"] = results["ROUGE-L"] = "rouge_score not installed"
+
+            return results
+        except Exception:
+            # Fallback to robust sequential implementation on any process-spawning exception
+            pass
+
+    # Sequential implementation
     if HAS_NLTK and predictions and references:
         from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu  # lazy
 
