@@ -38,6 +38,7 @@ def build_evaluation_tab() -> dict:
                 eval_custom_model = gr.Textbox(
                     label="Or custom model / local path",
                     placeholder="./output/model or username/model",
+                    info="If specified, this model ID will override the 'Model to Evaluate' dropdown selection above.",
                     max_length=512,
                 )
                 eval_lora_path_in = gr.Textbox(

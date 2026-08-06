@@ -17,9 +17,12 @@ def build_inference_tab() -> dict:
                     ],
                     value="gpt2", label="Model",
                 )
-                infer_custom = gr.Textbox(label="Or custom model ID",
-                                          placeholder="username/my-model",
-                                          max_length=512)
+                infer_custom = gr.Textbox(
+                    label="Or custom model ID",
+                    placeholder="username/my-model",
+                    info="If specified, this model ID will override the 'Model' dropdown selection above.",
+                    max_length=512,
+                )
                 lora_path    = gr.Textbox(
                     label="PEFT Adapter Path",
                     placeholder="e.g. ./output (auto-filled after training, or enter custom path)",
