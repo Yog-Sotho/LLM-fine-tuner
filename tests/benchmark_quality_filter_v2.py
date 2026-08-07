@@ -1,6 +1,9 @@
 
 import time
+from data.augmentation import quality_filter_v27
 import pandas as pd
+import pyarrow as pa
+import pyarrow.compute as pc
 from datasets import Dataset
 import numpy as np
 
@@ -58,6 +61,10 @@ def filter_pandas_full(ds):
     df_filtered = df[mask].reset_index(drop=True)
     return Dataset.from_pandas(df_filtered, preserve_index=False)
 
+def filter_pyarrow_native(ds):
+    filtered_ds, _ = quality_filter_v27(ds, min_length=min_length, max_length=max_length, is_dpo=True)
+    return filtered_ds
+
 print(f"Benchmarking filtering on {N} rows...")
 
 start = time.time()
@@ -78,8 +85,15 @@ end = time.time()
 time_full_pd = end - start
 print(f"Full Pandas (OOM risk): {time_full_pd:.4f}s")
 
-print(f"Vectorized Batched Speedup over Original: {time_orig / time_vec_batch:.2f}x")
-print(f"Full Pandas Speedup over Vectorized Batched: {time_vec_batch / time_full_pd:.2f}x")
+start = time.time()
+res4 = filter_pyarrow_native(dataset)
+end = time.time()
+time_pyarrow = end - start
+print(f"Native PyArrow filter (Our Optimization): {time_pyarrow:.4f}s")
 
-assert len(res1) == len(res2) == len(res3)
+print(f"PyArrow Speedup over Original Batched: {time_orig / time_pyarrow:.2f}x")
+print(f"PyArrow Speedup over Vectorized Batched: {time_vec_batch / time_pyarrow:.2f}x")
+print(f"PyArrow Speedup over Full Pandas: {time_full_pd / time_pyarrow:.2f}x")
+
+assert len(res1) == len(res2) == len(res3) == len(res4)
 print("Success!")
