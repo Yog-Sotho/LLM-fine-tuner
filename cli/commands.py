@@ -39,7 +39,7 @@ from config.constants import (
     COL_PROMPT, COL_TEXT, COL_INSTRUCTION,
     HAS_REWARD_TRAINER, HAS_PPO, HAS_ORPO,
 )
-from core.state import validate_path_traversal
+from core.state import validate_path_traversal, redact_sensitive_info
 from data.loader import load_dataset_from_file
 from data.preprocessing import validate_and_clean_dataset
 from inference.evaluation import compute_bleu_rouge, compute_bertscore_metric
@@ -151,7 +151,7 @@ def train(
     except typer.Exit:
         raise
     except Exception as e:
-        typer.echo(f"\n❌ Training failed: {e}", err=True)
+        typer.echo(f"\n❌ Training failed: {redact_sensitive_info(str(e))}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -224,7 +224,7 @@ def reward(
     except typer.Exit:
         raise
     except Exception as e:
-        typer.echo(f"\n❌ Reward training failed: {e}", err=True)
+        typer.echo(f"\n❌ Reward training failed: {redact_sensitive_info(str(e))}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -292,7 +292,7 @@ def orpo(
     except typer.Exit:
         raise
     except Exception as e:
-        typer.echo(f"\n❌ ORPO training failed: {e}", err=True)
+        typer.echo(f"\n❌ ORPO training failed: {redact_sensitive_info(str(e))}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -375,7 +375,7 @@ def ppo(
     except typer.Exit:
         raise
     except Exception as e:
-        typer.echo(f"\n❌ PPO training failed: {e}", err=True)
+        typer.echo(f"\n❌ PPO training failed: {redact_sensitive_info(str(e))}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -477,7 +477,7 @@ def evaluate(
     except typer.Exit:
         raise
     except Exception as e:
-        typer.echo(f"\n❌ Evaluation failed: {e}", err=True)
+        typer.echo(f"\n❌ Evaluation failed: {redact_sensitive_info(str(e))}", err=True)
         raise typer.Exit(code=1)
 
 

@@ -80,3 +80,19 @@ def test_on_registry_list_token_redaction_in_exceptions():
         result = on_registry_list("user/repo", "hf_valid_token_36_characters_minimum_len")
         assert "[REDACTED]" in result
         assert "hf_valid_token_36_characters_minimum_len" not in result
+
+def test_centralized_redact_sensitive_info():
+    from core.state import redact_sensitive_info
+
+    # Test regex-based HF token redaction
+    msg = "Connection failed for hf_abc123xyz7890123456789012345678900"
+    redacted = redact_sensitive_info(msg)
+    assert "[REDACTED]" in redacted
+    assert "hf_abc123xyz7890123456789012345678900" not in redacted
+
+    # Test environment variable HF_TOKEN redaction
+    with patch.dict(os.environ, {"HF_TOKEN": "my_secret_token_12345"}):
+        msg_with_env = "Failed loading model using token: my_secret_token_12345"
+        redacted_with_env = redact_sensitive_info(msg_with_env)
+        assert "[REDACTED]" in redacted_with_env
+        assert "my_secret_token_12345" not in redacted_with_env
