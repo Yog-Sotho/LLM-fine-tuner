@@ -16,8 +16,34 @@ The module-level singleton `app_state` is the single source of truth for:
 """
 
 import os
+import re
 import shutil
 import threading
+
+
+def redact_sensitive_info(text: str | None) -> str:
+    """Scan error/exception messages for sensitive inputs (like API keys, tokens, or passwords)
+    and replace them with [REDACTED] before presenting or logging the error.
+
+    Specifically redacts:
+    - Hugging Face API write tokens (using regex hf_[a-zA-Z0-9_]{30,})
+    - Any environment variable HF_TOKEN, HF_TOKEN_WRITE, etc.
+    """
+    if not text:
+        return ""
+
+    # Match standard HF token format: hf_ followed by at least 30 alphanumeric/underscore characters.
+    # Pattern uses a word boundary or start of string/word non-greedy boundary.
+    pattern = r"hf_[a-zA-Z0-9_]{30,}"
+    text = re.sub(pattern, "[REDACTED]", text)
+
+    # Redact environment HF_TOKEN if present
+    for env_var in ["HF_TOKEN", "HF_TOKEN_WRITE"]:
+        val = os.environ.get(env_var)
+        if val and len(val) >= 8 and val in text:
+            text = text.replace(val, "[REDACTED]")
+
+    return text
 
 
 def validate_path_traversal(path: str | None) -> str | None:

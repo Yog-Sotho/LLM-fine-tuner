@@ -1,3 +1,8 @@
+## 2026-08-03 - [Centralized Regex-based Credential and Exception Redaction]
+**Vulnerability:** Scattered, manual substring-replace-based token redactions (`err_msg.replace(token, "[REDACTED]")`) can fail to sanitize API write tokens if they originate from environment variables (`HF_TOKEN`) or are returned in slightly different formats (e.g. from implicit library cache loading). This left logs and error UI panels vulnerable to credential leakage.
+**Learning:** Substring replacement of local parameters is insufficient. Centralizing exception sanitization using a robust regex-based and environment-aware redaction engine ensures all matching API write tokens and implicit credentials are redacted system-wide regardless of their variable names.
+**Prevention:** Centralize sensitive token regex scanners (`hf_[a-zA-Z0-9_]{30,}`) and environment variable checks in a single core security utility and apply it consistently to all exception surfaces.
+
 ## 2026-08-01 - [Sensitive Token Redaction in Hub and Model Registry Exceptions]
 **Vulnerability:** Raw exception messages from Hugging Face Hub APIs or connection errors could contain the sensitive user-supplied API write token, which was subsequently returned and displayed directly in the Gradio UI error panels or written to application logs, exposing user credentials.
 **Learning:** Checking credentials for format constraints and path traversal is not enough. If downstream library calls fail, they may include credentials in their output strings, connection details, or exception representations. Exceptions must be intercepted and sanitized before they cross boundaries to the UI or logs.
