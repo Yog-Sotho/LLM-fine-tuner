@@ -20,7 +20,8 @@ Fix log
 
 import os
 
-from config.constants import HAS_HUB, HF_TOKEN_PREFIX, HF_TOKEN_MIN_LEN
+from config.constants import HAS_HUB, HF_TOKEN_MIN_LEN, HF_TOKEN_PREFIX
+from core.state import redact_sensitive_info
 
 
 def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
@@ -79,7 +80,5 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
         )
         return f"✅ Pushed to https://huggingface.co/{repo_id}"
     except Exception as e:
-        err_msg = str(e)
-        if token and token in err_msg:
-            err_msg = err_msg.replace(token, "[REDACTED]")
+        err_msg = redact_sensitive_info(str(e))
         return f"❌ Push failed: {err_msg}"
