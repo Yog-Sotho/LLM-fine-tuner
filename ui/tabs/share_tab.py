@@ -9,10 +9,17 @@ def build_share_tab() -> dict:
 
         gr.Markdown("### Push to Hugging Face Hub")
         with gr.Row():
-            repo_id    = gr.Textbox(label="Repo ID",
-                                     placeholder="username/my-finetuned-model",
-                                     max_length=512)
-            hf_token   = gr.Textbox(label="HF Token (write access)", type="password")
+            repo_id    = gr.Textbox(
+                label="Repo ID *",
+                placeholder="username/my-finetuned-model",
+                info="The destination repository ID on Hugging Face (e.g., 'username/my-model').",
+                max_length=512,
+            )
+            hf_token   = gr.Textbox(
+                label="HF Token (write access) *",
+                type="password",
+                info="Your Hugging Face API token with WRITE permissions to upload the model.",
+            )
             push_btn   = gr.Button("🚀 Push to Hub", variant="primary")
             push_status = gr.Markdown(" ")
 
@@ -24,13 +31,20 @@ def build_share_tab() -> dict:
         with gr.Row():
             with gr.Column():
                 registry_repo_id  = gr.Textbox(
-                    label="Registry Repo ID",
+                    label="Registry Repo ID *",
                     placeholder="username/my-model-registry",
+                    info="The repository ID on Hugging Face used for registering your versioned model.",
                     max_length=512,
                 )
-                registry_token    = gr.Textbox(label="HF Token (write access)", type="password")
+                registry_token    = gr.Textbox(
+                    label="HF Token (write access) *",
+                    type="password",
+                    info="Your Hugging Face API token with WRITE permissions to publish the version.",
+                )
                 registry_version  = gr.Textbox(
-                    label="Version Tag", placeholder="e.g. 1.0, 2.0.1, beta-1",
+                    label="Version Tag *",
+                    placeholder="e.g. 1.0, 2.0.1, beta-1",
+                    info="A unique identifier for this release (e.g., '1.0.0'). Only letters, numbers, and hyphens/dots/underscores are allowed.",
                     max_length=512,
                 )
                 registry_notes    = gr.Textbox(
