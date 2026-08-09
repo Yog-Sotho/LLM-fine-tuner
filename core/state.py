@@ -123,3 +123,16 @@ class AppState:
 # Module-level singleton — import this everywhere:
 #   from core.state import app_state
 app_state: AppState = AppState()
+
+
+def validate_path_traversal(path: str) -> str | None:
+    """Standardized validation to block path traversal and malformed inputs.
+
+    Returns an error message starting with '❌' if '..' or '\' is detected,
+    otherwise returns None.
+    """
+    if not path:
+        return None
+    if ".." in path or "\\" in path:
+        return "❌ Path traversal attempt detected (contains '..' or '\\')."
+    return None

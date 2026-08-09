@@ -59,6 +59,13 @@ def train_orpo_v27(
 
     if not HAS_ORPO:
         return "❌ ORPOTrainer not available. Install: pip install trl>=0.8.0"
+
+    # Sentinel: validate against path traversal.
+    for p in [model_name, output_dir]:
+        err = validate_path_traversal(p)
+        if err:
+            return err
+
     if orpo_file is None:
         return "❌ Please upload a preference dataset (prompt, chosen, rejected)."
 

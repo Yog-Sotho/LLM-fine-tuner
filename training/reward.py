@@ -65,6 +65,13 @@ def train_reward_model_v27(
         return "❌ RewardTrainer not available. Install: pip install trl>=0.7.0"
     if not HAS_PPO:
         return "❌ AutoModelForCausalLMWithValueHead not available. Install: pip install trl>=0.7.0"
+
+    # Sentinel: validate against path traversal.
+    for p in [model_name, output_dir]:
+        err = validate_path_traversal(p)
+        if err:
+            return err
+
     if reward_file is None:
         return "❌ Please upload a reward dataset (CSV/JSONL with 'chosen' & 'rejected' columns)."
 
