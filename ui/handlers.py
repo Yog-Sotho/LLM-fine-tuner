@@ -134,17 +134,18 @@ def on_train_click(
     elif training_preset == "Accurate (5 epochs)":
         epochs, lr = 5, 1e-4
 
+    # Gradio can deliver ints as floats (e.g. 4.0); DataLoader rejects float batch sizes.
     hyperparams = dict(
-        learning_rate=lr, epochs=epochs, batch_size=bs,
-        grad_accum=grad_accum, max_length=max_len,
-        warmup_steps=warmup, lora_rank=lora_rank,
-        lora_alpha=lora_alpha, lr_scheduler=lr_sched,
-        prefix_tuning_num_virtual_tokens=prefix_tuning_num_virtual_tokens,
-        prefix_tuning_token_dim=prefix_tuning_token_dim,
-        prefix_tuning_num_layers=prefix_tuning_num_layers,
-        prompt_tuning_num_virtual_tokens=prompt_tuning_num_virtual_tokens,
-        adapter_reduction_factor=adapter_reduction_factor,
-        dpo_beta=dpo_beta,
+        learning_rate=float(lr), epochs=int(epochs), batch_size=int(bs),
+        grad_accum=int(grad_accum), max_length=int(max_len),
+        warmup_steps=int(warmup), lora_rank=int(lora_rank),
+        lora_alpha=int(lora_alpha), lr_scheduler=str(lr_sched),
+        prefix_tuning_num_virtual_tokens=int(prefix_tuning_num_virtual_tokens),
+        prefix_tuning_token_dim=int(prefix_tuning_token_dim),
+        prefix_tuning_num_layers=int(prefix_tuning_num_layers),
+        prompt_tuning_num_virtual_tokens=int(prompt_tuning_num_virtual_tokens),
+        adapter_reduction_factor=int(adapter_reduction_factor),
+        dpo_beta=float(dpo_beta),
     )
     output_dir = tempfile.mkdtemp()
 
@@ -227,17 +228,6 @@ def on_batch_test(f, model_choice, custom_model, lora_path) -> str:
         app_state._last_batch_path = result
 
     return result
-    # Sentinel: Clean up previous batch results to prevent disk exhaustion (DoS).
-    app_state.cleanup_resource("_last_batch_path")
-
-    model_name = custom_model if custom_model else model_choice
-    result_path = batch_generate(model_name, lora_path, f)
-
-    # Sentinel: Track the result file for future cleanup if it's a valid path.
-    if result_path and os.path.isfile(result_path):
-        app_state._last_batch_path = result_path
-
-    return result_path
 
 
 # ── Hub ────────────────────────────────────────────────────────────────────
@@ -408,7 +398,8 @@ def build_loss_chart(log_records: list) -> pd.DataFrame:
     data: dict = {
         "Step":       [r["step"]       for r in log_records],
         "Train Loss": [r["train_loss"] for r in log_records],
-        "Eval Loss":  [r["eval_loss"]  for r in log_records],
+        # NaN (no eval split) renders as a gap rather than a "NaN" cell.
+        "Eval Loss":  [None if pd.isna(r["eval_loss"]) else r["eval_loss"] for r in log_records],
     }
 
     # F-2: Include ETA column only when timing data is actually present.

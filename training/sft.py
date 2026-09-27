@@ -7,7 +7,6 @@ Imports: config, core, data.
 Functions
 ---------
 train_model          — unified SFT/DPO training entry point
-load_qlora_model_v27 — standalone QLoRA model loader (retained, currently dead code)
 
 Patch log
 ---------
@@ -431,7 +430,8 @@ def train_model(
             from trl import DPOConfig, DPOTrainer  # lazy
 
             dpo_callbacks = [StopCallback(), log_callback]
-            if early_stop > 0 and eval_ds is not None:
+            # Early stopping on < 50 train rows reacts to a 1-row eval set's noise.
+            if early_stop > 0 and eval_ds is not None and len(train_ds) >= 50:
                 dpo_callbacks.append(EarlyStoppingCallback(early_stopping_patience=int(early_stop)))
             # F-2: Add ETA progress callback for DPO training
             if progress is not None:
@@ -474,7 +474,7 @@ def train_model(
             training_args = TrainingArguments(**base_training_args)
             collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
             sft_callbacks = [StopCallback(), log_callback]
-            if early_stop > 0 and eval_ds is not None:
+            if early_stop > 0 and eval_ds is not None and len(train_ds) >= 50:
                 sft_callbacks.append(EarlyStoppingCallback(early_stopping_patience=int(early_stop)))
             # F-2: Add ETA progress callback for SFT training
             if progress is not None:
@@ -567,54 +567,20 @@ def train_model(
         if log_callback.records:
             summary += f"📉 Final train loss: {log_callback.records[-1]['train_loss']}"
 
+        if progress is not None:
+            progress(1.0, desc="✅ Complete!")
+
         return summary, log_callback.records
 
     except Exception as e:
-        raise RuntimeError(f"Training failed: {e}")
-
-
-def load_qlora_model_v27(model_name: str, use_flash_attn: bool = False):
-    """Load a model with full QLoRA Enhanced config.
-
-    NOTE (v3.1 Fix #7): This function is currently dead code — the equivalent
-    logic is inlined inside run_ppo_v27() and train_model(). Retained for
-    potential future use or external callers.
-    """
-    # Sentinel: strip whitespace and validate against path traversal.
-    model_name = model_name.strip() if model_name else ""
-    if err := validate_path_traversal(model_name):
-        raise ValueError(err)
-
-    try:
-        bnb_kwargs = dict(QLORA_ENHANCED_BNB_KWARGS)
-        if not (torch.cuda.is_available() and torch.cuda.is_bf16_supported()):
-            bnb_kwargs["bnb_4bit_compute_dtype"] = torch.float16
+        raise RuntimeError(f"Training failed: {e}") from e
+    finally:
+        # Free VRAM on failure too; `model` is unbound if loading never happened
+        # and already deleted on the success path.
         try:
-            bnb = BitsAndBytesConfig(**bnb_kwargs, bnb_4bit_quant_storage=torch.bfloat16)
-        except TypeError:
-            bnb = BitsAndBytesConfig(**bnb_kwargs)
-        model_kwargs = dict(quantization_config=bnb, device_map="auto", trust_remote_code=True)
-        if use_flash_attn:
-            model_kwargs["attn_implementation"] = "flash_attention_2"
-            model_kwargs["torch_dtype"] = (
-                torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-            )
-        model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
-        targets = (
-            QLORA_ENHANCED_LORA_CONFIG["target_modules"]
-            if not any(k in model_name.lower() for k in ["gpt2", "pythia", "falcon"])
-            else get_lora_targets(model_name)
-        )
-        lora_cfg = LoraConfig(
-            task_type=TaskType.CAUSAL_LM,
-            r=QLORA_ENHANCED_LORA_CONFIG["r"],
-            lora_alpha=QLORA_ENHANCED_LORA_CONFIG["lora_alpha"],
-            target_modules=targets,
-            lora_dropout=QLORA_ENHANCED_LORA_CONFIG["lora_dropout"],
-            bias=QLORA_ENHANCED_LORA_CONFIG["bias"],
-        )
-        model = get_peft_model(model, lora_cfg)
-        model.print_trainable_parameters()
-        return model
-    except Exception as e:
-        raise RuntimeError(f"QLoRA Enhanced model load failed: {e}")
+            del model
+        except (NameError, UnboundLocalError):
+            pass
+        if device == "cuda":
+            torch.cuda.empty_cache()
+        gc.collect()

@@ -66,6 +66,9 @@ def run_ppo_v27(
     if not reward_model_path or not os.path.isdir(reward_model_path):
         return "❌ Reward model path is invalid or does not exist. Train a reward model first."
 
+    # A Stop left over from an earlier job would otherwise end this loop instantly.
+    app_state.stop_event.clear()
+
     try:
         from trl import (  # lazy
             AutoModelForCausalLMWithValueHead,
@@ -94,8 +97,7 @@ def run_ppo_v27(
             tokenizer.pad_token = tokenizer.eos_token
 
         # v3.0 Fix #2 (Critical): PPOTrainer requires the policy model to have a value head.
-        # load_qlora_model_v27 returns a plain PeftModel without a value head, causing
-        # PPOTrainer to fail. Fix: Load with AutoModelForCausalLMWithValueHead then apply LoRA.
+        # A plain PeftModel has no value head, causing PPOTrainer to fail. Fix: Load with AutoModelForCausalLMWithValueHead then apply LoRA.
         base_policy = AutoModelForCausalLMWithValueHead.from_pretrained(
             policy_model_name,
             device_map="auto" if torch.cuda.is_available() else None,
@@ -255,3 +257,20 @@ def run_ppo_v27(
 
     except Exception as e:
         return f"❌ PPO training failed: {e}"
+    finally:
+        # Free VRAM on failure too; names are unbound if loading never happened.
+        try:
+            del policy_model
+        except (NameError, UnboundLocalError):
+            pass
+        try:
+            del reward_model
+        except (NameError, UnboundLocalError):
+            pass
+        try:
+            del ref_model
+        except (NameError, UnboundLocalError):
+            pass
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
