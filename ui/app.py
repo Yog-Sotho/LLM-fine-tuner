@@ -24,6 +24,7 @@ import gradio as gr
 
 from config.constants import HAS_VLLM
 from core.hardware import get_hardware_summary, get_model_info
+from core.state import app_state
 from data.augmentation import on_augment_click, on_quality_filter_click
 from export.gguf import on_export_gguf
 from export.registry import on_registry_upload, on_registry_list
@@ -33,7 +34,6 @@ from inference.vllm_runner import on_merge_adapter_click, on_vllm_generate
 from training.reward import train_reward_model_v27
 from training.ppo import run_ppo_v27
 from training.orpo import train_orpo_v27
-from ui.css import CUSTOM_CSS
 from ui.handlers import (
     on_train_click, on_stop,
     on_generate, on_batch_test,
@@ -49,18 +49,19 @@ from ui.tabs.evaluation_tab import build_evaluation_tab
 from ui.tabs.share_tab      import build_share_tab
 
 
+def build_theme() -> gr.themes.Base:
+    """Return the app theme (Gradio 6 takes theme and css in launch(), not Blocks)."""
+    return gr.themes.Base(
+        primary_hue=gr.themes.colors.violet,
+        neutral_hue=gr.themes.colors.slate,
+        font=gr.themes.GoogleFont("Inter"),
+    )
+
+
 def build_demo() -> gr.Blocks:
     """Build and return the fully-wired Gradio Blocks demo."""
 
-    with gr.Blocks(
-        title="🧠 LLM Fine-Tuner v3.2 — PRODUCTION READY",
-        css=CUSTOM_CSS,
-        theme=gr.themes.Base(
-            primary_hue=gr.themes.colors.violet,
-            neutral_hue=gr.themes.colors.slate,
-            font=gr.themes.GoogleFont("Inter"),
-        ),
-    ) as demo:
+    with gr.Blocks(title="🧠 LLM Fine-Tuner v3.2") as demo:
 
         # ── Header ─────────────────────────────────────────────────────────
         gr.HTML("""
@@ -150,6 +151,7 @@ def build_demo() -> gr.Blocks:
             use_flash_attn, use_qlora_enhanced,
             augmented_ds,   # C-5 FIX: augmented dataset state injected here
             progress=gr.Progress(),
+            request: gr.Request | None = None,
         ):
             msg, zip_path, model_path, log_records = on_train_click(
                 file_input, model_choice, custom_model, training_preset, peft_method,
@@ -164,6 +166,7 @@ def build_demo() -> gr.Blocks:
                 use_flash_attn, use_qlora_enhanced,
                 augmented_ds=augmented_ds,  # C-5 FIX
                 progress=progress,
+                request=request,
             )
             return msg, zip_path, model_path, log_records, build_loss_chart(log_records)
 
@@ -309,5 +312,11 @@ def build_demo() -> gr.Blocks:
             inputs=[st["registry_repo_id"], st["registry_token"]],
             outputs=[st["registry_status"]],
         )
+
+        # Closing or refreshing the tab stops that session's job and frees its temp files.
+        def _close_session(request: gr.Request) -> None:
+            app_state.close_session(request.session_hash)
+
+        demo.unload(_close_session)
 
     return demo

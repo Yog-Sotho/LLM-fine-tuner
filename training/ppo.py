@@ -15,6 +15,7 @@ from peft import LoraConfig, TaskType, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from config.constants import (
+    ALLOW_REMOTE_CODE,
     COL_PROMPT,
     COL_TEXT,
     COL_INSTRUCTION,
@@ -37,10 +38,11 @@ def run_ppo_v27(
     ppo_epochs: int = 1,
     ppo_max_new_tokens: int = 128,
     progress=gr.Progress(),
+    request: gr.Request | None = None,
 ) -> str:
     """Run PPO fine-tuning using trl.PPOTrainer.
 
-    Requires trl>=0.7.0 (HAS_PPO=True).
+    Requires TRL's legacy value-head API (HAS_PPO=True); unavailable on supported TRL.
     Dataset must contain a 'prompt' column.
     Reward model must have been saved with AutoModelForCausalLMWithValueHead.
 
@@ -59,7 +61,7 @@ def run_ppo_v27(
         return err
 
     if not HAS_PPO:
-        return "❌ PPOTrainer not available. Install: pip install trl>=0.7.0"
+        return "❌ PPO training needs TRL's legacy value-head PPO API, which was removed in TRL 0.12 and is not part of the supported TRL versions. It is being rebuilt on the current TRL API."
     if ppo_file is None:
         return "❌ Please upload a dataset with a 'prompt' column."
     # H-7 FIX: os is now a proper top-level import, not __import__("os") inline.
@@ -67,7 +69,8 @@ def run_ppo_v27(
         return "❌ Reward model path is invalid or does not exist. Train a reward model first."
 
     # A Stop left over from an earlier job would otherwise end this loop instantly.
-    app_state.stop_event.clear()
+    stop_event = app_state.session_for(request).stop_event
+    stop_event.clear()
 
     try:
         from trl import (  # lazy
@@ -102,7 +105,7 @@ def run_ppo_v27(
             policy_model_name,
             device_map="auto" if torch.cuda.is_available() else None,
             torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-            trust_remote_code=True,
+            trust_remote_code=ALLOW_REMOTE_CODE,
         )
 
         ppo_targets = (
@@ -187,10 +190,10 @@ def run_ppo_v27(
             progress(0.25, desc="Running PPO training loop…")
 
         for epoch in range(ppo_epochs):
-            if app_state.stop_event.is_set():
+            if stop_event.is_set():
                 break
             for batch_idx in range(0, len(prompts), ppo_batch_size):
-                if app_state.stop_event.is_set():
+                if stop_event.is_set():
                     break
                 batch_prompts = prompts[batch_idx: batch_idx + ppo_batch_size]
                 query_tensors = all_query_tensors[batch_idx: batch_idx + ppo_batch_size]

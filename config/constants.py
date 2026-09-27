@@ -13,6 +13,7 @@ Contains:
 Rule: nothing in this file may import from any other llm_fine_tuner module.
 """
 
+import os
 import shutil
 import warnings
 import torch
@@ -32,6 +33,13 @@ warnings.filterwarnings(
     message=".*use_reentrant.*",
     category=UserWarning,
 )
+
+# ── Remote code execution opt-in ───────────────────────────────────────────
+# Hub repos with custom modeling code run that Python on this machine when loaded
+# with trust_remote_code enabled. Off unless the operator explicitly enables it.
+ALLOW_REMOTE_CODE: bool = os.environ.get("ALLOW_REMOTE_CODE", "false").strip().lower() in {
+    "1", "true", "yes",
+}
 
 # ── Column name constants ──────────────────────────────────────────────────
 COL_INSTRUCTION = "instruction"
@@ -116,9 +124,9 @@ try:
 except ImportError:
     HAS_OPENPYXL = False
 
-# ── PyPDF2 (PDF ingestion) ─────────────────────────────────────────────────
+# ── pypdf (PDF ingestion) ──────────────────────────────────────────────────
 try:
-    import PyPDF2  # noqa: F401
+    import pypdf  # noqa: F401
     HAS_PDF = True
 except ImportError:
     HAS_PDF = False
@@ -166,19 +174,30 @@ try:
 except ImportError:
     HAS_REWARD_TRAINER = False
 
-# ── TRL PPO ───────────────────────────────────────────────────────────────
+# ── TRL legacy PPO (value-head) API ──────────────────────────────────────
+# training/ppo.py and training/reward.py are written against PPOTrainer(config=...)
+# and AutoModelForCausalLMWithValueHead. TRL 0.12 replaced that API and TRL 1.x
+# removed it, so on supported TRL versions this is False.
 try:
-    from trl import PPOTrainer, PPOConfig, AutoModelForCausalLMWithValueHead  # noqa: F401
-    HAS_PPO = True
+    import inspect as _inspect
+
+    from trl import AutoModelForCausalLMWithValueHead, PPOConfig, PPOTrainer  # noqa: F401
+
+    HAS_PPO = "config" in _inspect.signature(PPOTrainer.__init__).parameters
 except ImportError:
     HAS_PPO = False
 
-# ── TRL ORPO ──────────────────────────────────────────────────────────────
+# ── TRL ORPO (top-level in TRL 0.x, trl.experimental.orpo in TRL 1.x) ────
+warnings.filterwarnings("ignore", message=".*importing from 'trl.experimental'.*")
 try:
-    from trl import ORPOTrainer, ORPOConfig  # noqa: F401
+    from trl.experimental.orpo import ORPOConfig, ORPOTrainer  # noqa: F401
     HAS_ORPO = True
 except ImportError:
-    HAS_ORPO = False
+    try:
+        from trl import ORPOConfig, ORPOTrainer  # noqa: F401
+        HAS_ORPO = True
+    except ImportError:
+        HAS_ORPO = False
 
 # ── AutoGPTQ (GPTQ quantised inference) ───────────────────────────────────
 try:

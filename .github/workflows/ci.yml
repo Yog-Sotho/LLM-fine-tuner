@@ -52,8 +52,9 @@ env:
   PYTHONUNBUFFERED: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   PIP_NO_COLOR: "1"
-  # Prevent any transformers / datasets call from hitting the network.
-  # Tests that genuinely need models patch _load_for_inference with mocks.
+  # Tests run offline. The smoke tests' tiny model is pre-fetched into the HF
+  # cache by a dedicated step that re-enables the network for itself only.
+  HF_HUB_OFFLINE: "1"
   TRANSFORMERS_OFFLINE: "1"
   HF_DATASETS_OFFLINE: "1"
   # Stop Gradio from phoning home during imports.
@@ -75,14 +76,14 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
       - name: "Cache pip"
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: "lint-${{ hashFiles('pyproject.toml') }}"
@@ -112,14 +113,14 @@ jobs:
     needs: [lint]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
       - name: "Cache pip"
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: "mypy-${{ hashFiles('pyproject.toml') }}"
@@ -174,14 +175,14 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "${{ matrix.python-version }}"
 
       - name: "Cache pip"
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: >-
@@ -190,45 +191,16 @@ jobs:
           restore-keys: "test-py${{ matrix.python-version }}-"
 
       # Install CPU PyTorch before any other dep to avoid pip resolving the
-      # CUDA build (~2 GB) from the default PyPI index.
-      - name: "Install CPU-only PyTorch 2.5.1"
+      # CUDA build (~2 GB) from the default PyPI index. torch >= 2.6 is required
+      # (CVE-2025-32434).
+      - name: "Install CPU-only PyTorch"
         run: |
-          pip install --quiet \
-            "torch==2.5.1" \
-            "torchvision==0.20.1" \
-            "torchaudio==2.5.1" \
+          pip install --quiet "torch>=2.6.0,<3" \
             --index-url https://download.pytorch.org/whl/cpu
 
-      # Exact version floors from pyproject.toml [project.dependencies]
-      - name: "Install core runtime dependencies"
-        run: |
-          pip install --quiet \
-            "gradio>=5.0.0" \
-            "transformers>=4.48.0" \
-            "datasets>=3.0.0" \
-            "peft>=0.14.0" \
-            "accelerate>=1.3.0" \
-            "bitsandbytes>=0.45.0" \
-            "trl>=0.8.0" \
-            "numpy>=2.0.0" \
-            "pandas>=2.2.0" \
-            "safetensors>=0.4.3" \
-            "tqdm>=4.66.0" \
-            "einops>=0.8.0" \
-            "matplotlib>=3.9.0" \
-            "huggingface_hub>=0.25.0" \
-            "typer>=0.15.0" \
-            "PyPDF2>=3.0.0" \
-            "openpyxl>=3.1.0" \
-            "psutil>=6.0.0"
-
-      # eval extras — used by test_preprocessing.py and evaluation tests
-      - name: "Install evaluation extras"
-        run: |
-          pip install --quiet \
-            "evaluate>=0.4.0" \
-            "rouge-score>=0.1.2" \
-            "nltk>=3.8.0"
+      # Install the package itself so CI tests exactly the declared dependency ranges.
+      - name: "Install package with evaluation extras"
+        run: pip install --quiet -e ".[eval]"
 
       - name: "Install dev / test tools"
         run: |
@@ -237,20 +209,34 @@ jobs:
             "pytest-cov>=5.0.0" \
             "pytest-timeout>=2.3.0"
 
-      # constants.py tries to find punkt at import time and downloads if absent.
-      # Pre-fetch here so tests don't fail with a network call that's blocked
-      # by TRANSFORMERS_OFFLINE (that var only affects transformers, not nltk).
-      - name: "Pre-fetch NLTK punkt data"
+      # NLTK data: punkt is looked up by constants.py at import time; wordnet and
+      # the tagger are needed by nlpaug's synonym augmentation tests.
+      - name: "Pre-fetch NLTK data"
         run: |
           python -c "
           import nltk
-          nltk.download('punkt',     quiet=True)
-          nltk.download('punkt_tab', quiet=True)
-          nltk.download('averaged_perceptron_tagger', quiet=True)
+          for pkg in ['punkt', 'punkt_tab', 'wordnet', 'omw-1.4',
+                      'averaged_perceptron_tagger', 'averaged_perceptron_tagger_eng']:
+              assert nltk.download(pkg, quiet=True), pkg
           print('NLTK data ready')
           "
 
+      # The smoke tests train a ~1M-parameter model for real. Fetch it once here
+      # (network allowed for this step only); tests then load it from the cache.
+      - name: "Pre-fetch smoke-test model"
+        env:
+          HF_HUB_OFFLINE: "0"
+          TRANSFORMERS_OFFLINE: "0"
+        run: |
+          python -c "
+          from huggingface_hub import snapshot_download
+          snapshot_download('hf-internal-testing/tiny-random-LlamaForCausalLM')
+          print('Smoke-test model cached')
+          "
+
       - name: "Run pytest with coverage"
+        env:
+          REQUIRE_SMOKE_MODELS: "1"   # a missing model fails instead of skipping
         run: |
           pytest tests/ \
             --cov=. \
@@ -262,7 +248,7 @@ jobs:
 
       - name: "Upload coverage to Codecov"
         if: matrix.python-version == '3.11'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: coverage.xml
           flags: unittests
@@ -283,14 +269,14 @@ jobs:
     needs: [lint]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
       - name: "Cache pip"
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: "audit-${{ hashFiles('requirements.txt') }}"
@@ -301,11 +287,16 @@ jobs:
 
       - name: "Audit requirements.txt for CVEs"
         run: |
+          # GHSA-8mgp-746c-j5xp (nltk <= 3.10.3, no fixed release yet) affects
+          # NLTK's model-artifact save/load APIs with caller-controlled paths.
+          # This project only uses sentence_bleu and nlpaug's wordnet lookups, so
+          # it is not reachable. Remove the waiver once nltk publishes a fix.
           pip-audit \
             --requirement requirements.txt \
             --skip-editable \
-            --output-format columns \
-            --progress-spinner off
+            --format columns \
+            --progress-spinner off \
+            --ignore-vuln GHSA-8mgp-746c-j5xp
 
   # =========================================================================
   # JOB 5 — DOCKER LINT
@@ -324,7 +315,7 @@ jobs:
     needs: [lint]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: "Lint GPU Dockerfile"
         uses: hadolint/hadolint-action@v3.1.0
@@ -353,14 +344,14 @@ jobs:
     needs: [lint]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
       - name: "Cache pip"
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: "pkg-${{ hashFiles('pyproject.toml', 'setup.py') }}"

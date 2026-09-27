@@ -20,8 +20,8 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from config.constants import HAS_VLLM
-from core.state import app_state, validate_path_traversal
+from config.constants import ALLOW_REMOTE_CODE, HAS_VLLM
+from core.state import app_state, validate_adapter_dir, validate_path_traversal
 
 
 def merge_adapter_for_inference(
@@ -56,6 +56,8 @@ def merge_adapter_for_inference(
         return "❌ Please provide the base model ID used during training."
     if not adapter_path or not os.path.isdir(adapter_path):
         return "❌ Adapter path is invalid or does not exist. Provide the training output directory."
+    if err := validate_adapter_dir(adapter_path):
+        return err
 
     try:
         os.makedirs(merged_output_dir, exist_ok=True)
@@ -64,7 +66,7 @@ def merge_adapter_for_inference(
             base_model_name,
             torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
             device_map="auto" if torch.cuda.is_available() else None,
-            trust_remote_code=True,
+            trust_remote_code=ALLOW_REMOTE_CODE,
         )
         peft_model = PeftModel.from_pretrained(base, adapter_path)
         merged_model = peft_model.merge_and_unload()
@@ -89,6 +91,7 @@ def on_merge_adapter_click(
     base_model_name: str,
     adapter_path: str,
     model_path_state: str,
+    request: gr.Request | None = None,
 ):
     """Gradio UI handler for the Merge Adapter button.
 
@@ -108,14 +111,12 @@ def on_merge_adapter_click(
             gr.update(),
         )
 
-    # Sentinel: Clean up previous merged models to prevent disk exhaustion (DoS).
-    app_state.cleanup_resource("_last_merged_dir")
+    session = app_state.session_for(request)
+    session.release("merged_dir")
 
     import tempfile
     merged_dir = tempfile.mkdtemp(prefix="merged_model_")
-
-    # Sentinel: Track the new merged directory for future cleanup.
-    app_state._last_merged_dir = merged_dir
+    session.track("merged_dir", merged_dir)
 
     result = merge_adapter_for_inference(base, adapter, merged_dir)
 
@@ -179,7 +180,7 @@ def vllm_generate_v27(
             model=model_path,
             quantization=quant,
             tensor_parallel_size=tensor_parallel_size,
-            trust_remote_code=True,
+            trust_remote_code=ALLOW_REMOTE_CODE,
         )
         app_state.vllm_cache[cache_key] = llm
 

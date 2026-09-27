@@ -12,6 +12,7 @@ Patch log
          with a human-readable ETA on every training step.
 """
 
+import threading
 import time
 from typing import Optional
 
@@ -21,10 +22,13 @@ from core.state import app_state
 
 
 class StopCallback(TrainerCallback):
-    """Signal the Trainer to stop cleanly when the UI stop button is pressed."""
+    """Signal the Trainer to stop cleanly when the session's Stop button is pressed."""
+
+    def __init__(self, stop_event: threading.Event | None = None) -> None:
+        self._stop_event = stop_event or app_state.session().stop_event
 
     def on_step_end(self, args, state, control, **kwargs):
-        if app_state.stop_event.is_set():
+        if self._stop_event.is_set():
             control.should_training_stop = True
         return control
 

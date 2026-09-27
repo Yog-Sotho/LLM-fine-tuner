@@ -236,7 +236,7 @@ def preprocess_function(
     the standard ChatML format is applied. Otherwise falls back to the
     '### Instruction / ### Response' prompt format.
 
-    Returns a dict with input_ids, attention_mask, and labels.
+    Returns a dict with input_ids and attention_mask (labels are added by the collator).
     """
     if use_chat_template and tokenizer.chat_template is not None:
         texts = []
@@ -278,7 +278,9 @@ def preprocess_function(
         padding=False,
         max_length=max_length,
     )
-    tokenized["labels"] = tokenized["input_ids"].copy()
+    # No "labels" here: with dynamic padding they'd be ragged lists the collator can't
+    # tensorize. DataCollatorForLanguageModeling(mlm=False) builds them from the
+    # padded input_ids instead.
     return tokenized
 
 

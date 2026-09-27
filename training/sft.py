@@ -35,6 +35,7 @@ import gc
 import glob
 import os
 import subprocess
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -66,6 +67,7 @@ from transformers import (
 )
 
 from config.constants import (
+    ALLOW_REMOTE_CODE,
     COL_INSTRUCTION,
     COL_OUTPUT,
     COL_TEXT,
@@ -109,6 +111,7 @@ def train_model(
     heretic_mode=False,
     progress=gr.Progress(),
     use_flash_attn=False,
+    stop_event: threading.Event | None = None,
 ):
     """Unified SFT / DPO training pipeline.
 
@@ -132,7 +135,8 @@ def train_model(
     # v3.0 Fix #1 (Critical): Define is_dpo here — was previously undefined.
     is_dpo = (training_mode == "dpo")
 
-    app_state.stop_event.clear()
+    stop_event = stop_event or app_state.session().stop_event
+    stop_event.clear()
     log_callback = LoggingCallback()
 
     try:
@@ -219,7 +223,7 @@ def train_model(
                 bnb = BitsAndBytesConfig(**bnb_kwargs, bnb_4bit_quant_storage=torch.bfloat16)
             except TypeError:
                 bnb = BitsAndBytesConfig(**bnb_kwargs)
-            model_kwargs = dict(quantization_config=bnb, device_map="auto", trust_remote_code=True)
+            model_kwargs = dict(quantization_config=bnb, device_map="auto", trust_remote_code=ALLOW_REMOTE_CODE)
             if use_flash_attn:
                 # v3.1 Fix #2 (Critical): Guard bfloat16 with hardware support check.
                 model_kwargs["attn_implementation"] = "flash_attention_2"
@@ -258,7 +262,7 @@ def train_model(
                 max_seq_length=hyperparams["max_length"],
                 dtype=dtype,
                 load_in_4bit=(device == "cuda"),
-                trust_remote_code=True,
+                trust_remote_code=ALLOW_REMOTE_CODE,
             )
             is_unsloth = True
             model = FastLanguageModel.get_peft_model(
@@ -285,7 +289,7 @@ def train_model(
                 model_kwargs = dict(
                     quantization_config=bnb,
                     device_map="auto",
-                    trust_remote_code=True,
+                    trust_remote_code=ALLOW_REMOTE_CODE,
                 )
                 # v3.2 Fix #5: Always set torch_dtype for non-quantised tensors.
                 model_kwargs["torch_dtype"] = (
@@ -302,7 +306,7 @@ def train_model(
                 model = AutoModelForCausalLM.from_pretrained(
                     model_name,
                     torch_dtype=torch.float32,
-                    trust_remote_code=True,
+                    trust_remote_code=ALLOW_REMOTE_CODE,
                 )
 
         # ── Warn if Unsloth + non-LoRA PEFT ───────────────────────────────
@@ -402,7 +406,6 @@ def train_model(
 
         base_training_args = dict(
             output_dir=output_dir,
-            overwrite_output_dir=True,
             num_train_epochs=hyperparams["epochs"],
             per_device_train_batch_size=hyperparams["batch_size"],
             gradient_accumulation_steps=hyperparams["grad_accum"],
@@ -418,18 +421,21 @@ def train_model(
             metric_for_best_model="eval_loss" if _load_best else None,
             greater_is_better=False,
             fp16=(device == "cuda"),
+            bf16=False,  # explicit: TRL 1.x configs default to bf16=True, which fails on CPU
             report_to="none",
             disable_tqdm=False,
             lr_scheduler_type=lr_scheduler_type,
             gradient_checkpointing=gradient_checkpointing,
+            # Reentrant checkpointing gives "does not require grad" with frozen LoRA base weights.
+            gradient_checkpointing_kwargs={"use_reentrant": False} if gradient_checkpointing else None,
         )
 
         if is_dpo:
             if not HAS_TRL:
-                raise ImportError("TRL not installed. Run: pip install trl>=0.7.0")
+                raise ImportError("TRL not installed. Run: pip install \"trl>=0.29.1,<2\"")
             from trl import DPOConfig, DPOTrainer  # lazy
 
-            dpo_callbacks = [StopCallback(), log_callback]
+            dpo_callbacks = [StopCallback(stop_event), log_callback]
             # Early stopping on < 50 train rows reacts to a 1-row eval set's noise.
             if early_stop > 0 and eval_ds is not None and len(train_ds) >= 50:
                 dpo_callbacks.append(EarlyStoppingCallback(early_stopping_patience=int(early_stop)))
@@ -437,43 +443,24 @@ def train_model(
             if progress is not None:
                 dpo_callbacks.append(ETAProgressCallback(gradio_progress=progress))
 
-            # v2.9: Use DPOConfig for beta — passing beta to DPOTrainer directly
-            # is deprecated in TRL >= 0.9.
+            dpo_config = DPOConfig(**base_training_args, remove_unused_columns=False, beta=dpo_beta)
             import inspect as _inspect
-            try:
-                dpo_config = DPOConfig(**base_training_args, remove_unused_columns=False, beta=dpo_beta)
-                # BOLT OPTIMIZATION: Parallelize internal trainer tokenization.
-                dpo_trainer_kwargs = {
-                    "model": model,
-                    "args": dpo_config,
-                    "train_dataset": train_ds,
-                    "eval_dataset": eval_ds,
-                    "tokenizer": tokenizer,
-                    "callbacks": dpo_callbacks,
-                }
-                if "dataset_num_proc" in _inspect.signature(DPOTrainer.__init__).parameters:
-                    dpo_trainer_kwargs["dataset_num_proc"] = os.cpu_count()
-                trainer = DPOTrainer(**dpo_trainer_kwargs)
-            except TypeError:
-                # Fallback for older TRL versions
-                training_args = TrainingArguments(**base_training_args, remove_unused_columns=False)
-                # BOLT OPTIMIZATION: Parallelize internal trainer tokenization.
-                dpo_trainer_kwargs = {
-                    "model": model,
-                    "args": training_args,
-                    "train_dataset": train_ds,
-                    "eval_dataset": eval_ds,
-                    "tokenizer": tokenizer,
-                    "beta": dpo_beta,
-                    "callbacks": dpo_callbacks,
-                }
-                if "dataset_num_proc" in _inspect.signature(DPOTrainer.__init__).parameters:
-                    dpo_trainer_kwargs["dataset_num_proc"] = os.cpu_count()
-                trainer = DPOTrainer(**dpo_trainer_kwargs)
+            dpo_trainer_kwargs = {
+                "model": model,
+                "args": dpo_config,
+                "train_dataset": train_ds,
+                "eval_dataset": eval_ds,
+                "processing_class": tokenizer,
+                "callbacks": dpo_callbacks,
+            }
+            # BOLT OPTIMIZATION: Parallelize internal trainer tokenization.
+            if "dataset_num_proc" in _inspect.signature(DPOTrainer.__init__).parameters:
+                dpo_trainer_kwargs["dataset_num_proc"] = os.cpu_count()
+            trainer = DPOTrainer(**dpo_trainer_kwargs)
         else:
             training_args = TrainingArguments(**base_training_args)
             collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-            sft_callbacks = [StopCallback(), log_callback]
+            sft_callbacks = [StopCallback(stop_event), log_callback]
             if early_stop > 0 and eval_ds is not None and len(train_ds) >= 50:
                 sft_callbacks.append(EarlyStoppingCallback(early_stopping_patience=int(early_stop)))
             # F-2: Add ETA progress callback for SFT training
@@ -487,7 +474,7 @@ def train_model(
                 "train_dataset": train_ds,
                 "eval_dataset": eval_ds,
                 "data_collator": collator,
-                "tokenizer": tokenizer,
+                "processing_class": tokenizer,
                 "callbacks": sft_callbacks,
             }
             if "dataset_num_proc" in _inspect.signature(Trainer.__init__).parameters:
@@ -510,7 +497,7 @@ def train_model(
         t0 = time.time()
         trainer.train(resume_from_checkpoint=resume_path)
         elapsed = time.time() - t0
-        status = "stopped by user" if app_state.stop_event.is_set() else "complete"
+        status = "stopped by user" if stop_event.is_set() else "complete"
 
         # ── Save ───────────────────────────────────────────────────────────
         if progress is not None:

@@ -7,7 +7,7 @@ Imports: config.constants, stdlib, pandas, datasets.
 Functions
 ---------
 detect_file_type       — sniff extension from a Gradio file object
-extract_text_from_pdf  — extract raw text from PDF pages via PyPDF2
+extract_text_from_pdf  — extract raw text from PDF pages via pypdf
 load_dataset_from_file — unified loader for csv/jsonl/json/txt/excel/pdf
 safe_extract_zip       — ZIP extraction with path-traversal guard
 """
@@ -43,7 +43,7 @@ def detect_file_type(file) -> str | None:
 
     Returns one of: 'csv', 'jsonl', 'json', 'txt', 'excel', 'pdf', or None.
     'excel' is only returned when openpyxl is installed.
-    'pdf'   is only returned when PyPDF2 is installed.
+    'pdf'   is only returned when pypdf is installed.
     """
     name = Path(file.name).name.lower()
     if name.endswith(FILE_EXT_CSV):              return "csv"
@@ -58,13 +58,13 @@ def detect_file_type(file) -> str | None:
 def extract_text_from_pdf(pdf_path: str) -> str:
     """Extract all text from a PDF file, page by page.
 
-    Requires PyPDF2 (HAS_PDF=True). Caller must guard before calling.
+    Requires pypdf (HAS_PDF=True). Caller must guard before calling.
     """
-    import PyPDF2  # lazy — only imported when actually used
+    import pypdf  # lazy — only imported when actually used
 
     text = []
     with open(pdf_path, "rb") as f:
-        reader = PyPDF2.PdfReader(f)
+        reader = pypdf.PdfReader(f)
         for page in reader.pages:
             t = page.extract_text()
             if t:

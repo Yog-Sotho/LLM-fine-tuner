@@ -10,7 +10,7 @@
 # Environment variables (all optional, can be set via docker run -e or compose):
 #   HF_TOKEN          — HuggingFace API token (for Hub push / gated models)
 #   SHARE             — Set to "true" to get a public Gradio share URL
-#   EXTRA_ARGS        — Additional args appended to UI launch (e.g. --auth user:pass)
+#   GRADIO_AUTH       — Require login: "user:password" (comma-separate multiple pairs)
 #
 # =============================================================================
 
@@ -89,26 +89,19 @@ if [[ $# -eq 0 ]]; then
     # ── UI mode ───────────────────────────────────────────────────────────────
     log "No arguments — launching Gradio UI on port 7860"
 
-    SHARE_FLAG=""
+    # SHARE and GRADIO_AUTH are read from the environment by main.py. Passing
+    # them as arguments would route the launch into CLI mode and fail.
     if [[ "${SHARE:-false}" == "true" ]]; then
-        SHARE_FLAG="--share"
         ok "Share mode enabled — a public URL will be printed below"
     fi
-
-    # L-8 FIX: EXTRA_ARGS is now split into a proper array to handle spaces in
-    # argument values correctly (e.g. EXTRA_ARGS="--auth user:pass").
-    # The previous unquoted ${EXTRA_ARGS:-} relied on word-splitting which is
-    # fragile and can cause unexpected argument splitting.
-    EXTRA_ARGS_ARRAY=()
-    if [[ -n "${EXTRA_ARGS:-}" ]]; then
-        # shellcheck disable=SC2206
-        EXTRA_ARGS_ARRAY=(${EXTRA_ARGS})
+    if [[ -z "${GRADIO_AUTH:-}" ]]; then
+        warn "GRADIO_AUTH not set — the UI has no login. Set GRADIO_AUTH=user:password before exposing it."
     fi
 
     ok "UI will be available at:  http://localhost:7860"
     echo ""
 
-    exec python3 main.py ${SHARE_FLAG} "${EXTRA_ARGS_ARRAY[@]+"${EXTRA_ARGS_ARRAY[@]}"}"
+    exec python3 main.py
 else
     # ── CLI mode ──────────────────────────────────────────────────────────────
     log "Arguments detected — running CLI: $*"

@@ -206,8 +206,9 @@ Set these with `-e` (plain Docker) or in a `.env` file (Compose).
 | Variable | Default | Description |
 |---|---|---|
 | `HF_TOKEN` | *(empty)* | HuggingFace API token — needed for Hub push and gated models |
-| `SHARE` | `false` | Set to `true` for a public Gradio URL (useful on remote servers) |
-| `EXTRA_ARGS` | *(empty)* | Extra args appended to the Gradio launch command |
+| `SHARE` | `false` | Set to `true` for a public Gradio URL (useful on remote servers) — always combine with `GRADIO_AUTH` |
+| `GRADIO_AUTH` | *(empty)* | Require a login: `user:password` (comma-separate multiple pairs) |
+| `ALLOW_REMOTE_CODE` | `false` | Allow models whose Hub repo ships custom Python code (`trust_remote_code`). Only enable for repos you trust |
 | `HF_HOME` | `/app/cache/huggingface` | HuggingFace cache location inside the container |
 | `HF_HUB_ENABLE_HF_TRANSFER` | `1` | Faster HuggingFace downloads (recommended ON) |
 | `TOKENIZERS_PARALLELISM` | `false` | Suppresses tokeniser warning in Docker |
@@ -219,10 +220,10 @@ Set these with `-e` (plain Docker) or in a `.env` file (Compose).
 If you're running on a remote machine and want to access the UI from your local browser:
 
 ```bash
-SHARE=true docker compose up llm-fine-tuner-gpu
+SHARE=true GRADIO_AUTH=me:a-long-password docker compose up llm-fine-tuner-gpu
 ```
 
-A public URL like `https://abc123.gradio.live` will be printed. Open it anywhere.
+The port is published on the host's localhost only (`127.0.0.1:7860`). A public URL like `https://abc123.gradio.live` will be printed. Open it anywhere.
 
 ---
 

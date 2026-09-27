@@ -178,8 +178,8 @@ def reward(
 
     typer.echo(f"🎖️  Training reward model: {model} | Max Length: {max_length}")
 
-    if not HAS_REWARD_TRAINER:
-        typer.echo("❌ Install: pip install trl>=0.7.0", err=True)
+    if not (HAS_REWARD_TRAINER and HAS_PPO):
+        typer.echo("❌ Reward model training needs TRL's legacy value-head PPO API, which was removed in TRL 0.12 and is not part of the supported TRL versions. It is being rebuilt on the current TRL API.", err=True)
         raise typer.Exit(code=1)
 
     # N-4 FIX: Added ftype guard (was missing for reward/orpo/ppo — only train had it).
@@ -254,7 +254,7 @@ def orpo(
     typer.echo(f"🌀 ORPO training: {model} | Beta: {beta} | Alpha: {alpha}")
 
     if not HAS_ORPO:
-        typer.echo("❌ Install: pip install trl>=0.8.0", err=True)
+        typer.echo("❌ ORPO not available. Install: pip install \"trl>=0.29.1,<2\"", err=True)
         raise typer.Exit(code=1)
 
     # N-4 FIX: Added ftype guard (was missing for reward/orpo/ppo — only train had it).
@@ -324,7 +324,7 @@ def ppo(
     typer.echo(f"🔁 PPO: Policy={policy_model} | Reward={reward_model}")
 
     if not HAS_PPO:
-        typer.echo("❌ Install: pip install trl>=0.7.0", err=True)
+        typer.echo("❌ PPO training needs TRL's legacy value-head PPO API, which was removed in TRL 0.12 and is not part of the supported TRL versions. It is being rebuilt on the current TRL API.", err=True)
         raise typer.Exit(code=1)
     if not os.path.isdir(reward_model):
         typer.echo(f"❌ Reward model path invalid: {reward_model}", err=True)

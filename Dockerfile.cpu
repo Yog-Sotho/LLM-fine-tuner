@@ -44,11 +44,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --upgrade pip setuptools wheel
 
 # ── PyTorch CPU ───────────────────────────────────────────────────────────────
+# torch >= 2.6 is required: <= 2.5.1 is affected by CVE-2025-32434 (torch.load RCE).
 RUN pip install \
-        torch==2.5.1 \
-        torchvision==0.20.1 \
-        torchaudio==2.5.1 \
+        torch==2.14.0 \
         --index-url https://download.pytorch.org/whl/cpu
+
+# Fail the build if any command in a pipe fails (not just the last one).
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # ── Core dependencies (skip GPU-only packages) ────────────────────────────────
 COPY requirements.txt /tmp/requirements.txt
@@ -66,7 +68,7 @@ RUN git clone --depth 1 https://github.com/ggerganov/llama.cpp /opt/llama.cpp &&
         -DLLAMA_BLAS=ON \
         -DLLAMA_BLAS_VENDOR=OpenBLAS \
         -G Ninja && \
-    cmake --build /opt/llama.cpp/build --config Release -j$(nproc) && \
+    cmake --build /opt/llama.cpp/build --config Release -j"$(nproc)" && \
     echo "✅ llama.cpp built (CPU / OpenBLAS)"
 
 ENV PATH="/opt/llama.cpp/build/bin:${PATH}"

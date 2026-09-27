@@ -69,7 +69,7 @@ def get_hardware_summary() -> str:
     # Core optional deps
     deps = []
     deps.append("openpyxl ✓"              if HAS_OPENPYXL else "openpyxl ✗ (no Excel)")
-    deps.append("PyPDF2 ✓"               if HAS_PDF      else "PyPDF2 ✗ (no PDF)")
+    deps.append("pypdf ✓"                if HAS_PDF      else "pypdf ✗ (no PDF)")
     deps.append("huggingface_hub ✓"      if HAS_HUB      else "huggingface_hub ✗ (no Hub push)")
     deps.append("psutil ✓"               if HAS_PSUTIL   else "psutil ✗")
     deps.append("unsloth ✓"              if HAS_UNSLOTH  else "unsloth ✗ (install for 2-5× speed)")
@@ -78,8 +78,8 @@ def get_hardware_summary() -> str:
 
     # v2.7 RLHF / eval deps
     v27 = []
-    v27.append("RewardTrainer ✓" if HAS_REWARD_TRAINER else "RewardTrainer ✗")
-    v27.append("PPO ✓"           if HAS_PPO            else "PPO ✗")
+    v27.append("Reward model ✓" if HAS_REWARD_TRAINER and HAS_PPO else "Reward model ✗ (being rebuilt)")
+    v27.append("PPO ✓"           if HAS_PPO            else "PPO ✗ (being rebuilt)")
     v27.append("ORPO ✓"          if HAS_ORPO           else "ORPO ✗")
     v27.append("evaluate ✓"      if HAS_EVALUATE       else "evaluate ✗")
     v27.append("bert_score ✓"    if HAS_BERTSCORE      else "bert_score ✗")

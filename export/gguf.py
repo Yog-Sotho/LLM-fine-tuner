@@ -16,6 +16,8 @@ import shutil
 import subprocess
 import tempfile
 
+import gradio as gr
+
 from config.constants import HAS_UNSLOTH
 from core.state import app_state, validate_path_traversal
 
@@ -148,7 +150,7 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
         )
 
 
-def on_export_gguf(model_path: str, quantization: str):
+def on_export_gguf(model_path: str, quantization: str, request: gr.Request | None = None):
     """Gradio UI handler for the GGUF Export button.
 
     Returns (status_str, gguf_file_path_or_None).
@@ -166,12 +168,10 @@ def on_export_gguf(model_path: str, quantization: str):
     if not model_path or not os.path.isdir(model_path):
         return "❌ No trained model found. Train first.", None
 
-    # Sentinel: Clean up the previous GGUF directory to prevent disk exhaustion (DoS).
-    app_state.cleanup_resource("_last_gguf_dir")
-
+    session = app_state.session_for(request)
+    session.release("gguf_dir")
     gguf_dir = tempfile.mkdtemp(prefix="gguf_")
-    # Sentinel: Track the new GGUF directory for future cleanup.
-    app_state._last_gguf_dir = gguf_dir
+    session.track("gguf_dir", gguf_dir)
 
     result = export_to_gguf(model_path, gguf_dir, quantization)
     gguf_files = glob.glob(os.path.join(gguf_dir, "*.gguf"))

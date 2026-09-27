@@ -28,6 +28,7 @@ Patch log
 """
 
 import os
+import shutil
 import tempfile
 
 import gradio as gr
@@ -67,17 +68,19 @@ def on_train_click(
     use_qlora_enhanced=False,   # kept for UI arity — ignored; peft_method drives QLoRA
     augmented_ds=None,          # C-5 FIX: augmented/filtered dataset from gr.State
     progress=gr.Progress(),
+    request: gr.Request | None = None,
 ):
     """Handler for the Start Training button.
 
     Orchestrates: file load → validate → preset apply → train → card → zip.
     Returns (log_str, zip_file_path, model_dir_path, log_records).
     """
-    app_state.stop_event.clear()
+    session = app_state.session_for(request)
+    session.stop_event.clear()
 
-    # Sentinel: Clean up previous training resources to prevent disk exhaustion (DoS).
-    app_state.cleanup_resource("_last_zip_path")
-    app_state.cleanup_resource("_last_model_dir")
+    # Free this session's previous run (other sessions' results are untouched).
+    session.release("zip")
+    session.release("model_dir")
 
     training_mode = "dpo" if "dpo" in training_mode.lower() else "sft"
 
@@ -168,6 +171,7 @@ def on_train_click(
             training_mode=training_mode, dpo_beta=dpo_beta, heretic_mode=heretic_mode,
             progress=progress,
             use_flash_attn=use_flash_attn,
+            stop_event=session.stop_event,
         )
         create_model_card(
             model_name, dataset_info, hyperparams,
@@ -176,20 +180,20 @@ def on_train_click(
         )
         zip_path = create_zip_from_folder(output_dir)
 
-        # Sentinel: Track resources so the next run can clean them up.
-        app_state._last_zip_path = zip_path
-        app_state._last_model_dir = output_dir
+        session.track("zip", zip_path)
+        session.track("model_dir", output_dir)
 
         full_msg  = msg + "\n" + issues_str
         return full_msg, zip_path, output_dir, log_records
 
     except Exception as e:
+        shutil.rmtree(output_dir, ignore_errors=True)
         return f"❌ Training failed: {e}\n{issues_str}", None, None, []
 
 
-def on_stop() -> str:
-    """Signal the training loop to halt after the current step."""
-    app_state.stop_event.set()
+def on_stop(request: gr.Request | None = None) -> str:
+    """Signal this session's running job to halt after the current step."""
+    app_state.session_for(request).stop_event.set()
     return "🛑 Stop signal sent — will halt after the current step."
 
 
@@ -206,7 +210,7 @@ def on_generate(prompt, model_choice, custom_model, lora_path, max_tok, temp, to
     return generate_text(model_name, lora_path, prompt, int(max_tok), temp, top_p)
 
 
-def on_batch_test(f, model_choice, custom_model, lora_path) -> str:
+def on_batch_test(f, model_choice, custom_model, lora_path, request: gr.Request | None = None) -> str:
     # Sentinel: strip whitespace and validate against path traversal.
     custom_model = custom_model.strip() if custom_model else ""
     lora_path    = lora_path.strip()    if lora_path    else ""
@@ -217,15 +221,14 @@ def on_batch_test(f, model_choice, custom_model, lora_path) -> str:
         if err := validate_path_traversal(f.name):
             return err
 
-    # Sentinel: Clean up previous batch generation results to prevent disk exhaustion (DoS).
-    app_state.cleanup_resource("_last_batch_path")
+    session = app_state.session_for(request)
+    session.release("batch")
 
     model_name = custom_model if custom_model else model_choice
     result = batch_generate(model_name, lora_path, f)
 
-    # Sentinel: Track resources so the next run can clean them up.
     if os.path.isfile(result):
-        app_state._last_batch_path = result
+        session.track("batch", result)
 
     return result
 

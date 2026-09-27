@@ -36,7 +36,9 @@ services:
     container_name: llm-fine-tuner-gpu
 
     ports:
-      - "7860:7860"         # Gradio UI
+      # Published on the host's localhost only. To expose it on the network,
+      # change to "7860:7860" AND set GRADIO_AUTH=user:password.
+      - "127.0.0.1:7860:7860"  # Gradio UI
 
     volumes:
       - ./cache:/app/cache/huggingface   # Model cache — survives container restarts
@@ -49,6 +51,8 @@ services:
       - HF_TOKEN=${HF_TOKEN:-}
       # Set SHARE=true to get a public Gradio URL (useful for remote machines)
       - SHARE=${SHARE:-false}
+      - GRADIO_AUTH=${GRADIO_AUTH:-}
+      - ALLOW_REMOTE_CODE=${ALLOW_REMOTE_CODE:-false}
       # Disable tokenizer parallelism warning inside Docker
       - TOKENIZERS_PARALLELISM=false
       # Point HF cache to the mounted volume
@@ -86,7 +90,7 @@ services:
     container_name: llm-fine-tuner-cpu
 
     ports:
-      - "7860:7860"
+      - "127.0.0.1:7860:7860"
 
     volumes:
       - ./cache:/app/cache/huggingface
@@ -97,6 +101,8 @@ services:
     environment:
       - HF_TOKEN=${HF_TOKEN:-}
       - SHARE=${SHARE:-false}
+      - GRADIO_AUTH=${GRADIO_AUTH:-}
+      - ALLOW_REMOTE_CODE=${ALLOW_REMOTE_CODE:-false}
       - TOKENIZERS_PARALLELISM=false
       - HF_HOME=/app/cache/huggingface
       - TRANSFORMERS_CACHE=/app/cache/huggingface

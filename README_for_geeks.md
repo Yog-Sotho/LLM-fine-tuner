@@ -33,7 +33,7 @@ config/ → core/ → data/ → training/ → inference/ → export/ → ui/ / c
 | Module | Responsibility |
 |---|---|
 | `config/constants.py` | All `COL_*`, `HAS_*`, `GGUF_QUANT_PRESETS`, `QLORA_ENHANCED_*`, `LORA_TARGET_MAP` |
-| `core/state.py` | `AppState` singleton — `stop_event`, `inference_cache`, `vllm_cache` |
+| `core/state.py` | `AppState` singleton — shared `inference_cache` / `vllm_cache`, per-session `SessionState` (stop event, temp files) |
 | `core/hardware.py` | VRAM detection, model recommendation, Unsloth compatibility check |
 | `core/callbacks.py` | `StopCallback`, `LoggingCallback` |
 | `data/loader.py` | Multi-format ingest, ZIP path-traversal guard, `safe_extract_zip()` |
@@ -88,7 +88,7 @@ rouge-score>=0.1.2        # HAS_ROUGE
 bert-score>=0.3.13        # HAS_BERTSCORE
 nltk>=3.8.0               # HAS_NLTK     — BLEU corpus scoring
 nlpaug>=1.1.10            # HAS_NLPAUG   — data augmentation
-PyPDF2>=3.0.0             # HAS_PDF
+pypdf>=6.16.1             # HAS_PDF
 openpyxl>=3.1.0           # HAS_OPENPYXL
 heretic-llm>=1.2.0        # Heretic Mode abliteration
 psutil>=6.0.0             # HAS_PSUTIL   — RAM reporting

@@ -58,11 +58,13 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
 RUN python3 -m pip install --upgrade pip setuptools wheel
 
 # ── PyTorch (CUDA 12.6 wheel) ─────────────────────────────────────────────────
+# torch >= 2.6 is required: <= 2.5.1 is affected by CVE-2025-32434 (torch.load RCE).
 RUN pip install \
-        torch==2.5.1+cu126 \
-        torchvision==0.20.1+cu126 \
-        torchaudio==2.5.1+cu126 \
+        torch==2.14.0+cu126 \
         --index-url https://download.pytorch.org/whl/cu126
+
+# Fail the build if any command in a pipe fails (not just the last one).
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # ── Core dependencies ─────────────────────────────────────────────────────────
 COPY requirements.txt /tmp/requirements.txt
@@ -96,7 +98,7 @@ RUN git clone --depth 1 https://github.com/ggerganov/llama.cpp /opt/llama.cpp &&
         ${CUDA_CMAKE_FLAG} \
         -DCMAKE_BUILD_TYPE=Release \
         -G Ninja && \
-    cmake --build /opt/llama.cpp/build --config Release -j$(nproc) && \
+    cmake --build /opt/llama.cpp/build --config Release -j"$(nproc)" && \
     echo "✅ llama.cpp built with CUDA support"
 
 # ── NLTK data (downloaded once at build time) ─────────────────────────────────

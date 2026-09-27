@@ -119,7 +119,7 @@ def _compute_bleu_rouge_chunk(chunk_data: tuple) -> tuple:
     return bleu_scores, r1_scores, r2_scores, rl_scores
 
 
-def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
+def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict[str, float | str]:
     """Compute BLEU-1, ROUGE-1, ROUGE-2, ROUGE-L over paired lists.
 
     BOLT OPTIMIZATION: Uses chunk-based multiprocessing via ProcessPoolExecutor on large
@@ -127,7 +127,7 @@ def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
     Uses the high-performance 'fork' start method on Linux/Unix systems to avoid massive PyTorch/Transformers re-import overhead,
     and falls back to sequential execution on small datasets or single-core systems.
     """
-    results = {}
+    results: dict[str, float | str] = {}
     if not predictions or not references:
         results["BLEU-1"] = 0.0
         results["ROUGE-1"] = results["ROUGE-2"] = results["ROUGE-L"] = 0.0
@@ -150,7 +150,7 @@ def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
             # Determine start method: "fork" is highly preferred on Linux/Unix because it is very fast
             # and avoids re-importing torch and transformers in the spawned child processes.
             if "fork" in multiprocessing.get_all_start_methods():
-                mp_context = multiprocessing.get_context("fork")
+                mp_context: multiprocessing.context.BaseContext = multiprocessing.get_context("fork")
             else:
                 mp_context = multiprocessing.get_context()  # fallback to default (spawn or forkserver)
 
@@ -524,6 +524,7 @@ def on_evaluate_click(
     judge_criteria: str,
     eval_max_new_tokens: int = 150,
     progress=gr.Progress(),
+    request: gr.Request | None = None,
 ):
     """Handler for the Evaluation tab Run button.
 
@@ -561,6 +562,10 @@ def on_evaluate_click(
             pd.DataFrame(),
             "",
         )
+
+    # A Stop pressed during an earlier job must not cut this evaluation to zero rows.
+    stop_event = app_state.session_for(request).stop_event
+    stop_event.clear()
 
     try:
         progress(0, desc="Loading evaluation dataset…")
@@ -608,7 +613,7 @@ def on_evaluate_click(
         batch_size = 8
 
         for i in range(0, len(prompts), batch_size):
-            if app_state.stop_event.is_set():
+            if stop_event.is_set():
                 break
             batch_prompts = prompts[i: i + batch_size]
             inputs = tokenizer(

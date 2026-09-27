@@ -16,10 +16,11 @@ def build_rlhf_tab() -> dict:
             "</h3></div>"
         )
         gr.Markdown(
-            f"Dependencies: RewardTrainer {'✅' if HAS_REWARD_TRAINER else '❌'} | "
-            f"PPO {'✅ (ValueHead Rewards Fixed)' if HAS_PPO else '❌'} | "
+            f"Reward model {'✅' if HAS_REWARD_TRAINER and HAS_PPO else '❌ (being rebuilt)'} | "
+            f"PPO {'✅' if HAS_PPO else '❌ (being rebuilt)'} | "
             f"ORPO {'✅' if HAS_ORPO else '❌'}\n"
-            "_Install all: `pip install trl>=0.8.0`_"
+            "_Reward model and PPO use TRL's legacy value-head API, which current TRL no longer "
+            "provides; they are being rebuilt. ORPO needs `pip install \"trl>=0.29.1,<2\"`._"
         )
 
         with gr.Tabs():
