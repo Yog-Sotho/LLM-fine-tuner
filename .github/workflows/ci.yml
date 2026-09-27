@@ -242,7 +242,6 @@ jobs:
             --cov=. \
             --cov-report=xml:coverage.xml \
             --cov-report=term-missing \
-            --cov-omit="archive/*,docs/*,tests/*,setup.py" \
             --timeout=120 \
             -p no:warnings
 

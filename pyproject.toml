@@ -111,6 +111,11 @@ python_functions = ["test_*"]
 addopts = "-v --tb=short"
 
 
+# pytest-cov has no --cov-omit flag; coverage.py reads its settings from here.
+[tool.coverage.run]
+omit = ["archive/*", "docs/*", "tests/*", "setup.py"]
+
+
 [tool.ruff]
 target-version = "py310"
 line-length = 100
