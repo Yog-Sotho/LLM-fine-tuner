@@ -88,7 +88,8 @@ class AppState:
         # environment to allow more concurrent engines (requires proportionally
         # more GPU VRAM per additional engine).
         self.vllm_cache: dict = {}
-        self.max_vllm_engines: int = int(os.environ.get("MAX_VLLM_ENGINES", "1"))
+        # Clamped to [1, 8]: an unbounded value would let one env var exhaust VRAM.
+        self.max_vllm_engines: int = min(max(1, int(os.environ.get("MAX_VLLM_ENGINES", "1"))), 8)
 
         # ── Resource tracking for DoS prevention (Sentinel) ────────────────
         # Many operations create temporary files or directories that are

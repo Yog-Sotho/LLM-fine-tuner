@@ -19,6 +19,7 @@ Fix log
 """
 
 import os
+import re
 
 from config.constants import HAS_HUB, HF_TOKEN_MIN_LEN, HF_TOKEN_PREFIX
 from core.state import redact_sensitive_info
@@ -63,6 +64,11 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
         return (
             "❌ Invalid Hugging Face write token.\n"
             f"Tokens start with '{HF_TOKEN_PREFIX}' and are at least {HF_TOKEN_MIN_LEN} characters long.\n"
+            "Get yours at: https://huggingface.co/settings/tokens"
+        )
+    if not re.fullmatch(r"hf_[A-Za-z0-9_]+", token):
+        return (
+            "❌ Token contains invalid characters.\n"
             "Get yours at: https://huggingface.co/settings/tokens"
         )
     if not HAS_HUB:

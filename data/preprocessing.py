@@ -167,6 +167,15 @@ def validate_and_clean_dataset(
     if len(df) == 0:
         issues.append("❌ Dataset is empty after cleaning. No valid examples remain.")
 
+    # Identical chosen/rejected pairs give DPO zero gradient signal (often swapped columns).
+    if is_dpo and len(df) > 0:
+        identical = int((df[COL_CHOSEN] == df[COL_REJECTED]).sum())
+        if identical:
+            issues.append(
+                f"⚠️ {identical} DPO pairs ({100 * identical / len(df):.0f}%) have identical "
+                f"chosen and rejected text — check the column assignment. "
+            )
+
     # Convert back to HuggingFace Dataset
     return Dataset.from_pandas(df, preserve_index=False), issues
 

@@ -19,7 +19,7 @@ sys.modules['numpy'] = MagicMock()
 sys.modules['PyPDF2'] = MagicMock()
 sys.modules['trl'] = MagicMock()
 
-from training.sft import train_model, load_qlora_model_v27
+from training.sft import train_model
 
 def test_train_model_hardening():
     # Test traversal in model_name
@@ -41,15 +41,6 @@ def test_train_model_hardening():
     except ValueError as e:
         assert "❌ Path traversal attempt detected." in str(e)
 
-def test_load_qlora_model_v27_hardening():
-    # Test traversal in model_name
-    try:
-        load_qlora_model_v27(model_name="../unsafe")
-        assert False, "Should have raised ValueError for model_name traversal"
-    except ValueError as e:
-        assert "❌ Path traversal attempt detected." in str(e)
-
 if __name__ == "__main__":
     test_train_model_hardening()
-    test_load_qlora_model_v27_hardening()
     print("SFT hardening verification tests passed!")

@@ -136,6 +136,11 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
             f"⚠️ Install llama.cpp quantize tool for quantization"
         )
 
+    except subprocess.TimeoutExpired:
+        return (
+            "❌ GGUF conversion timed out after 15 minutes.\n"
+            "The model may be too large or disk I/O is slow."
+        )
     except Exception as e:
         return (
             f"❌ GGUF export error: {e}\n"
