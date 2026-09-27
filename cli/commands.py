@@ -21,7 +21,7 @@ Fix history preserved inline:
   v2.9 Minor #7 : ORPO --alpha option present
   FIX 2b        : Batched generation in evaluate (attention-mask strip)
   FIX 2c        : reward --max-length exposed
-  N-4 FIX       : reward, orpo, and ppo now guard ftype=None before calling
+  N-4 FIX       : reward and orpo now guard ftype=None before calling
                   load_dataset_from_file — previously only train did this,
                   the others passed None directly causing a confusing
                   RuntimeError: "Unsupported file type: None" deep in the stack.
@@ -211,7 +211,7 @@ def reward(
         )
         raise typer.Exit(code=1)
 
-    # N-4 FIX: Added ftype guard (was missing for reward/orpo/ppo — only train had it).
+    # N-4 FIX: Added ftype guard (was missing for reward/orpo — only train had it).
     # Without this, an unsupported extension silently passes ftype=None into
     # load_dataset_from_file, which crashes deep in the stack with
     # "Unsupported file type: None" — confusing for non-technical users.
@@ -279,7 +279,7 @@ def orpo(
         typer.echo('❌ ORPO not available. Install: pip install "trl>=0.29.1,<2"', err=True)
         raise typer.Exit(code=1)
 
-    # N-4 FIX: Added ftype guard (was missing for reward/orpo/ppo — only train had it).
+    # N-4 FIX: Added ftype guard (was missing for reward/orpo — only train had it).
     if not os.path.exists(data):
         typer.echo(f"❌ Dataset not found: {data}", err=True)
         raise typer.Exit(code=1)

@@ -69,8 +69,8 @@ def build_demo() -> gr.Blocks:
         # ── Header ─────────────────────────────────────────────────────────
         gr.HTML("""
         <div id="header-banner">
-            <h1>🧠 LLM Fine-Tuner v3.2 — PRODUCTION READY</h1>
-            <p>✅ v3.2 FIXES: Small Dataset Split Guard · PPO Reward Float Type · CLI --help Routing · QLoRA Checkbox Clarified · CUDA torch_dtype Always Set · All v3.1 Fixes Preserved</p>
+            <h1>🧠 LLM Fine-Tuner v3.2</h1>
+            <p>SFT · DPO · ORPO · KTO · Reward model · GRPO — LoRA / QLoRA · GGUF export · vLLM inference</p>
         </div>
         """)
         hw_md = gr.Markdown(get_hardware_summary(), elem_id="hw-info")  # noqa: F841

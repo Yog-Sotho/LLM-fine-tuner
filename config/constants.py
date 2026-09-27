@@ -76,7 +76,7 @@ GGUF_QUANT_PRESETS: dict[str, dict[str, str]] = {
 }
 
 # ── QLoRA Enhanced configuration ──────────────────────────────────────────
-# Used by train_model() (CUDA branch) and run_ppo_v27().
+# Used by train_model() (QLoRA Enhanced branch).
 QLORA_ENHANCED_LORA_CONFIG: dict = {
     "r": 64,
     "lora_alpha": 128,
