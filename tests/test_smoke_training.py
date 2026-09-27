@@ -210,6 +210,20 @@ def test_sft_with_chat_template_trains(tiny_model, tmp_path):
     _assert_safetensors_adapter(tmp_path)
 
 
+def test_packing_is_skipped_without_flash_attention(tiny_model, tmp_path):
+    """Packing needs Flash Attention 2 on CUDA; otherwise it is skipped with a visible note."""
+    from training.sft import train_model
+
+    ds = Dataset.from_dict({"text": ["alpha beta", "gamma delta", "epsilon zeta", "eta theta"]})
+    summary, records = train_model(
+        tiny_model, ds, str(tmp_path), {**_hyperparams(), "packing": True}, "cpu", "LoRA",
+        True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+        False, False, "", training_mode="sft", progress=None,
+    )  # fmt: skip
+    assert summary.startswith("✅ Training complete")
+    assert any("Packing skipped" in r.get("note", "") for r in records)
+
+
 @pytest.fixture(scope="module")
 def reward_model_dir(tiny_model, tmp_path_factory):
     from training.reward import train_reward_model_v27
