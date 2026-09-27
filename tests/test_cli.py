@@ -20,6 +20,7 @@ Covers:
 """
 
 import os
+import re
 import tempfile
 
 import pandas as pd
@@ -28,6 +29,14 @@ from typer.testing import CliRunner
 from cli.commands import DummyFile, app
 
 runner = CliRunner()
+
+# Typer forces Rich colour output when GITHUB_ACTIONS is set, and the ANSI codes
+# split option names (e.g. "-\x1b[0m\x1b[1;36m-model"). Assert on plain text.
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(text: str) -> str:
+    return _ANSI.sub("", text)
 
 
 # ── DummyFile ──────────────────────────────────────────────────────────────
@@ -45,13 +54,13 @@ def test_help_flag_exits_zero():
     """--help must print usage and exit 0 — not launch Gradio."""
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    assert "Usage" in result.output or "Commands" in result.output
+    assert "Usage" in _plain(result.output) or "Commands" in _plain(result.output)
 
 
 def test_train_help_exits_zero():
     result = runner.invoke(app, ["train", "--help"])
     assert result.exit_code == 0
-    assert "--model" in result.output
+    assert "--model" in _plain(result.output)
 
 
 # ── train — missing data ───────────────────────────────────────────────────
@@ -120,7 +129,7 @@ def test_qlora_enhanced_override_message(monkeypatch):
             ],
         )
         # The override warning must appear before any error
-        assert "overrides" in result.output or "QLoRA Enhanced" in result.output
+        assert "overrides" in _plain(result.output) or "QLoRA Enhanced" in _plain(result.output)
     finally:
         os.unlink(path)
 
@@ -143,7 +152,7 @@ def test_reward_exits_when_no_reward_trainer(monkeypatch):
         ],
     )
     assert result.exit_code != 0
-    assert "trl" in result.output.lower() or "install" in result.output.lower()
+    assert "trl" in _plain(result.output).lower() or "install" in _plain(result.output).lower()
 
 
 # ── orpo — dependency missing ──────────────────────────────────────────────
@@ -164,7 +173,7 @@ def test_orpo_exits_when_no_orpo(monkeypatch):
         ],
     )
     assert result.exit_code != 0
-    assert "trl" in result.output.lower() or "install" in result.output.lower()
+    assert "trl" in _plain(result.output).lower() or "install" in _plain(result.output).lower()
 
 
 # ── ppo — invalid reward model path ───────────────────────────────────────
