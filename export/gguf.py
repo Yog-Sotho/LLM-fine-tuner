@@ -47,6 +47,7 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
         return f"❌ {err.lstrip('❌ ')}"
 
     from core.state import validate_identifier
+
     if err := validate_identifier(quantization):
         return f"❌ {err.lstrip('❌ ')}"
 
@@ -78,16 +79,13 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
                 # Previously `except Exception: pass` silently swallowed CUDA OOM,
                 # disk-full, and corrupt-model errors, making diagnosis impossible.
                 print(
-                    f"⚠️ Unsloth GGUF export failed ({unsloth_err!r}), "
-                    f"trying llama.cpp fallback..."
+                    f"⚠️ Unsloth GGUF export failed ({unsloth_err!r}), trying llama.cpp fallback..."
                 )
 
         # ── Path B: llama.cpp ─────────────────────────────────────────────
         convert_script = shutil.which("convert_hf_to_gguf.py")
         if convert_script is None:
-            candidate = os.path.join(
-                os.path.expanduser("~"), "llama.cpp", "convert_hf_to_gguf.py"
-            )
+            candidate = os.path.join(os.path.expanduser("~"), "llama.cpp", "convert_hf_to_gguf.py")
             if os.path.isfile(candidate):
                 convert_script = candidate
 
@@ -103,7 +101,9 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
         fp16_path = os.path.join(output_dir, "model_fp16.gguf")
         result = subprocess.run(
             ["python", convert_script, model_path, "--outtype", "f16", "--outfile", fp16_path],
-            capture_output=True, text=True, timeout=900,
+            capture_output=True,
+            text=True,
+            timeout=900,
         )
         if result.returncode != 0:
             return (
@@ -117,7 +117,9 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
             # v2.9 Minor Fix #6: Pass quantisation string in its original case.
             result2 = subprocess.run(
                 [quantize_bin, fp16_path, gguf_out, quantization],
-                capture_output=True, text=True, timeout=900,
+                capture_output=True,
+                text=True,
+                timeout=900,
             )
             if result2.returncode == 0:
                 os.remove(fp16_path)
@@ -144,10 +146,7 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
             "The model may be too large or disk I/O is slow."
         )
     except Exception as e:
-        return (
-            f"❌ GGUF export error: {e}\n"
-            f"Ensure dependencies are installed correctly"
-        )
+        return f"❌ GGUF export error: {e}\nEnsure dependencies are installed correctly"
 
 
 def on_export_gguf(model_path: str, quantization: str, request: gr.Request | None = None):
@@ -160,6 +159,7 @@ def on_export_gguf(model_path: str, quantization: str, request: gr.Request | Non
     quantization = quantization.strip() if quantization else ""
 
     from core.state import validate_identifier
+
     if err := validate_path_traversal(model_path):
         return err, None
     if err := validate_identifier(quantization):

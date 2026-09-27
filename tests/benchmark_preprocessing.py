@@ -1,21 +1,21 @@
-
-import time
-import pandas as pd
-from datasets import Dataset
 import os
 import sys
+import time
+
+from datasets import Dataset
 
 # Add current directory to path so we can import data.preprocessing
 sys.path.append(os.getcwd())
 
-from data.preprocessing import validate_and_clean_dataset
 from config.constants import COL_INSTRUCTION, COL_OUTPUT
+from data.preprocessing import validate_and_clean_dataset
+
 
 def benchmark():
     print("Generating 100,000 rows of dummy data...")
     data = {
         COL_INSTRUCTION: ["Instruction " + str(i) for i in range(100000)],
-        COL_OUTPUT: ["Output " + str(i) for i in range(100000)]
+        COL_OUTPUT: ["Output " + str(i) for i in range(100000)],
     }
     # Add some empty rows
     data[COL_INSTRUCTION][10] = ""
@@ -34,6 +34,7 @@ def benchmark():
     print(f"Original time: {end_time - start_time:.4f} seconds")
     print(f"Issues: {issues}")
     print(f"Cleaned dataset size: {len(cleaned_ds)}")
+
 
 if __name__ == "__main__":
     benchmark()

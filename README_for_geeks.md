@@ -152,8 +152,8 @@ pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git" 
 ```python
 # Applied config (from config/constants.py)
 LoraConfig(
-    r=8,                    # rank — increase to 16/32/64 for harder tasks
-    lora_alpha=16,          # scaling factor; rule of thumb: 2 × r
+    r=8,  # rank — increase to 16/32/64 for harder tasks
+    lora_alpha=16,  # scaling factor; rule of thumb: 2 × r
     target_modules=LORA_TARGET_MAP[model_family],  # auto-detected per architecture
     lora_dropout=0.05,
     bias="none",
@@ -178,7 +178,7 @@ LoraConfig(
 BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16,   # float16 fallback on non-bf16 GPUs
+    bnb_4bit_compute_dtype=torch.bfloat16,  # float16 fallback on non-bf16 GPUs
     bnb_4bit_use_double_quant=True,
 )
 
@@ -186,8 +186,7 @@ BitsAndBytesConfig(
 LoraConfig(
     r=64,
     lora_alpha=128,
-    target_modules=["q_proj","v_proj","k_proj","o_proj",
-                    "gate_proj","up_proj","down_proj"],
+    target_modules=["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
     lora_dropout=0.05,
     bias="none",
 )
@@ -202,9 +201,9 @@ LoraConfig(
 ```python
 PrefixTuningConfig(
     task_type=TaskType.CAUSAL_LM,
-    num_virtual_tokens=30,           # UI-configurable
-    encoder_hidden_size=512,         # v3.1 fix: was incorrectly named token_dim
-    num_layers=2,                    # v3.1 fix: was removed, now correctly passed
+    num_virtual_tokens=30,  # UI-configurable
+    encoder_hidden_size=512,  # v3.1 fix: was incorrectly named token_dim
+    num_layers=2,  # v3.1 fix: was removed, now correctly passed
 )
 ```
 
@@ -214,7 +213,7 @@ PrefixTuningConfig(
 PromptTuningConfig(
     task_type=TaskType.CAUSAL_LM,
     prompt_tuning_init=PromptTuningInit.TEXT,
-    num_virtual_tokens=20,           # UI-configurable
+    num_virtual_tokens=20,  # UI-configurable
     # v3.1 fix: num_transformer_layers removed (invalid kwarg)
 )
 ```
@@ -223,7 +222,7 @@ PromptTuningConfig(
 
 ```python
 # Requires adapter-transformers fork of peft (HAS_ADAPTER_CONFIG)
-AdapterConfig(reduction_factor=16)   # UI-configurable
+AdapterConfig(reduction_factor=16)  # UI-configurable
 ```
 
 ---
@@ -267,11 +266,11 @@ def train_model(
 
 ```python
 hyperparams = {
-    "learning_rate": 2e-4,      # cosine scheduler peak LR
+    "learning_rate": 2e-4,  # cosine scheduler peak LR
     "epochs": 3,
-    "batch_size": 2,            # per-device; v2.9-B: never silently overridden
-    "grad_accum": 4,            # effective batch = batch_size × grad_accum × n_gpus
-    "max_length": 256,          # truncation length in tokens
+    "batch_size": 2,  # per-device; v2.9-B: never silently overridden
+    "grad_accum": 4,  # effective batch = batch_size × grad_accum × n_gpus
+    "max_length": 256,  # truncation length in tokens
     "warmup_steps": 100,
     "lora_rank": 8,
     "lora_alpha": 16,
@@ -287,9 +286,9 @@ if len(dataset) < 2:
 else:
     split = dataset.train_test_split(test_size=0.2, seed=42)
     train_ds, eval_ds = split["train"], split["test"]
-    if len(eval_ds) == 0:           # e.g. 2 examples → 0.2 rounds to 0
+    if len(eval_ds) == 0:  # e.g. 2 examples → 0.2 rounds to 0
         train_ds = dataset.select(range(len(dataset) - 1))
-        eval_ds  = dataset.select([len(dataset) - 1])
+        eval_ds = dataset.select([len(dataset) - 1])
 
 # EarlyStoppingCallback, load_best_model_at_end, metric_for_best_model
 # are only set when eval_ds is not None
@@ -316,13 +315,15 @@ SFT uses `Trainer` + `DataCollatorForLanguageModeling`. DPO routes to `DPOTraine
 ```python
 # Saves AutoModelForCausalLMWithValueHead (v2.9-A fix — PPO-compatible format)
 train_reward_model_v27(
-    model_name, reward_file, output_dir,
+    model_name,
+    reward_file,
+    output_dir,
     rm_epochs=3,
     rm_lr=1.4e-5,
     rm_batch_size=4,
     rm_eval_steps=100,
-    rm_max_length=1024,   # v2.7 Fix 2c: exposed in UI + CLI
-    progress=None,        # v2.9-D: always guarded against None
+    rm_max_length=1024,  # v2.7 Fix 2c: exposed in UI + CLI
+    progress=None,  # v2.9-D: always guarded against None
 )
 ```
 
@@ -331,13 +332,13 @@ train_reward_model_v27(
 ```python
 run_ppo_v27(
     policy_model_name,
-    reward_model_path,    # must be AutoModelForCausalLMWithValueHead
+    reward_model_path,  # must be AutoModelForCausalLMWithValueHead
     ppo_file,
     output_dir,
     ppo_lr=1.4e-5,
-    ppo_batch_size=1,     # keep at 1–2; PPO stores full trajectory
+    ppo_batch_size=1,  # keep at 1–2; PPO stores full trajectory
     ppo_mini_batch_size=1,
-    ppo_epochs=1,         # outer loop epochs (v2.7 Fix 1b)
+    ppo_epochs=1,  # outer loop epochs (v2.7 Fix 1b)
     ppo_max_new_tokens=128,
     progress=None,
 )
@@ -350,10 +351,12 @@ run_ppo_v27(
 
 ```python
 train_orpo_v27(
-    model_name, orpo_file, output_dir,
+    model_name,
+    orpo_file,
+    output_dir,
     orpo_lr=1e-4,
     orpo_beta=0.1,
-    orpo_alpha=0.1,       # v2.9 Minor Fix #7: exposed in UI + CLI
+    orpo_alpha=0.1,  # v2.9 Minor Fix #7: exposed in UI + CLI
     orpo_epochs=3,
     orpo_batch_size=2,
     progress=None,
@@ -405,7 +408,7 @@ if app_state.inference_cache.get("model_name") != model_name:
 # vllm_cache keyed by (model_path, quant) — engine is reused across calls (v2.9-G)
 if app_state.vllm_cache.get("key") != cache_key:
     app_state.vllm_cache["engine"] = LLM(model=model_path, quantization=quant)
-    app_state.vllm_cache["key"]    = cache_key
+    app_state.vllm_cache["key"] = cache_key
 ```
 
 ### Token-based prompt stripping (v2.9 Minor Fix #5)
@@ -414,9 +417,9 @@ if app_state.vllm_cache.get("key") != cache_key:
 # Attention mask used for exact input length — avoids decode-then-strip heuristic
 input_lengths = inputs["attention_mask"].sum(dim=1).tolist()
 for idx, gen_ids in enumerate(outputs):
-    input_len    = input_lengths[idx]
+    input_len = input_lengths[idx]
     response_ids = gen_ids[input_len:] if input_len < gen_ids.shape[0] else gen_ids
-    response     = tokenizer.decode(response_ids, skip_special_tokens=True)
+    response = tokenizer.decode(response_ids, skip_special_tokens=True)
 ```
 
 ---
@@ -426,10 +429,10 @@ for idx, gen_ids in enumerate(outputs):
 ```python
 # Priority: Unsloth native → llama.cpp fallback (export/gguf.py)
 GGUF_QUANT_PRESETS = {
-    "q8_0":   {"desc": "Near-lossless (99% quality)",       "size": "~7 GB (7B)"},
-    "q6_k":   {"desc": "Best balance — recommended default", "size": "~5.5 GB (7B)"},
-    "q5_k_m": {"desc": "Good quality, smaller",              "size": "~4.7 GB (7B)"},
-    "q4_k_m": {"desc": "Max compression",                    "size": "~4 GB (7B)"},
+    "q8_0": {"desc": "Near-lossless (99% quality)", "size": "~7 GB (7B)"},
+    "q6_k": {"desc": "Best balance — recommended default", "size": "~5.5 GB (7B)"},
+    "q5_k_m": {"desc": "Good quality, smaller", "size": "~4.7 GB (7B)"},
+    "q4_k_m": {"desc": "Max compression", "size": "~4 GB (7B)"},
 }
 # v2.9 Minor Fix #6: quant string passed to llama.cpp in original case (not lowercased)
 ```
@@ -522,9 +525,9 @@ python main.py evaluate \
 # main.py — ALL sys.argv > 1 invocations go to Typer
 # Previously broke on `python main.py --help` because "--help" ∉ cli_commands set
 if len(sys.argv) > 1:
-    app()           # Typer handles --help, train --help, train --model … etc.
+    app()  # Typer handles --help, train --help, train --model … etc.
 else:
-    demo.launch()   # Gradio only on zero-argument invocation
+    demo.launch()  # Gradio only on zero-argument invocation
 ```
 
 ---

@@ -21,12 +21,16 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 from config.constants import (
     ALLOW_REMOTE_CODE,
-    COL_PROMPT,
     COL_CHOSEN,
+    COL_PROMPT,
     COL_REJECTED,
     HAS_ORPO,
 )
-from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
+from core.callbacks import (
+    ETAProgressCallback,
+    LoggingCallback,
+    StopCallback,
+)  # F-2: ETAProgressCallback added
 from core.hardware import get_lora_targets
 from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
@@ -60,7 +64,7 @@ def train_orpo_v27(
         return err
 
     if not HAS_ORPO:
-        return "❌ ORPOTrainer not available. Install: pip install \"trl>=0.29.1,<2\""
+        return '❌ ORPOTrainer not available. Install: pip install "trl>=0.29.1,<2"'
     if orpo_file is None:
         return "❌ Please upload a preference dataset (prompt, chosen, rejected)."
 
@@ -126,17 +130,17 @@ def train_orpo_v27(
         # v3.2 Fix #1: Guard against datasets too small to produce a non-empty eval split.
         if len(ds) < 2:
             orpo_train_ds = ds
-            orpo_eval_ds  = None
+            orpo_eval_ds = None
         else:
             split = ds.train_test_split(test_size=0.1, seed=42)
             orpo_train_ds = split["train"]
-            orpo_eval_ds  = split["test"]
+            orpo_eval_ds = split["test"]
             if len(orpo_eval_ds) == 0:
                 orpo_train_ds = ds.select(range(len(ds) - 1))
-                orpo_eval_ds  = ds.select([len(ds) - 1])
+                orpo_eval_ds = ds.select([len(ds) - 1])
 
         _orpo_eval_strategy = "no" if orpo_eval_ds is None else "steps"
-        _orpo_load_best     = orpo_eval_ds is not None
+        _orpo_load_best = orpo_eval_ds is not None
 
         orpo_config_kwargs = dict(
             output_dir=output_dir,
@@ -157,6 +161,7 @@ def train_orpo_v27(
 
         # Guard alpha — added in TRL >= 0.8.1; silently omit on older installs.
         import inspect as _inspect
+
         try:
             if "alpha" in _inspect.signature(ORPOConfig.__init__).parameters:
                 orpo_config_kwargs["alpha"] = orpo_alpha
@@ -211,7 +216,7 @@ def train_orpo_v27(
             progress(1.0, desc="✅ Complete!")
         return (
             f"✅ ORPO training {status}!\n"
-            f"⏱ Elapsed: {elapsed/60:.1f} min\n"
+            f"⏱ Elapsed: {elapsed / 60:.1f} min\n"
             f"📉 Final train loss: {final_loss}\n"
             f"📁 Saved to: {output_dir}"
         )

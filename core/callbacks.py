@@ -14,7 +14,6 @@ Patch log
 
 import threading
 import time
-from typing import Optional
 
 from transformers import TrainerCallback
 
@@ -64,14 +63,16 @@ class LoggingCallback(TrainerCallback):
         else:
             eta_s = 0.0
 
-        self.records.append({
-            "step":       state.global_step,
-            "train_loss": round(logs["loss"], 4),
-            "eval_loss":  round(logs.get("eval_loss", float("nan")), 4),
-            # F-2 additions: timing data for ETA display and telemetry
-            "elapsed_s":  round(elapsed, 1),
-            "eta_s":      round(eta_s, 1),
-        })
+        self.records.append(
+            {
+                "step": state.global_step,
+                "train_loss": round(logs["loss"], 4),
+                "eval_loss": round(logs.get("eval_loss", float("nan")), 4),
+                # F-2 additions: timing data for ETA display and telemetry
+                "elapsed_s": round(elapsed, 1),
+                "eta_s": round(eta_s, 1),
+            }
+        )
 
 
 class ETAProgressCallback(TrainerCallback):

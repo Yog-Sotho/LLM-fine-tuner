@@ -62,6 +62,7 @@ def _load_for_inference(model_name: str, lora_path: str | None):
     lora_path = lora_path.strip() if lora_path else None
 
     from core.state import validate_path_traversal
+
     if err := validate_path_traversal(model_name):
         raise ValueError(err)
     if lora_path:
@@ -185,6 +186,7 @@ def batch_generate(
     try:
         if prompts_file and hasattr(prompts_file, "name") and prompts_file.name:
             from core.state import validate_path_traversal
+
             if err := validate_path_traversal(prompts_file.name):
                 return err
 
@@ -211,7 +213,7 @@ def batch_generate(
         model, tokenizer = _load_for_inference(model_name, lora_path)
 
         for i in range(0, len(prompts), batch_size):
-            batch_prompts = prompts[i: i + batch_size]
+            batch_prompts = prompts[i : i + batch_size]
             inputs = tokenizer(
                 batch_prompts,
                 return_tensors="pt",

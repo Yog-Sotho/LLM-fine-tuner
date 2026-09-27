@@ -1,23 +1,26 @@
-import time
-import pandas as pd
-import tempfile
 import os
 import sys
-from datasets import Dataset
+import tempfile
+import time
+
+import pandas as pd
 
 # Add current directory to path
 sys.path.append(os.getcwd())
 
 from data.loader import load_dataset_from_dataframe, load_dataset_from_file
 
+
 def benchmark_file_upload_bolt(n=100000):
     print(f"⚡ Bolt: Benchmarking file upload optimization for {n} rows...")
 
     # Create dummy DataFrame
-    df = pd.DataFrame({
-        "instruction": ["What is the capital of France? " * 3] * n,
-        "output": ["The capital is Paris. " * 3] * n
-    })
+    df = pd.DataFrame(
+        {
+            "instruction": ["What is the capital of France? " * 3] * n,
+            "output": ["The capital is Paris. " * 3] * n,
+        }
+    )
 
     # Prepare file
     with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
@@ -42,7 +45,7 @@ def benchmark_file_upload_bolt(n=100000):
     new_time = t1 - t0
     print(f"⚡ New single-pass read method: {new_time:.4f}s")
 
-    speedup = old_time / new_time if new_time > 0 else float('inf')
+    speedup = old_time / new_time if new_time > 0 else float("inf")
     print(f"🚀 Speedup: {speedup:.2f}x")
 
     # Clean up
@@ -53,6 +56,7 @@ def benchmark_file_upload_bolt(n=100000):
     assert ds_old.column_names == ds_new.column_names
     assert len(raw_df_old) == len(raw_df_new)
     print("✅ Correctness and logical parity verified.")
+
 
 if __name__ == "__main__":
     benchmark_file_upload_bolt()

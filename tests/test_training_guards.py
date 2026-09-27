@@ -15,8 +15,8 @@ Covers:
   - load_best_model_at_end is False when no eval
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
 import datasets
 
 from config.constants import COL_TEXT
@@ -28,21 +28,23 @@ def _make_ds(n: int):
 
 # We test the split logic in isolation — pull it out of training/sft.py
 
+
 def _simulate_split(ds, test_size=0.2):
     """Mirror the guard logic from training/sft.py for unit testing."""
     if len(ds) < 2:
         return ds, None
     split = ds.train_test_split(test_size=test_size, seed=42)
     train_ds = split["train"]
-    eval_ds  = split["test"]
+    eval_ds = split["test"]
     if len(eval_ds) == 0:
         # Manually reserve last example
         train_ds = ds.select(range(len(ds) - 1))
-        eval_ds  = ds.select([len(ds) - 1])
+        eval_ds = ds.select([len(ds) - 1])
     return train_ds, eval_ds
 
 
 # ── split guard tests ──────────────────────────────────────────────────────
+
 
 def test_single_example_no_eval():
     ds = _make_ds(1)
@@ -70,6 +72,7 @@ def test_ten_examples_normal_split():
 def test_no_early_stopping_when_no_eval():
     """EarlyStoppingCallback must be absent when eval_ds is None."""
     from transformers import EarlyStoppingCallback
+
     callbacks = []
     early_stop = 3
     eval_ds = None  # simulated no-eval scenario
@@ -81,6 +84,7 @@ def test_no_early_stopping_when_no_eval():
 def test_early_stopping_added_when_eval_present():
     """EarlyStoppingCallback must be present when eval_ds exists."""
     from transformers import EarlyStoppingCallback
+
     callbacks = []
     early_stop = 3
     eval_ds = MagicMock()  # simulated eval dataset
@@ -93,11 +97,11 @@ def test_early_stopping_added_when_eval_present():
 def test_load_best_model_false_when_no_eval():
     """load_best_model_at_end must be False when eval_ds is None (prevents crash)."""
     eval_ds = None
-    load_best = (eval_ds is not None)
+    load_best = eval_ds is not None
     assert load_best is False
 
 
 def test_load_best_model_true_when_eval_present():
     eval_ds = MagicMock()
-    load_best = (eval_ds is not None)
+    load_best = eval_ds is not None
     assert load_best is True

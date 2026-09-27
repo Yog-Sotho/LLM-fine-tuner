@@ -1,8 +1,8 @@
-
 import time
+
 import pandas as pd
 from datasets import Dataset
-import numpy as np
+
 
 def original_augment_reconstruction(dataset, all_aug_versions, target_col, texts_to_aug):
     augmented_rows = []
@@ -18,6 +18,7 @@ def original_augment_reconstruction(dataset, all_aug_versions, target_col, texts
             augmented_rows.append(new_example)
     return Dataset.from_list(augmented_rows)
 
+
 def optimized_augment_reconstruction(dataset, all_aug_versions, target_col, texts_to_aug):
     df_orig = dataset.to_pandas()
     dfs = [df_orig]
@@ -25,16 +26,17 @@ def optimized_augment_reconstruction(dataset, all_aug_versions, target_col, text
         df_aug = df_orig.copy()
         if len(aug_results) < len(df_orig):
             # Pad if nlpaug returned fewer results
-            aug_results = list(aug_results) + texts_to_aug[len(aug_results):]
+            aug_results = list(aug_results) + texts_to_aug[len(aug_results) :]
         elif len(aug_results) > len(df_orig):
             # Truncate if nlpaug returned more (unlikely but safe)
-            aug_results = aug_results[:len(df_orig)]
+            aug_results = aug_results[: len(df_orig)]
 
         df_aug[target_col] = aug_results
         dfs.append(df_aug)
 
-    combined = pd.concat(dfs).sort_index(kind='stable')
+    combined = pd.concat(dfs).sort_index(kind="stable")
     return Dataset.from_pandas(combined, preserve_index=False)
+
 
 # Setup
 N = 10000
@@ -45,8 +47,7 @@ dataset = Dataset.from_dict(data)
 texts_to_aug = data[target_col]
 
 all_aug_versions = [
-    [f"Augmented {j} version {i}" for i in range(N)]
-    for j in range(augmentation_factor - 1)
+    [f"Augmented {j} version {i}" for i in range(N)] for j in range(augmentation_factor - 1)
 ]
 
 print(f"Benchmarking augmentation reconstruction for {N} rows, factor {augmentation_factor}...")

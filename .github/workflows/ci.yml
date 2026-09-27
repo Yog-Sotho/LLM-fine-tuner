@@ -91,7 +91,7 @@ jobs:
 
       - name: "Install ruff"
         # Same version range declared in [project.optional-dependencies] dev
-        run: pip install --quiet "ruff>=0.4.0"
+        run: pip install --quiet "ruff==0.16.9"  # pinned: format output changes between releases
 
       - name: "ruff format --check"
         run: ruff format --check --diff .

@@ -215,73 +215,79 @@ CLASSIFIERS: list[str] = [
 # ── Project URLs ───────────────────────────────────────────────────────────────
 # Mirrors [project.urls] in pyproject.toml.
 PROJECT_URLS: dict[str, str] = {
-    "Homepage":    "https://github.com/Yog-Sotho/LLM-fine-tuner",
-    "Repository":  "https://github.com/Yog-Sotho/LLM-fine-tuner",
-    "Issues":      "https://github.com/Yog-Sotho/LLM-fine-tuner/issues",
-    "Changelog":   "https://github.com/Yog-Sotho/LLM-fine-tuner/releases",
+    "Homepage": "https://github.com/Yog-Sotho/LLM-fine-tuner",
+    "Repository": "https://github.com/Yog-Sotho/LLM-fine-tuner",
+    "Issues": "https://github.com/Yog-Sotho/LLM-fine-tuner/issues",
+    "Changelog": "https://github.com/Yog-Sotho/LLM-fine-tuner/releases",
 }
 
 # ── setup() ────────────────────────────────────────────────────────────────────
 setup(
     # ── Identity ──────────────────────────────────────────────────────────
-    name="llm-fine-tuner",                          # matches pyproject.toml name
-    version=_version,                               # read from pyproject.toml
+    name="llm-fine-tuner",  # matches pyproject.toml name
+    version=_version,  # read from pyproject.toml
     description=(
         "Advanced LLM Fine-Tuner — SFT, DPO, ORPO, PPO, reward modelling and evaluation. "
         "No-code Gradio UI + full CLI. QLoRA, Unsloth, GGUF, vLLM, Heretic Mode."
     ),
     long_description=_long_description,
     long_description_content_type=_long_desc_content_type,
-
     # ── Author ────────────────────────────────────────────────────────────
     author="Yog-Sotho",
     author_email="",
     maintainer="Yog-Sotho",
     maintainer_email="",
-
     # ── URLs ──────────────────────────────────────────────────────────────
     url="https://github.com/Yog-Sotho/LLM-fine-tuner",
     project_urls=PROJECT_URLS,
-
     # ── License ───────────────────────────────────────────────────────────
-    license="MIT",                                  # matches pyproject.toml
-
+    license="MIT",  # matches pyproject.toml
     # ── Python version ────────────────────────────────────────────────────
-    python_requires=">=3.10",                       # matches pyproject.toml
-
+    python_requires=">=3.10",  # matches pyproject.toml
     # ── Packages ──────────────────────────────────────────────────────────
     packages=PACKAGES,
-    package_dir={"": "."},                          # flat layout, no src/
-
+    package_dir={"": "."},  # flat layout, no src/
     # ── Static assets bundled into the wheel ──────────────────────────────
     package_data={
         # Include CSS so ui.css is accessible at runtime via importlib.resources
-        "ui":     ["*.py", "css.py"],
+        "ui": ["*.py", "css.py"],
         # Include docs index so help text can be read from the package
-        "docs":   ["index.md"],
+        "docs": ["index.md"],
         # Include all Python sources for the config layer (needed by some
         # tools that inspect the installed package for constants)
         "config": ["*.py"],
     },
     include_package_data=True,
-
     # ── Dependencies ──────────────────────────────────────────────────────
     install_requires=INSTALL_REQUIRES,
     extras_require=EXTRAS_REQUIRE,
-
     # ── Entry points ──────────────────────────────────────────────────────
     entry_points=ENTRY_POINTS,
-
     # ── Metadata ──────────────────────────────────────────────────────────
     classifiers=CLASSIFIERS,
     keywords=[
-        "llm", "fine-tuning", "machine-learning", "deep-learning",
-        "gradio", "peft", "lora", "qlora", "dpo", "rlhf", "ppo", "orpo",
-        "transformers", "huggingface", "unsloth", "gguf", "vllm",
-        "nlp", "pytorch", "ai",
+        "llm",
+        "fine-tuning",
+        "machine-learning",
+        "deep-learning",
+        "gradio",
+        "peft",
+        "lora",
+        "qlora",
+        "dpo",
+        "rlhf",
+        "ppo",
+        "orpo",
+        "transformers",
+        "huggingface",
+        "unsloth",
+        "gguf",
+        "vllm",
+        "nlp",
+        "pytorch",
+        "ai",
     ],
     platforms=["any"],
-
     # Must be False: gradio, transformers, and huggingface_hub all read their
     # own package resources at runtime (templates, tokeniser files, etc.).
     zip_safe=False,

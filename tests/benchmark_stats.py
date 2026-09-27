@@ -1,6 +1,7 @@
 import time
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 from datasets import Dataset
@@ -13,19 +14,20 @@ COL_TEXT = "text"
 COL_INSTRUCTION = "instruction"
 COL_OUTPUT = "output"
 
+
 def get_stats_loop(ds):
     try:
         if COL_PROMPT in ds.column_names and COL_CHOSEN in ds.column_names:
             _lengths = [
                 len(str(p)) + len(str(c)) + len(str(r))
-                for p, c, r in zip(ds[COL_PROMPT], ds[COL_CHOSEN], ds[COL_REJECTED])
+                for p, c, r in zip(ds[COL_PROMPT], ds[COL_CHOSEN], ds[COL_REJECTED], strict=False)
             ]
         elif COL_TEXT in ds.column_names:
             _lengths = [len(str(t)) for t in ds[COL_TEXT]]
         elif COL_INSTRUCTION in ds.column_names and COL_OUTPUT in ds.column_names:
             _lengths = [
                 len(str(i)) + len(str(o))
-                for i, o in zip(ds[COL_INSTRUCTION], ds[COL_OUTPUT])
+                for i, o in zip(ds[COL_INSTRUCTION], ds[COL_OUTPUT], strict=False)
             ]
         else:
             first_col = ds.column_names[0] if ds.column_names else None
@@ -34,28 +36,31 @@ def get_stats_loop(ds):
         _lengths = [100] * len(ds)
     return float(np.mean(_lengths)) if _lengths else 0.0
 
+
 def get_stats_vectorized(ds):
     df = ds.to_pandas()
     if COL_PROMPT in df.columns and COL_CHOSEN in df.columns:
         # Sum of lengths
-        lengths = df[COL_PROMPT].astype(str).str.len() + \
-                  df[COL_CHOSEN].astype(str).str.len() + \
-                  df[COL_REJECTED].astype(str).str.len()
+        lengths = (
+            df[COL_PROMPT].astype(str).str.len()
+            + df[COL_CHOSEN].astype(str).str.len()
+            + df[COL_REJECTED].astype(str).str.len()
+        )
     elif COL_TEXT in df.columns:
         lengths = df[COL_TEXT].astype(str).str.len()
     elif COL_INSTRUCTION in df.columns and COL_OUTPUT in df.columns:
-        lengths = df[COL_INSTRUCTION].astype(str).str.len() + \
-                  df[COL_OUTPUT].astype(str).str.len()
+        lengths = df[COL_INSTRUCTION].astype(str).str.len() + df[COL_OUTPUT].astype(str).str.len()
     else:
         first_col = df.columns[0] if not df.empty else None
         lengths = df[first_col].astype(str).str.len() if first_col else pd.Series(dtype=float)
 
     return float(lengths.mean()) if not lengths.empty else 0.0
 
+
 def get_stats_arrow(ds):
     table = ds.data
     col_names = ds.column_names
-    if (COL_PROMPT in col_names and COL_CHOSEN in col_names):
+    if COL_PROMPT in col_names and COL_CHOSEN in col_names:
         p_len = pc.fill_null(pc.utf8_length(pc.cast(table[COL_PROMPT], pa.string())), 0)
         c_len = pc.fill_null(pc.utf8_length(pc.cast(table[COL_CHOSEN], pa.string())), 0)
         r_len = pc.fill_null(pc.utf8_length(pc.cast(table[COL_REJECTED], pa.string())), 0)
@@ -74,6 +79,7 @@ def get_stats_arrow(ds):
             return 0.0
     mean_length = pc.mean(lengths).as_py()
     return float(mean_length) if mean_length is not None else 0.0
+
 
 if __name__ == "__main__":
     # Create a large dataset
@@ -104,5 +110,5 @@ if __name__ == "__main__":
     arrow_time = t1 - t0
     print(f"Vectorized Arrow took: {arrow_time:.4f}s, avg: {avg_arrow}")
 
-    print(f"Arrow Speedup over Loop: {loop_time/arrow_time:.2f}x")
-    print(f"Arrow Speedup over Pandas: {vec_time/arrow_time:.2f}x")
+    print(f"Arrow Speedup over Loop: {loop_time / arrow_time:.2f}x")
+    print(f"Arrow Speedup over Pandas: {vec_time / arrow_time:.2f}x")

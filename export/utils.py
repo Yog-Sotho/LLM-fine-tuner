@@ -29,8 +29,8 @@ from datetime import datetime
 import gradio as gr
 import torch
 
-from data.loader import safe_extract_zip
 from core.state import PICKLE_WEIGHT_SUFFIXES, app_state, validate_adapter_dir
+from data.loader import safe_extract_zip
 
 
 def create_zip_from_folder(folder_path: str) -> str:
@@ -48,7 +48,7 @@ def create_zip_from_folder(folder_path: str) -> str:
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for root, _, files in os.walk(folder_path):
                 for fname in files:
-                    fpath    = os.path.join(root, fname)
+                    fpath = os.path.join(root, fname)
                     arc_name = os.path.relpath(fpath, start=os.path.dirname(folder_path))
                     zf.write(fpath, arc_name)
     return zip_path
@@ -80,12 +80,14 @@ def create_model_card(
     a 400 error when pushing.  Tags are now built as a Python list and rendered
     cleanly — the "heretic" tag is only included when heretic_mode is True.
     """
-    mode          = peft_method if peft_method != "Full Fine-tuning" else "full fine-tune"
+    mode = peft_method if peft_method != "Full Fine-tuning" else "full fine-tune"
     training_type = "DPO Alignment" if training_mode == "dpo" else "Supervised Fine-Tuning"
 
     tag_peft = (
-        "lora"           if peft_method in ["LoRA", "QLoRA Enhanced"]
-        else "peft"      if peft_method != "Full Fine-tuning"
+        "lora"
+        if peft_method in ["LoRA", "QLoRA Enhanced"]
+        else "peft"
+        if peft_method != "Full Fine-tuning"
         else "full-finetune"
     )
     tag_train = "dpo" if training_mode == "dpo" else "sft"
@@ -151,6 +153,7 @@ def on_peft_zip_upload(zip_file, request: gr.Request | None = None) -> tuple:
 
     if hasattr(zip_file, "name") and zip_file.name:
         from core.state import validate_path_traversal
+
         if err := validate_path_traversal(zip_file.name):
             return " ", err, " "
 

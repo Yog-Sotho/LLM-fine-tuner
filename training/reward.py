@@ -28,7 +28,11 @@ from config.constants import (
     HAS_PPO,
     HAS_REWARD_TRAINER,
 )
-from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
+from core.callbacks import (
+    ETAProgressCallback,
+    LoggingCallback,
+    StopCallback,
+)  # F-2: ETAProgressCallback added
 from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
 
@@ -64,7 +68,7 @@ def train_reward_model_v27(
     # after the tokenizer was already loaded, causing a ~2s delay before the user
     # saw the error message. Fast-fail at the earliest possible point.
     if not HAS_REWARD_TRAINER:
-        return "❌ RewardTrainer not available. Install: pip install \"trl>=0.29.1,<2\""
+        return '❌ RewardTrainer not available. Install: pip install "trl>=0.29.1,<2"'
     if not HAS_PPO:
         return "❌ Reward model training needs TRL's legacy value-head PPO API, which was removed in TRL 0.12 and is not part of the supported TRL versions. It is being rebuilt on the current TRL API."
     if reward_file is None:
@@ -105,8 +109,9 @@ def train_reward_model_v27(
             trust_remote_code=ALLOW_REMOTE_CODE,
         )
 
-        from data.preprocessing import tokenize_reward_function
         import os
+
+        from data.preprocessing import tokenize_reward_function
 
         if progress is not None:
             progress(0.15, desc="Tokenising reward pairs…")
@@ -126,17 +131,17 @@ def train_reward_model_v27(
         # v3.2 Fix #1: Guard against datasets too small to produce a non-empty eval split.
         if len(tokenized_ds) < 2:
             rm_train_ds = tokenized_ds
-            rm_eval_ds  = None
+            rm_eval_ds = None
         else:
             split = tokenized_ds.train_test_split(test_size=0.1, seed=42)
             rm_train_ds = split["train"]
-            rm_eval_ds  = split["test"]
+            rm_eval_ds = split["test"]
             if len(rm_eval_ds) == 0:
                 rm_train_ds = tokenized_ds.select(range(len(tokenized_ds) - 1))
-                rm_eval_ds  = tokenized_ds.select([len(tokenized_ds) - 1])
+                rm_eval_ds = tokenized_ds.select([len(tokenized_ds) - 1])
 
         _rm_eval_strategy = "no" if rm_eval_ds is None else "steps"
-        _rm_load_best     = rm_eval_ds is not None
+        _rm_load_best = rm_eval_ds is not None
 
         reward_config = RewardConfig(
             output_dir=output_dir,
@@ -193,7 +198,7 @@ def train_reward_model_v27(
             progress(1.0, desc="✅ Complete!")
         return (
             f"✅ Reward model training {status}!\n"
-            f"⏱ Elapsed: {elapsed/60:.1f} min\n"
+            f"⏱ Elapsed: {elapsed / 60:.1f} min\n"
             f"📉 Final train loss: {final_loss}\n"
             f"📁 Saved to: {output_dir}"
         )

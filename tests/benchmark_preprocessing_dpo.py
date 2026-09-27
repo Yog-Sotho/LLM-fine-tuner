@@ -1,21 +1,22 @@
-import time
-import pandas as pd
-from datasets import Dataset
 import os
 import sys
+import time
+
+from datasets import Dataset
 
 # Add current directory to path so we can import data.preprocessing
 sys.path.append(os.getcwd())
 
+from config.constants import COL_CHOSEN, COL_PROMPT, COL_REJECTED
 from data.preprocessing import validate_and_clean_dataset
-from config.constants import COL_PROMPT, COL_CHOSEN, COL_REJECTED
+
 
 def benchmark():
     print("Generating 100,000 rows of dummy DPO data...")
     data = {
         COL_PROMPT: ["Prompt " + str(i) for i in range(100000)],
         COL_CHOSEN: ["Chosen " + str(i) for i in range(100000)],
-        COL_REJECTED: ["Rejected " + str(i) for i in range(100000)]
+        COL_REJECTED: ["Rejected " + str(i) for i in range(100000)],
     }
     # Add some empty rows
     data[COL_PROMPT][10] = ""
@@ -38,8 +39,11 @@ def benchmark():
     print(f"Cleaned dataset size: {len(cleaned_ds)}")
 
     # Assert correctness
-    assert len(cleaned_ds) == 98999, f"Expected 98999 rows after removing 2 empty and 999 duplicate rows, but got {len(cleaned_ds)}"
+    assert len(cleaned_ds) == 98999, (
+        f"Expected 98999 rows after removing 2 empty and 999 duplicate rows, but got {len(cleaned_ds)}"
+    )
     print("Verification passed successfully!")
+
 
 if __name__ == "__main__":
     benchmark()

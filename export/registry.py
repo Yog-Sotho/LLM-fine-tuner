@@ -39,15 +39,16 @@ class ModelRegistry:
         token = token.strip() if token else ""
 
         from core.state import validate_path_traversal
+
         if err := (validate_path_traversal(repo_id) or validate_path_traversal(token)):
             raise ValueError(err)
 
         from huggingface_hub import HfApi, create_repo  # lazy
 
         self._create_repo = create_repo
-        self.api     = HfApi()
+        self.api = HfApi()
         self.repo_id = repo_id
-        self.token   = token
+        self.token = token
 
     def create_repo_if_needed(self) -> None:
         """Ensure the target repository exists (idempotent)."""
@@ -76,6 +77,7 @@ class ModelRegistry:
         version = version.strip() if version else ""
 
         from core.state import validate_identifier, validate_path_traversal
+
         if err := (validate_path_traversal(model_path) or validate_identifier(version)):
             return err
 
@@ -97,7 +99,7 @@ class ModelRegistry:
             base_model_name = "unknown"
             try:
                 adapter_config_path = os.path.join(model_path, "adapter_config.json")
-                config_path         = os.path.join(model_path, "config.json")
+                config_path = os.path.join(model_path, "config.json")
                 if os.path.exists(adapter_config_path):
                     with open(adapter_config_path) as f:
                         adapter_cfg = json.load(f)
@@ -111,9 +113,9 @@ class ModelRegistry:
             except Exception as e:
                 base_model_name = f"unknown (error: {e})"
 
-            metadata["base_model"]   = base_model_name
-            metadata["version"]      = version
-            metadata["uploaded_at"]  = datetime.now().isoformat()
+            metadata["base_model"] = base_model_name
+            metadata["version"] = version
+            metadata["uploaded_at"] = datetime.now().isoformat()
 
             self.api.upload_file(
                 path_or_fileobj=json.dumps(metadata, indent=2).encode(),
@@ -155,8 +157,8 @@ class ModelRegistry:
                     )
                     with open(content) as f:
                         meta = json.load(f)
-                    ver   = meta_file.replace("metadata_v", "").replace(".json", "")
-                    base  = meta.get("base_model", "unknown")
+                    ver = meta_file.replace("metadata_v", "").replace(".json", "")
+                    base = meta.get("base_model", "unknown")
                     notes = meta.get("notes", "")
                     notes = (notes[:50] + "...") if len(notes) > 50 else notes
                     versions_info.append(f"• v{ver}: {base} | {notes}")
@@ -172,6 +174,7 @@ class ModelRegistry:
 
 # ── Gradio UI handlers ─────────────────────────────────────────────────────
 
+
 def on_registry_upload(
     model_path_state: str,
     registry_repo_id: str,
@@ -182,11 +185,12 @@ def on_registry_upload(
     """Handler for the Registry Upload button in the Share tab."""
     # Sentinel: strip whitespace and validate against path traversal / malformed input.
     registry_repo_id = registry_repo_id.strip() if registry_repo_id else ""
-    registry_token   = registry_token.strip()   if registry_token   else ""
+    registry_token = registry_token.strip() if registry_token else ""
     registry_version = registry_version.strip() if registry_version else ""
     model_path_state = model_path_state.strip() if model_path_state else ""
 
     from core.state import validate_identifier, validate_path_traversal
+
     if err := (
         validate_path_traversal(model_path_state)
         or validate_path_traversal(registry_repo_id)
@@ -230,12 +234,12 @@ def on_registry_list(registry_repo_id: str, registry_token: str) -> str:
     """Handler for the List Versions button in the Share tab."""
     # Sentinel: strip whitespace and validate against path traversal.
     registry_repo_id = registry_repo_id.strip() if registry_repo_id else ""
-    registry_token   = registry_token.strip()   if registry_token   else ""
+    registry_token = registry_token.strip() if registry_token else ""
 
     from core.state import validate_path_traversal
+
     if err := (
-        validate_path_traversal(registry_repo_id)
-        or validate_path_traversal(registry_token)
+        validate_path_traversal(registry_repo_id) or validate_path_traversal(registry_token)
     ):
         return err
 

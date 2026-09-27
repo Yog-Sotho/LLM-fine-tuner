@@ -27,28 +27,30 @@ Fix history preserved inline:
 """
 
 import os
-import sys
 from datetime import datetime
-from typing import Optional
 
 import torch
 import typer
 
 from config.constants import (
-    COL_CHOSEN, COL_REJECTED,
-    COL_PROMPT, COL_TEXT, COL_INSTRUCTION,
-    HAS_REWARD_TRAINER, HAS_PPO, HAS_ORPO,
+    COL_CHOSEN,
+    COL_INSTRUCTION,
+    COL_PROMPT,
+    COL_REJECTED,
+    COL_TEXT,
+    HAS_ORPO,
+    HAS_PPO,
+    HAS_REWARD_TRAINER,
 )
 from core.state import validate_path_traversal
 from data.loader import load_dataset_from_file
 from data.preprocessing import validate_and_clean_dataset
-from inference.evaluation import compute_bleu_rouge, compute_bertscore_metric
+from inference.evaluation import compute_bertscore_metric, compute_bleu_rouge
 from inference.generate import _load_for_inference
 from training.orpo import train_orpo_v27
 from training.ppo import run_ppo_v27
 from training.reward import train_reward_model_v27
 from training.sft import train_model
-
 
 app = typer.Typer(
     name="llm-fine-tuner",
@@ -59,11 +61,13 @@ app = typer.Typer(
 
 class DummyFile:
     """Minimal file-like proxy so core functions that expect gr.File work in CLI context."""
+
     def __init__(self, name: str):
         self.name = name
 
 
 # ── train ──────────────────────────────────────────────────────────────────
+
 
 @app.command()
 def train(
@@ -74,11 +78,13 @@ def train(
     batch_size: int = typer.Option(2, "--batch-size", help="Per-device batch size"),
     max_length: int = typer.Option(256, "--max-length", help="Maximum sequence length"),
     learning_rate: float = typer.Option(2e-4, "--lr", help="Learning rate"),
-    peft_method: str = typer.Option("LoRA", "--peft",
-                                     help="PEFT method: LoRA | QLoRA Enhanced | Full Fine-tuning | Auto"),
+    peft_method: str = typer.Option(
+        "LoRA", "--peft", help="PEFT method: LoRA | QLoRA Enhanced | Full Fine-tuning | Auto"
+    ),
     lora_rank: int = typer.Option(8, "--lora-rank", help="LoRA rank"),
     use_qlora_enhanced: bool = typer.Option(
-        False, "--qlora-enhanced",
+        False,
+        "--qlora-enhanced",
         help="Activate QLoRA Enhanced (NF4 + double quant). Overrides --peft.",
     ),
     use_flash_attn: bool = typer.Option(False, "--flash-attn", help="Enable Flash Attention 2"),
@@ -98,7 +104,9 @@ def train(
         typer.echo(err, err=True)
         raise typer.Exit(code=1)
 
-    typer.echo(f"🚀 Starting training: {model} | PEFT: {peft_method} | Data: {data} | Output: {output}")
+    typer.echo(
+        f"🚀 Starting training: {model} | PEFT: {peft_method} | Data: {data} | Output: {output}"
+    )
 
     if not os.path.exists(data):
         typer.echo(f"❌ Dataset not found: {data}", err=True)
@@ -129,19 +137,30 @@ def train(
             "lr_scheduler": "cosine",
         }
         msg, _ = train_model(
-            model_name=model, dataset=ds, output_dir=output,
+            model_name=model,
+            dataset=ds,
+            output_dir=output,
             hyperparams=hyperparams,
             device="cuda" if torch.cuda.is_available() else "cpu",
             peft_method=peft_method,
-            use_lora=True, lora_rank=lora_rank, lora_alpha=lora_rank * 2,
-            prefix_tuning_num_virtual_tokens=30, prefix_tuning_token_dim=512,
-            prefix_tuning_num_layers=2, prompt_tuning_num_virtual_tokens=20,
+            use_lora=True,
+            lora_rank=lora_rank,
+            lora_alpha=lora_rank * 2,
+            prefix_tuning_num_virtual_tokens=30,
+            prefix_tuning_token_dim=512,
+            prefix_tuning_num_layers=2,
+            prompt_tuning_num_virtual_tokens=20,
             adapter_reduction_factor=16,
-            resume_from_checkpoint=False, early_stop=3,
-            lr_scheduler_type="cosine", gradient_checkpointing=True,
-            use_unsloth=False, use_chat_template=False,
+            resume_from_checkpoint=False,
+            early_stop=3,
+            lr_scheduler_type="cosine",
+            gradient_checkpointing=True,
+            use_unsloth=False,
+            use_chat_template=False,
             system_prompt="You are a helpful assistant.",
-            training_mode="sft", dpo_beta=0.1, heretic_mode=False,
+            training_mode="sft",
+            dpo_beta=0.1,
+            heretic_mode=False,
             progress=None,
             use_flash_attn=use_flash_attn,
         )
@@ -152,10 +171,11 @@ def train(
         raise
     except Exception as e:
         typer.echo(f"\n❌ Training failed: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 # ── reward ─────────────────────────────────────────────────────────────────
+
 
 @app.command()
 def reward(
@@ -179,7 +199,10 @@ def reward(
     typer.echo(f"🎖️  Training reward model: {model} | Max Length: {max_length}")
 
     if not (HAS_REWARD_TRAINER and HAS_PPO):
-        typer.echo("❌ Reward model training needs TRL's legacy value-head PPO API, which was removed in TRL 0.12 and is not part of the supported TRL versions. It is being rebuilt on the current TRL API.", err=True)
+        typer.echo(
+            "❌ Reward model training needs TRL's legacy value-head PPO API, which was removed in TRL 0.12 and is not part of the supported TRL versions. It is being rebuilt on the current TRL API.",
+            err=True,
+        )
         raise typer.Exit(code=1)
 
     # N-4 FIX: Added ftype guard (was missing for reward/orpo/ppo — only train had it).
@@ -198,9 +221,7 @@ def reward(
     try:
         ds = load_dataset_from_file(DummyFile(data), ftype, is_dpo=True)
         if not (COL_CHOSEN in ds.column_names and COL_REJECTED in ds.column_names):
-            typer.echo(
-                f"❌ Dataset requires '{COL_CHOSEN}' and '{COL_REJECTED}' columns", err=True
-            )
+            typer.echo(f"❌ Dataset requires '{COL_CHOSEN}' and '{COL_REJECTED}' columns", err=True)
             raise typer.Exit(code=1)
 
         result = train_reward_model_v27(
@@ -225,16 +246,16 @@ def reward(
         raise
     except Exception as e:
         typer.echo(f"\n❌ Reward training failed: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 # ── orpo ───────────────────────────────────────────────────────────────────
 
+
 @app.command()
 def orpo(
     model: str = typer.Option(..., "--model", help="Base model ID"),
-    data: str = typer.Option(..., "--data",
-                              help="Preference dataset (prompt / chosen / rejected)"),
+    data: str = typer.Option(..., "--data", help="Preference dataset (prompt / chosen / rejected)"),
     output: str = typer.Option("./orpo_model", "--output", help="Output directory"),
     epochs: int = typer.Option(3, "--epochs"),
     lr: float = typer.Option(1e-4, "--lr"),
@@ -254,7 +275,7 @@ def orpo(
     typer.echo(f"🌀 ORPO training: {model} | Beta: {beta} | Alpha: {alpha}")
 
     if not HAS_ORPO:
-        typer.echo("❌ ORPO not available. Install: pip install \"trl>=0.29.1,<2\"", err=True)
+        typer.echo('❌ ORPO not available. Install: pip install "trl>=0.29.1,<2"', err=True)
         raise typer.Exit(code=1)
 
     # N-4 FIX: Added ftype guard (was missing for reward/orpo/ppo — only train had it).
@@ -278,8 +299,11 @@ def orpo(
             model_name=model,
             orpo_file=DummyFile(data),
             output_dir=output,
-            orpo_lr=lr, orpo_beta=beta, orpo_alpha=alpha,
-            orpo_epochs=epochs, orpo_batch_size=batch_size,
+            orpo_lr=lr,
+            orpo_beta=beta,
+            orpo_alpha=alpha,
+            orpo_epochs=epochs,
+            orpo_batch_size=batch_size,
             progress=None,
         )
         if "✅" in result:
@@ -293,10 +317,11 @@ def orpo(
         raise
     except Exception as e:
         typer.echo(f"\n❌ ORPO training failed: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 # ── ppo ────────────────────────────────────────────────────────────────────
+
 
 @app.command()
 def ppo(
@@ -308,8 +333,9 @@ def ppo(
     lr: float = typer.Option(1.4e-5, "--lr"),
     batch_size: int = typer.Option(1, "--batch-size"),
     mini_batch_size: int = typer.Option(1, "--mini-batch-size"),
-    max_new_tokens: int = typer.Option(128, "--max-new-tokens",
-                                        help="Max tokens per generated response"),
+    max_new_tokens: int = typer.Option(
+        128, "--max-new-tokens", help="Max tokens per generated response"
+    ),
 ):
     """PPO fine-tuning with a trained reward model (FIX 3c: full implementation)."""
     if err := (
@@ -324,7 +350,10 @@ def ppo(
     typer.echo(f"🔁 PPO: Policy={policy_model} | Reward={reward_model}")
 
     if not HAS_PPO:
-        typer.echo("❌ PPO training needs TRL's legacy value-head PPO API, which was removed in TRL 0.12 and is not part of the supported TRL versions. It is being rebuilt on the current TRL API.", err=True)
+        typer.echo(
+            "❌ PPO training needs TRL's legacy value-head PPO API, which was removed in TRL 0.12 and is not part of the supported TRL versions. It is being rebuilt on the current TRL API.",
+            err=True,
+        )
         raise typer.Exit(code=1)
     if not os.path.isdir(reward_model):
         typer.echo(f"❌ Reward model path invalid: {reward_model}", err=True)
@@ -359,7 +388,8 @@ def ppo(
             reward_model_path=reward_model,
             ppo_file=DummyFile(data),
             output_dir=output,
-            ppo_lr=lr, ppo_batch_size=batch_size,
+            ppo_lr=lr,
+            ppo_batch_size=batch_size,
             ppo_mini_batch_size=mini_batch_size,
             ppo_epochs=epochs,
             ppo_max_new_tokens=max_new_tokens,
@@ -376,18 +406,21 @@ def ppo(
         raise
     except Exception as e:
         typer.echo(f"\n❌ PPO training failed: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 # ── evaluate ───────────────────────────────────────────────────────────────
+
 
 @app.command()
 def evaluate(
     model: str = typer.Option(..., "--model", help="Model ID or local path"),
     data: str = typer.Option(..., "--data", help="Test dataset (prompt / reference columns)"),
-    lora: Optional[str] = typer.Option(None, "--lora", help="PEFT adapter path"),
+    lora: str | None = typer.Option(None, "--lora", help="PEFT adapter path"),
     bertscore: bool = typer.Option(False, "--bertscore", help="Compute BERTScore"),
-    batch_size: int = typer.Option(8, "--batch-size", help="Generation batch size (BOLT OPTIMIZED)"),
+    batch_size: int = typer.Option(
+        8, "--batch-size", help="Generation batch size (BOLT OPTIMIZED)"
+    ),
     max_new_tokens: int = typer.Option(150, "--max-new-tokens", help="Tokens to generate"),
 ):
     """Batched BLEU / ROUGE / BERTScore evaluation suite (BOLT OPTIMIZED)."""
@@ -425,7 +458,7 @@ def evaluate(
                 typer.echo("❌ Dataset requires 'prompt' column", err=True)
                 raise typer.Exit(code=1)
 
-        prompts    = df["prompt"].astype(str).tolist()
+        prompts = df["prompt"].astype(str).tolist()
         references = df["reference"].astype(str).tolist() if "reference" in df.columns else []
 
         # FIX 2b: batched generation with attention-mask-based prompt stripping
@@ -434,21 +467,29 @@ def evaluate(
         for i in range(0, len(prompts), batch_size):
             batch = prompts[i : i + batch_size]
             inputs = tokenizer(
-                batch, return_tensors="pt", padding=True,
-                truncation=True, max_length=512,
+                batch,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=512,
             )
             if torch.cuda.is_available():
                 inputs = {k: v.cuda() for k, v in inputs.items()}
             with torch.inference_mode():
                 outputs = model_obj.generate(
-                    **inputs, max_new_tokens=max_new_tokens,
-                    do_sample=True, temperature=0.7, top_p=0.9,
+                    **inputs,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=True,
+                    temperature=0.7,
+                    top_p=0.9,
                     pad_token_id=tokenizer.eos_token_id,
                 )
             # BOLT OPTIMIZATION: Standardized batch decoding and prompt stripping
             # Left-padding ensures all responses start at input_ids.shape[1].
             input_len = inputs["input_ids"].shape[1]
-            batch_responses = tokenizer.batch_decode(outputs[:, input_len:], skip_special_tokens=True)
+            batch_responses = tokenizer.batch_decode(
+                outputs[:, input_len:], skip_special_tokens=True
+            )
             predictions.extend(batch_responses)
 
         metrics: dict = {}
@@ -466,6 +507,7 @@ def evaluate(
             typer.echo("ℹ️  No reference column — automatic metrics skipped.")
 
         import pandas as _pd
+
         result_df = _pd.DataFrame({"prompt": prompts, "prediction": predictions})
         if references:
             result_df["reference"] = references
@@ -478,12 +520,13 @@ def evaluate(
         raise
     except Exception as e:
         typer.echo(f"\n❌ Evaluation failed: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
 
-def _infer_ftype(path: str) -> Optional[str]:
+
+def _infer_ftype(path: str) -> str | None:
     """Return 'csv' or 'jsonl' based on file extension, or None if unsupported."""
     if path.endswith(".csv"):
         return "csv"

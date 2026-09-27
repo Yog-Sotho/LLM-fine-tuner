@@ -1,4 +1,3 @@
-
 import os
 import sys
 
@@ -7,6 +6,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from export.gguf import on_export_gguf
 from inference.vllm_runner import on_vllm_generate
+
 
 def test_on_export_gguf_traversal():
     print("Testing on_export_gguf for path traversal...")
@@ -23,6 +23,7 @@ def test_on_export_gguf_traversal():
     status, gguf = on_export_gguf("  /non/existent/path  ", "q6_k")
     assert "No trained model found" in status
     print("✅ on_export_gguf security check passed.")
+
 
 def test_on_vllm_generate_traversal():
     print("Testing on_vllm_generate for path traversal...")

@@ -45,6 +45,7 @@ def merge_adapter_for_inference(
     merged_output_dir = merged_output_dir.strip() if merged_output_dir else ""
 
     from core.state import validate_path_traversal
+
     if err := (
         validate_path_traversal(base_model_name)
         or validate_path_traversal(adapter_path)
@@ -55,7 +56,9 @@ def merge_adapter_for_inference(
     if not base_model_name:
         return "❌ Please provide the base model ID used during training."
     if not adapter_path or not os.path.isdir(adapter_path):
-        return "❌ Adapter path is invalid or does not exist. Provide the training output directory."
+        return (
+            "❌ Adapter path is invalid or does not exist. Provide the training output directory."
+        )
     if err := validate_adapter_dir(adapter_path):
         return err
 
@@ -99,8 +102,10 @@ def on_merge_adapter_click(
     On success, also updates the merged model path state component.
     """
     # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
-    base    = base_model_name.strip() if base_model_name and base_model_name.strip() else ""
-    adapter = adapter_path.strip() if adapter_path and adapter_path.strip() else (model_path_state or "")
+    base = base_model_name.strip() if base_model_name and base_model_name.strip() else ""
+    adapter = (
+        adapter_path.strip() if adapter_path and adapter_path.strip() else (model_path_state or "")
+    )
 
     if validate_path_traversal(base) or validate_path_traversal(str(adapter)):
         return "❌ Path traversal attempt detected.", gr.update()
@@ -115,6 +120,7 @@ def on_merge_adapter_click(
     session.release("merged_dir")
 
     import tempfile
+
     merged_dir = tempfile.mkdtemp(prefix="merged_model_")
     session.track("merged_dir", merged_dir)
 
@@ -153,7 +159,8 @@ def vllm_generate_v27(
     model_path = model_path.strip() if model_path else ""
     vllm_quantization = vllm_quantization.strip() if vllm_quantization else ""
 
-    from core.state import validate_path_traversal, validate_identifier
+    from core.state import validate_identifier, validate_path_traversal
+
     if err := validate_path_traversal(model_path):
         raise ValueError(err)
     if err := validate_identifier(vllm_quantization):
@@ -204,9 +211,10 @@ def on_vllm_generate(
     """Gradio UI handler for the vLLM Generate button."""
     # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
     model_path_state = model_path_state.strip() if model_path_state else ""
-    vllm_quant        = vllm_quant.strip()        if vllm_quant        else ""
+    vllm_quant = vllm_quant.strip() if vllm_quant else ""
 
     from core.state import validate_identifier
+
     if err := validate_path_traversal(model_path_state):
         return err
     if err := validate_identifier(vllm_quant):

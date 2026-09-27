@@ -20,19 +20,19 @@ Fix log
 import torch
 
 from config.constants import (
-    HAS_PSUTIL,
-    HAS_OPENPYXL,
-    HAS_PDF,
-    HAS_HUB,
-    HAS_UNSLOTH,
-    HAS_TRL,
-    HAS_REWARD_TRAINER,
-    HAS_PPO,
-    HAS_ORPO,
-    HAS_EVALUATE,
     HAS_BERTSCORE,
-    HAS_NLTK,
+    HAS_EVALUATE,
+    HAS_HUB,
     HAS_NLPAUG,
+    HAS_NLTK,
+    HAS_OPENPYXL,
+    HAS_ORPO,
+    HAS_PDF,
+    HAS_PPO,
+    HAS_PSUTIL,
+    HAS_REWARD_TRAINER,
+    HAS_TRL,
+    HAS_UNSLOTH,
     HAS_VLLM,
     LORA_TARGET_MAP,
 )
@@ -46,7 +46,7 @@ def get_hardware_summary() -> str:
     if torch.cuda.is_available():
         name = torch.cuda.get_device_name(0)
         # L6 FIX: binary GiB (1024**3), not decimal GB (1e9).
-        vram_gib = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+        vram_gib = torch.cuda.get_device_properties(0).total_memory / (1024**3)
         lines.append(f"- 🟢 **GPU:** {name} &nbsp;|&nbsp; **VRAM:** {vram_gib:.1f} GiB")
     else:
         lines.append("- 🟡 **GPU:** Not available &mdash; training will use CPU (slow)")
@@ -55,8 +55,9 @@ def get_hardware_summary() -> str:
     if HAS_PSUTIL:
         try:
             import psutil
+
             # L6 FIX: binary GiB.
-            ram_gib = psutil.virtual_memory().total / (1024 ** 3)
+            ram_gib = psutil.virtual_memory().total / (1024**3)
             lines.append(f"- 💾 **System RAM:** {ram_gib:.1f} GiB")
         except Exception:
             lines.append("- 💾 **System RAM:** Unavailable")
@@ -68,24 +69,26 @@ def get_hardware_summary() -> str:
 
     # Core optional deps
     deps = []
-    deps.append("openpyxl ✓"              if HAS_OPENPYXL else "openpyxl ✗ (no Excel)")
-    deps.append("pypdf ✓"                if HAS_PDF      else "pypdf ✗ (no PDF)")
-    deps.append("huggingface_hub ✓"      if HAS_HUB      else "huggingface_hub ✗ (no Hub push)")
-    deps.append("psutil ✓"               if HAS_PSUTIL   else "psutil ✗")
-    deps.append("unsloth ✓"              if HAS_UNSLOTH  else "unsloth ✗ (install for 2-5× speed)")
-    deps.append("trl ✓ (DPO + SFT ready)" if HAS_TRL      else "trl ✗ (pip install trl for DPO)")
+    deps.append("openpyxl ✓" if HAS_OPENPYXL else "openpyxl ✗ (no Excel)")
+    deps.append("pypdf ✓" if HAS_PDF else "pypdf ✗ (no PDF)")
+    deps.append("huggingface_hub ✓" if HAS_HUB else "huggingface_hub ✗ (no Hub push)")
+    deps.append("psutil ✓" if HAS_PSUTIL else "psutil ✗")
+    deps.append("unsloth ✓" if HAS_UNSLOTH else "unsloth ✗ (install for 2-5× speed)")
+    deps.append("trl ✓ (DPO + SFT ready)" if HAS_TRL else "trl ✗ (pip install trl for DPO)")
     lines.append("- 📦 **Optional deps:** " + " &nbsp;|&nbsp; ".join(deps))
 
     # v2.7 RLHF / eval deps
     v27 = []
-    v27.append("Reward model ✓" if HAS_REWARD_TRAINER and HAS_PPO else "Reward model ✗ (being rebuilt)")
-    v27.append("PPO ✓"           if HAS_PPO            else "PPO ✗ (being rebuilt)")
-    v27.append("ORPO ✓"          if HAS_ORPO           else "ORPO ✗")
-    v27.append("evaluate ✓"      if HAS_EVALUATE       else "evaluate ✗")
-    v27.append("bert_score ✓"    if HAS_BERTSCORE      else "bert_score ✗")
-    v27.append("nltk ✓"          if HAS_NLTK           else "nltk ✗")
-    v27.append("nlpaug ✓"        if HAS_NLPAUG         else "nlpaug ✗")
-    v27.append("vLLM ✓ (cached)" if HAS_VLLM           else "vLLM ✗")
+    v27.append(
+        "Reward model ✓" if HAS_REWARD_TRAINER and HAS_PPO else "Reward model ✗ (being rebuilt)"
+    )
+    v27.append("PPO ✓" if HAS_PPO else "PPO ✗ (being rebuilt)")
+    v27.append("ORPO ✓" if HAS_ORPO else "ORPO ✗")
+    v27.append("evaluate ✓" if HAS_EVALUATE else "evaluate ✗")
+    v27.append("bert_score ✓" if HAS_BERTSCORE else "bert_score ✗")
+    v27.append("nltk ✓" if HAS_NLTK else "nltk ✗")
+    v27.append("nlpaug ✓" if HAS_NLPAUG else "nlpaug ✗")
+    v27.append("vLLM ✓ (cached)" if HAS_VLLM else "vLLM ✗")
     lines.append("- 🆕 **v2.7 deps:** " + " &nbsp;|&nbsp; ".join(v27))
 
     return "\n".join(lines)
@@ -110,7 +113,7 @@ def auto_recommend_model() -> str:
     if not torch.cuda.is_available():
         return "gpt2"
     # L6 FIX: binary GiB for consistent comparison with driver-reported values.
-    vram_gib = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+    vram_gib = torch.cuda.get_device_properties(0).total_memory / (1024**3)
     if vram_gib < 4:
         return "gpt2"
     elif vram_gib < 8:
@@ -126,20 +129,20 @@ def get_model_info(model_id: str) -> str:
     """Return a short parameter-count / VRAM-estimate string for known models."""
     m = model_id.lower()
     table = {
-        "gpt2-xl":     ("1.5B",  "6 GiB"),
-        "gpt2-large":  ("774M",  "3 GiB"),
-        "gpt2-medium": ("355M",  "1.5 GiB"),
-        "gpt2":        ("124M",  "0.5 GiB"),
-        "distilgpt2":  ("82M",   "0.3 GiB"),
-        "opt-125m":    ("125M",  "0.5 GiB"),
-        "opt-350m":    ("350M",  "1.4 GiB"),
-        "opt-1.3b":    ("1.3B",  "2.7 GiB"),
-        "pythia-70m":  ("70M",   "0.3 GiB"),
-        "pythia-160m": ("160M",  "0.6 GiB"),
-        "tinyllama":   ("1.1B",  "2.2 GiB"),
-        "llama-2-7b":  ("7B",    "14 GiB"),
-        "mistral-7b":  ("7B",    "14 GiB"),
-        "llama-2-13b": ("13B",   "26 GiB"),
+        "gpt2-xl": ("1.5B", "6 GiB"),
+        "gpt2-large": ("774M", "3 GiB"),
+        "gpt2-medium": ("355M", "1.5 GiB"),
+        "gpt2": ("124M", "0.5 GiB"),
+        "distilgpt2": ("82M", "0.3 GiB"),
+        "opt-125m": ("125M", "0.5 GiB"),
+        "opt-350m": ("350M", "1.4 GiB"),
+        "opt-1.3b": ("1.3B", "2.7 GiB"),
+        "pythia-70m": ("70M", "0.3 GiB"),
+        "pythia-160m": ("160M", "0.6 GiB"),
+        "tinyllama": ("1.1B", "2.2 GiB"),
+        "llama-2-7b": ("7B", "14 GiB"),
+        "mistral-7b": ("7B", "14 GiB"),
+        "llama-2-13b": ("13B", "26 GiB"),
     }
     for key, (params, mem) in table.items():
         if key in m:

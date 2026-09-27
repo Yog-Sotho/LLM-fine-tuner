@@ -1,13 +1,13 @@
 import time
+
 import pandas as pd
-from datasets import Dataset
 
 COL_PROMPT = "prompt"
 COL_CHOSEN = "chosen"
 COL_REJECTED = "rejected"
 
+
 def current_logic(df):
-    original_len = len(df)
     # Vectorized strip and empty check for DPO
     p_stripped = df[COL_PROMPT].astype(str).str.strip()
     c_stripped = df[COL_CHOSEN].astype(str).str.strip()
@@ -20,16 +20,15 @@ def current_logic(df):
     df = df[mask].reset_index(drop=True)
     lengths = lengths[mask].reset_index(drop=True)
 
-    pre_dup_len = len(df)
-    df = df.drop_duplicates(subset=[COL_PROMPT, COL_CHOSEN, COL_REJECTED], keep='first')
+    df = df.drop_duplicates(subset=[COL_PROMPT, COL_CHOSEN, COL_REJECTED], keep="first")
 
     # Redundant index lookup/alignment
     lengths = lengths.loc[df.index].reset_index(drop=True)
     df = df.reset_index(drop=True)
     return df, lengths
 
+
 def optimized_logic(df):
-    original_len = len(df)
     # Vectorized strip and empty check for DPO
     p_stripped = df[COL_PROMPT].astype(str).str.strip()
     c_stripped = df[COL_CHOSEN].astype(str).str.strip()
@@ -38,17 +37,21 @@ def optimized_logic(df):
 
     df = df[mask].reset_index(drop=True)
 
-    pre_dup_len = len(df)
-    df = df.drop_duplicates(subset=[COL_PROMPT, COL_CHOSEN, COL_REJECTED], keep='first').reset_index(drop=True)
+    df = df.drop_duplicates(
+        subset=[COL_PROMPT, COL_CHOSEN, COL_REJECTED], keep="first"
+    ).reset_index(drop=True)
 
     # Calculate lengths ONLY on final deduplicated rows
     if len(df) > 0:
-        lengths = df[COL_PROMPT].astype(str).str.strip().str.len() + \
-                  df[COL_CHOSEN].astype(str).str.strip().str.len() + \
-                  df[COL_REJECTED].astype(str).str.strip().str.len()
+        lengths = (
+            df[COL_PROMPT].astype(str).str.strip().str.len()
+            + df[COL_CHOSEN].astype(str).str.strip().str.len()
+            + df[COL_REJECTED].astype(str).str.strip().str.len()
+        )
     else:
         lengths = pd.Series(dtype=int)
     return df, lengths
+
 
 def benchmark():
     N = 100000
@@ -56,7 +59,7 @@ def benchmark():
     data = {
         COL_PROMPT: ["Prompt " + str(i) for i in range(N)],
         COL_CHOSEN: ["Chosen " + str(i) for i in range(N)],
-        COL_REJECTED: ["Rejected " + str(i) for i in range(N)]
+        COL_REJECTED: ["Rejected " + str(i) for i in range(N)],
     }
     # Create 50% duplicates
     for i in range(N // 2):
@@ -87,6 +90,7 @@ def benchmark():
     assert len(len_cur) == len(len_opt)
     pd.testing.assert_series_equal(len_cur, len_opt, check_names=False)
     print("Verification passed! Both methods yield exact parity.")
+
 
 if __name__ == "__main__":
     benchmark()

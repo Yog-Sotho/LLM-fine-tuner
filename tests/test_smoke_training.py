@@ -45,11 +45,27 @@ def _train(model: str, dataset: Dataset, output_dir: pathlib.Path, mode: str) ->
     from training.sft import train_model
 
     return train_model(
-        model, dataset, str(output_dir), _hyperparams(), "cpu", "LoRA",
-        True, 4, 8,          # use_lora, lora_rank, lora_alpha
-        10, 64, 1, 10, 16,   # prefix/prompt-tuning/adapter settings (unused for LoRA)
-        False, 0, "linear", False,  # resume, early_stop, scheduler, grad checkpointing
-        False, False, "You are a helpful assistant.",  # unsloth, chat template, system prompt
+        model,
+        dataset,
+        str(output_dir),
+        _hyperparams(),
+        "cpu",
+        "LoRA",
+        True,
+        4,
+        8,  # use_lora, lora_rank, lora_alpha
+        10,
+        64,
+        1,
+        10,
+        16,  # prefix/prompt-tuning/adapter settings (unused for LoRA)
+        False,
+        0,
+        "linear",
+        False,  # resume, early_stop, scheduler, grad checkpointing
+        False,
+        False,
+        "You are a helpful assistant.",  # unsloth, chat template, system prompt
         training_mode=mode,
         progress=None,
     )
@@ -71,21 +87,25 @@ def test_ui_builds_and_main_imports():
 
 
 def test_sft_trains_and_saves_safetensors_adapter(tiny_model, tmp_path):
-    ds = Dataset.from_dict({
-        "instruction": ["Say hi", "Say bye", "Count to two", "Name a colour"],
-        "output": ["Hi", "Bye", "One two", "Blue"],
-    })
+    ds = Dataset.from_dict(
+        {
+            "instruction": ["Say hi", "Say bye", "Count to two", "Name a colour"],
+            "output": ["Hi", "Bye", "One two", "Blue"],
+        }
+    )
     summary, records = _train(tiny_model, ds, tmp_path, "sft")
     assert summary.startswith("✅ Training complete")
     _assert_safetensors_adapter(tmp_path)
 
 
 def test_dpo_trains_and_saves_safetensors_adapter(tiny_model, tmp_path):
-    ds = Dataset.from_dict({
-        "prompt": ["Greet me", "Say goodbye", "Pick a number", "Name a fruit"],
-        "chosen": ["Hello!", "Goodbye!", "Seven", "Apple"],
-        "rejected": ["Go away", "Whatever", "Banana", "Seven"],
-    })
+    ds = Dataset.from_dict(
+        {
+            "prompt": ["Greet me", "Say goodbye", "Pick a number", "Name a fruit"],
+            "chosen": ["Hello!", "Goodbye!", "Seven", "Apple"],
+            "rejected": ["Go away", "Whatever", "Banana", "Seven"],
+        }
+    )
     summary, _ = _train(tiny_model, ds, tmp_path, "dpo")
     assert summary.startswith("✅ Training complete")
     _assert_safetensors_adapter(tmp_path)
@@ -98,19 +118,25 @@ def test_orpo_trains_and_saves_adapter(tiny_model, tmp_path):
     if not HAS_ORPO:
         pytest.skip("ORPO not available in the installed TRL")
     data = tmp_path / "prefs.csv"
-    pd.DataFrame({
-        "prompt": ["Greet me", "Say goodbye", "Pick a number", "Name a fruit"],
-        "chosen": ["Hello!", "Goodbye!", "Seven", "Apple"],
-        "rejected": ["Go away", "Whatever", "Banana", "Seven"],
-    }).to_csv(data, index=False)
+    pd.DataFrame(
+        {
+            "prompt": ["Greet me", "Say goodbye", "Pick a number", "Name a fruit"],
+            "chosen": ["Hello!", "Goodbye!", "Seven", "Apple"],
+            "rejected": ["Go away", "Whatever", "Banana", "Seven"],
+        }
+    ).to_csv(data, index=False)
 
     class _Upload:
         name = str(data)
 
     out = tmp_path / "orpo"
     result = train_orpo_v27(
-        tiny_model, _Upload(), str(out),
-        orpo_epochs=1, orpo_batch_size=2, progress=None,
+        tiny_model,
+        _Upload(),
+        str(out),
+        orpo_epochs=1,
+        orpo_batch_size=2,
+        progress=None,
     )
     assert result.startswith("✅ ORPO training complete"), result
     _assert_safetensors_adapter(out)
@@ -148,9 +174,25 @@ def test_cli_train_runs_end_to_end(tiny_model, tmp_path):
         data, index=False
     )
     out = tmp_path / "cli_out"
-    result = CliRunner().invoke(app, [
-        "train", "--model", tiny_model, "--data", str(data), "--output", str(out),
-        "--epochs", "1", "--batch-size", "2", "--max-length", "32", "--lora-rank", "4",
-    ])
+    result = CliRunner().invoke(
+        app,
+        [
+            "train",
+            "--model",
+            tiny_model,
+            "--data",
+            str(data),
+            "--output",
+            str(out),
+            "--epochs",
+            "1",
+            "--batch-size",
+            "2",
+            "--max-length",
+            "32",
+            "--lora-rank",
+            "4",
+        ],
+    )
     assert result.exit_code == 0, result.output
     _assert_safetensors_adapter(out)

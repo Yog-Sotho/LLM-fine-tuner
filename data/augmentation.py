@@ -18,19 +18,19 @@ import pandas as pd
 from datasets import Dataset
 
 from config.constants import (
-    COL_TEXT,
-    COL_INSTRUCTION,
-    COL_PROMPT,
     COL_CHOSEN,
-    COL_REJECTED,
+    COL_INSTRUCTION,
     COL_OUTPUT,
+    COL_PROMPT,
+    COL_REJECTED,
+    COL_TEXT,
     HAS_NLPAUG,
 )
 from data.loader import detect_file_type, load_dataset_from_file
 from data.preprocessing import preview_dataset
 
-
 # ── Core augmentation logic ────────────────────────────────────────────────
+
 
 def augment_dataset_v27(
     dataset: Dataset,
@@ -52,8 +52,7 @@ def augment_dataset_v27(
     """
     if not HAS_NLPAUG:
         return dataset, (
-            "⚠️ nlpaug not installed. Run: pip install nlpaug\n"
-            "Original dataset returned unchanged."
+            "⚠️ nlpaug not installed. Run: pip install nlpaug\nOriginal dataset returned unchanged."
         )
 
     try:
@@ -75,7 +74,11 @@ def augment_dataset_v27(
             return dataset, "✅ No augmentation requested (factor <= 1)."
 
         col_is_text = COL_TEXT in dataset.column_names
-        target_col = COL_TEXT if col_is_text else (COL_INSTRUCTION if COL_INSTRUCTION in dataset.column_names else None)
+        target_col = (
+            COL_TEXT
+            if col_is_text
+            else (COL_INSTRUCTION if COL_INSTRUCTION in dataset.column_names else None)
+        )
 
         if target_col:
             # BOLT OPTIMIZATION: Use direct column access for ~10,000x speedup over row-wise loop.
@@ -98,6 +101,7 @@ def augment_dataset_v27(
 
             # BOLT OPTIMIZATION: Vectorized reconstruction using Pandas for ~20x speedup.
             import pandas as pd
+
             df_orig = dataset.to_pandas()
             dfs = [df_orig]
 
@@ -105,23 +109,24 @@ def augment_dataset_v27(
                 df_aug = df_orig.copy()
                 # Robustness: pad or truncate if nlpaug returns mismatched length
                 if len(aug_results) < len(df_orig):
-                    aug_results = list(aug_results) + texts_to_aug[len(aug_results):]
+                    aug_results = list(aug_results) + texts_to_aug[len(aug_results) :]
                 elif len(aug_results) > len(df_orig):
-                    aug_results = aug_results[:len(df_orig)]
+                    aug_results = aug_results[: len(df_orig)]
 
                 df_aug[target_col] = aug_results
                 dfs.append(df_aug)
 
             # Interleave rows: [Orig1, Aug1_V1, Aug1_V2, Orig2, Aug2_V1, ...]
             # concat() + sort_index(kind='stable') achieves this in one go.
-            combined_df = pd.concat(dfs).sort_index(kind='stable')
+            combined_df = pd.concat(dfs).sort_index(kind="stable")
             aug_ds = Dataset.from_pandas(combined_df, preserve_index=False)
         else:
             # Fallback for datasets without TEXT or INSTRUCTION columns
             import pandas as pd
+
             df_orig = dataset.to_pandas()
             dfs = [df_orig] * augmentation_factor
-            combined_df = pd.concat(dfs).sort_index(kind='stable')
+            combined_df = pd.concat(dfs).sort_index(kind="stable")
             aug_ds = Dataset.from_pandas(combined_df, preserve_index=False)
         msg = (
             f"✅ Augmentation complete!\n"
@@ -169,13 +174,21 @@ def quality_filter_v27(
             r = pd.Series(batch.get(COL_REJECTED, [])).astype(str).str.len()
 
             # Handle missing columns gracefully with defaults that pass the filter
-            if p.empty: p = pd.Series([min_length] * len(next(iter(batch.values()))))
-            if c.empty: c = pd.Series([min_length] * len(p))
-            if r.empty: r = pd.Series([min_length] * len(p))
+            if p.empty:
+                p = pd.Series([min_length] * len(next(iter(batch.values()))))
+            if c.empty:
+                c = pd.Series([min_length] * len(p))
+            if r.empty:
+                r = pd.Series([min_length] * len(p))
 
-            mask = (p >= min_length) & (p <= max_length) & \
-                   (c >= min_length) & (c <= max_length) & \
-                   (r >= min_length) & (r <= max_length)
+            mask = (
+                (p >= min_length)
+                & (p <= max_length)
+                & (c >= min_length)
+                & (c <= max_length)
+                & (r >= min_length)
+                & (r <= max_length)
+            )
             return mask.tolist()
 
         elif COL_TEXT in batch:
@@ -187,8 +200,9 @@ def quality_filter_v27(
         elif COL_INSTRUCTION in batch:
             # Instruction-Response branch
             inst = pd.Series(batch[COL_INSTRUCTION]).astype(str).str.len()
-            out  = pd.Series(batch.get(COL_OUTPUT, [])).astype(str).str.len()
-            if out.empty: out = pd.Series([0] * len(inst))
+            out = pd.Series(batch.get(COL_OUTPUT, [])).astype(str).str.len()
+            if out.empty:
+                out = pd.Series([0] * len(inst))
 
             # v3.1 Fix #6: Combined length check
             combined = inst + out
@@ -214,6 +228,7 @@ def quality_filter_v27(
 
 
 # ── Gradio UI handlers ─────────────────────────────────────────────────────
+
 
 def on_augment_click(file, training_mode, aug_factor, aug_type, progress=gr.Progress()):
     """Handler for the Augment button in the Data tab.
@@ -254,7 +269,12 @@ def on_augment_click(file, training_mode, aug_factor, aug_type, progress=gr.Prog
         progress(1.0, desc="Done!")
 
         # C-5 FIX: Return aug_ds as fourth value for gr.State storage.
-        return msg, gr.update(value=preview, visible=True), gr.update(value=stats, visible=True), aug_ds
+        return (
+            msg,
+            gr.update(value=preview, visible=True),
+            gr.update(value=stats, visible=True),
+            aug_ds,
+        )
 
     except Exception as e:
         return f"❌ {e}", gr.update(visible=False), gr.update(visible=False), None
@@ -298,7 +318,12 @@ def on_quality_filter_click(file, training_mode, min_len, max_len, progress=gr.P
         progress(1.0, desc="Done!")
 
         # C-5 FIX: Return filtered_ds as fourth value for gr.State storage.
-        return msg, gr.update(value=preview, visible=True), gr.update(value=stats, visible=True), filtered_ds
+        return (
+            msg,
+            gr.update(value=preview, visible=True),
+            gr.update(value=stats, visible=True),
+            filtered_ds,
+        )
 
     except Exception as e:
         return f"❌ {e}", gr.update(visible=False), gr.update(visible=False), None

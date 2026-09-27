@@ -14,11 +14,10 @@ Covers:
   - rewards list contains Python floats, not tensors
 """
 
-import pytest
 import torch
 
-
 # ── helpers mirroring run_ppo_v27 reward extraction ───────────────────────
+
 
 def _broken_reward_append(rewards: list, reward_val: float):
     """Original broken pattern: re-wraps a float in torch.tensor."""
@@ -37,13 +36,12 @@ def _extract_reward_from_value_head(logits_tensor: torch.Tensor) -> float:
 
 # ── tests ──────────────────────────────────────────────────────────────────
 
+
 def test_extraction_returns_float():
     """_extract_reward_from_value_head must return a Python float, not a tensor."""
     fake_output = torch.randn(1, 5, 1)  # shape: (batch, seq, 1) — value head output
     reward_val = _extract_reward_from_value_head(fake_output.squeeze(-1))
-    assert isinstance(reward_val, float), (
-        f"Expected float, got {type(reward_val)}"
-    )
+    assert isinstance(reward_val, float), f"Expected float, got {type(reward_val)}"
 
 
 def test_fixed_pattern_rewards_are_floats():
@@ -77,7 +75,7 @@ def test_fixed_rewards_list_compatible_with_trl():
     All values should be finite real numbers.
     """
     rewards = []
-    for i in range(3):
+    for _ in range(3):
         fake = torch.randn(1, 5, 1)
         val = _extract_reward_from_value_head(fake.squeeze(-1))
         _fixed_reward_append(rewards, val)

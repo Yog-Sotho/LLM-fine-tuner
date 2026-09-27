@@ -1,8 +1,10 @@
 import time
-import pytest
+
 from datasets import Dataset
+
+from config.constants import COL_INSTRUCTION, COL_OUTPUT, COL_TEXT
 from data.augmentation import augment_dataset_v27
-from config.constants import COL_TEXT, COL_INSTRUCTION, COL_OUTPUT
+
 
 def test_augment_dataset_batching_speed():
     # Setup a larger dataset to measure speedup
@@ -19,6 +21,7 @@ def test_augment_dataset_batching_speed():
     assert "Augmentation complete" in msg
     print(f"Batched time for 20 examples (factor 3): {batched_time:.4f}s")
 
+
 def test_augment_dataset_correctness_interspersed():
     # Setup a small dataset to verify row order
     texts = ["Sentence A.", "Sentence B."]
@@ -33,12 +36,15 @@ def test_augment_dataset_correctness_interspersed():
     assert aug_ds[2][COL_TEXT] == "Sentence B."
     assert aug_ds[3][COL_TEXT] != "Sentence B."
 
+
 def test_augment_dataset_instruction_mapping():
     # Verify it works with COL_INSTRUCTION
-    dataset = Dataset.from_dict({
-        COL_INSTRUCTION: ["Tell me a joke.", "What is AI?"],
-        COL_OUTPUT: ["Why did the chicken...", "Artificial Intelligence is..."]
-    })
+    dataset = Dataset.from_dict(
+        {
+            COL_INSTRUCTION: ["Tell me a joke.", "What is AI?"],
+            COL_OUTPUT: ["Why did the chicken...", "Artificial Intelligence is..."],
+        }
+    )
 
     aug_ds, _ = augment_dataset_v27(dataset, augmentation_factor=2, aug_type="synonym")
 

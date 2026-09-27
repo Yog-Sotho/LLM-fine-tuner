@@ -1,15 +1,15 @@
-
-import time
-import pandas as pd
-import tempfile
 import os
 import sys
-from datasets import Dataset
+import tempfile
+import time
+
+import pandas as pd
 
 # Add current directory to path
 sys.path.append(os.getcwd())
 
 from data.loader import load_dataset_from_dataframe, load_dataset_from_file
+
 
 def benchmark_refresh_bolt(n=100000):
     print(f"⚡ Bolt: Benchmarking refresh optimization for {n} rows...")
@@ -33,13 +33,14 @@ def benchmark_refresh_bolt(n=100000):
     new_time = t1 - t0
     print(f"⚡ New direct method: {new_time:.4f}s")
 
-    speedup = old_time / new_time if new_time > 0 else float('inf')
+    speedup = old_time / new_time if new_time > 0 else float("inf")
     print(f"🚀 Speedup: {speedup:.2f}x")
 
     # Verify correctness
     assert len(ds_old) == len(ds_new)
     assert ds_old.column_names == ds_new.column_names
     print("✅ Correctness verified.")
+
 
 if __name__ == "__main__":
     benchmark_refresh_bolt()

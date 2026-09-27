@@ -1,13 +1,12 @@
-
 import time
-import os
+
 from datasets import Dataset
 
 # Simulate a large dataset
 N = 100_000
 data = {
     "instruction": ["Instruction " + str(i) for i in range(N)],
-    "output": ["Output " + str(i) for i in range(N)]
+    "output": ["Output " + str(i) for i in range(N)],
 }
 # Add some empty rows
 data["instruction"][500] = ""
@@ -15,21 +14,22 @@ data["output"][1000] = "  "
 
 dataset = Dataset.from_dict(data)
 
+
 def original_filter(ds):
     return ds.filter(
-        lambda x: (
-            len(str(x["instruction"]).strip()) > 0
-            and len(str(x["output"]).strip()) > 0
-        )
+        lambda x: len(str(x["instruction"]).strip()) > 0 and len(str(x["output"]).strip()) > 0
     )
+
 
 def batched_filter(ds):
     def filter_fn(batch):
         return [
             len(str(i).strip()) > 0 and len(str(o).strip()) > 0
-            for i, o in zip(batch["instruction"], batch["output"])
+            for i, o in zip(batch["instruction"], batch["output"], strict=False)
         ]
+
     return ds.filter(filter_fn, batched=True)
+
 
 print(f"Benchmarking filtering on {N} rows...")
 

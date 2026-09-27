@@ -12,6 +12,7 @@ def test_redact_sensitive_info_regex():
     assert token not in redacted
     assert redacted == "Failed to upload model because of invalid token [REDACTED]."
 
+
 def test_redact_sensitive_info_multiple_tokens():
     token1 = "hf_abcdefghijklmnopqrstuvwxyz012345"
     token2 = "hf_12345678901234567890123456789012"
@@ -21,6 +22,7 @@ def test_redact_sensitive_info_multiple_tokens():
     assert token1 not in redacted
     assert token2 not in redacted
     assert redacted == "Token 1: [REDACTED], Token 2: [REDACTED]"
+
 
 def test_redact_sensitive_info_env_vars():
     # Set HF_TOKEN in environment
@@ -33,6 +35,7 @@ def test_redact_sensitive_info_env_vars():
 
     # Cleanup
     del os.environ["HF_TOKEN"]
+
 
 def test_redact_sensitive_info_none():
     assert redact_sensitive_info(None) == ""
