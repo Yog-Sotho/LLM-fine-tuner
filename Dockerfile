@@ -153,7 +153,7 @@ COPY . /app/
 # ── Directory structure for persistent volumes ────────────────────────────────
 RUN mkdir -p \
         /app/cache/huggingface \
-        /app/data \
+        /app/datasets \
         /app/models \
         /app/outputs
 
@@ -173,12 +173,12 @@ RUN chmod +x /docker-entrypoint.sh
 EXPOSE 7860
 
 # Volumes that users should mount for persistence
-VOLUME ["/app/cache/huggingface", "/app/data", "/app/models", "/app/outputs"]
+VOLUME ["/app/cache/huggingface", "/app/datasets", "/app/models", "/app/outputs"]
 
 # H-5 FIX: Switch to non-root user before running the entrypoint.
 USER llmuser
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 # Default: launch Gradio UI. Pass CLI args to override:
-#   docker run ... train --model gpt2 --data /app/data/train.csv
+#   docker run ... train --model gpt2 --data /app/datasets/train.csv
 CMD []

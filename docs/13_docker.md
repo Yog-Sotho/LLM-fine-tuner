@@ -117,7 +117,7 @@ docker build -f Dockerfile.cpu -t llm-fine-tuner:cpu .
 docker run --gpus all \
     -p 7860:7860 \
     -v $(pwd)/cache:/app/cache/huggingface \
-    -v $(pwd)/data:/app/data \
+    -v $(pwd)/datasets:/app/datasets \
     -v $(pwd)/models:/app/models \
     -v $(pwd)/outputs:/app/outputs \
     -e HF_TOKEN=hf_your_token \
@@ -127,7 +127,7 @@ docker run --gpus all \
 docker run \
     -p 7860:7860 \
     -v $(pwd)/cache:/app/cache/huggingface \
-    -v $(pwd)/data:/app/data \
+    -v $(pwd)/datasets:/app/datasets \
     -v $(pwd)/models:/app/models \
     -v $(pwd)/outputs:/app/outputs \
     llm-fine-tuner:cpu
@@ -142,14 +142,14 @@ Any argument after the image name goes straight to `main.py` as a CLI command.
 ### Train a model
 
 ```bash
-# First, put your dataset in the ./data/ folder on your HOST machine
-cp my_training_data.csv ./data/
+# First, put your dataset in the ./datasets/ folder on your HOST machine
+cp my_training_data.csv ./datasets/
 
-# Then run training — it reads from /app/data/ inside the container
+# Then run training — it reads from /app/datasets/ inside the container
 docker compose run --rm llm-fine-tuner-gpu \
     train \
     --model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
-    --data /app/data/my_training_data.csv \
+    --data /app/datasets/my_training_data.csv \
     --output /app/models/my_model \
     --epochs 3
 ```
@@ -162,17 +162,17 @@ When training finishes, your model appears in `./models/my_model/` on your host 
 # Step 1 — SFT
 docker compose run --rm llm-fine-tuner-gpu \
     train --model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
-    --data /app/data/sft.csv --output /app/models/sft --epochs 3
+    --data /app/datasets/sft.csv --output /app/models/sft --epochs 3
 
 # Step 2 — Reward model
 docker compose run --rm llm-fine-tuner-gpu \
     reward --model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
-    --data /app/data/reward.csv --output /app/models/reward
+    --data /app/datasets/reward.csv --output /app/models/reward
 
 # Step 3 — Evaluate
 docker compose run --rm llm-fine-tuner-gpu \
     evaluate --model /app/models/sft \
-    --data /app/data/eval.csv --bertscore
+    --data /app/datasets/eval.csv --bertscore
 ```
 
 ### Show help
@@ -191,7 +191,7 @@ The container uses four persistent volumes. Everything inside them survives cont
 | Host path | Container path | What goes here |
 |---|---|---|
 | `./cache/` | `/app/cache/huggingface` | Downloaded model weights (saves re-downloading) |
-| `./data/` | `/app/data` | Your training datasets |
+| `./datasets/` | `/app/datasets` | Your training datasets |
 | `./models/` | `/app/models` | Trained model outputs |
 | `./outputs/` | `/app/outputs` | Evaluation CSVs, GGUF exports, ZIPs |
 

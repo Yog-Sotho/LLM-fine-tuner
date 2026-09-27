@@ -77,7 +77,7 @@ PYCHECK
 echo ""
 
 # ── Volume check ──────────────────────────────────────────────────────────────
-for dir in /app/cache/huggingface /app/data /app/models /app/outputs; do
+for dir in /app/cache/huggingface /app/datasets /app/models /app/outputs; do
     if [[ ! -d "$dir" ]]; then
         mkdir -p "$dir"
         warn "Created missing directory: $dir"

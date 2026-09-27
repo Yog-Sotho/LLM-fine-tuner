@@ -37,7 +37,8 @@ cache/
 *.pth
 
 # ── Dataset and output directories — mounted as volumes ───────────────────────
-data/
+# Datasets live in datasets/, NOT data/ — data/ is the application's Python package.
+datasets/
 models/
 outputs/
 

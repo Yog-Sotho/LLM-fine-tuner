@@ -15,11 +15,11 @@
 #
 # CLI (headless training via compose):
 #   docker compose run --rm llm-fine-tuner-gpu \
-#       train --model gpt2 --data /app/data/train.csv --output /app/models/run1
+#       train --model gpt2 --data /app/datasets/train.csv --output /app/models/run1
 #
 # Volumes (persistent across container restarts):
 #   ./cache     → HuggingFace model cache   (saves re-downloading models)
-#   ./data      → Your training datasets
+#   ./datasets  → Your training datasets
 #   ./models    → Trained model outputs
 #   ./outputs   → Evaluation results, exports, ZIPs
 #
@@ -42,7 +42,7 @@ services:
 
     volumes:
       - ./cache:/app/cache/huggingface   # Model cache — survives container restarts
-      - ./data:/app/data                 # Mount your datasets here
+      - ./datasets:/app/datasets                 # Mount your datasets here
       - ./models:/app/models             # Trained models saved here
       - ./outputs:/app/outputs           # Eval results, GGUF exports, ZIPs
 
@@ -94,7 +94,7 @@ services:
 
     volumes:
       - ./cache:/app/cache/huggingface
-      - ./data:/app/data
+      - ./datasets:/app/datasets
       - ./models:/app/models
       - ./outputs:/app/outputs
 

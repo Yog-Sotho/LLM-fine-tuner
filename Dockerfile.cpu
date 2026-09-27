@@ -82,7 +82,7 @@ COPY . /app/
 
 RUN mkdir -p \
         /app/cache/huggingface \
-        /app/data \
+        /app/datasets \
         /app/models \
         /app/outputs
 
@@ -91,7 +91,7 @@ RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 7860
 
-VOLUME ["/app/cache/huggingface", "/app/data", "/app/models", "/app/outputs"]
+VOLUME ["/app/cache/huggingface", "/app/datasets", "/app/models", "/app/outputs"]
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD []
