@@ -15,9 +15,10 @@ Patch log
                  DataFrames and is fully backwards-compatible with the 3-column
                  output produced by old-format log records.
 """
+
 import gradio as gr
 
-from config.constants import HAS_UNSLOTH, HAS_VLLM
+from config.constants import HAS_UNSLOTH
 from core.hardware import auto_recommend_model, get_model_info
 
 
@@ -30,16 +31,19 @@ def build_train_tab() -> dict:
                 gr.Markdown("### Model selection")
                 model_choice = gr.Dropdown(
                     choices=[
-                        "gpt2", "distilgpt2",
-                        "facebook/opt-125m", "facebook/opt-350m",
-                        "EleutherAI/pythia-70m", "EleutherAI/pythia-160m",
+                        "gpt2",
+                        "distilgpt2",
+                        "facebook/opt-125m",
+                        "facebook/opt-350m",
+                        "EleutherAI/pythia-70m",
+                        "EleutherAI/pythia-160m",
                         "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
                         "mistralai/Mistral-7B-v0.1",
                     ],
                     value=recommended_model,
                     label="Base Model",
                 )
-                custom_model  = gr.Textbox(
+                custom_model = gr.Textbox(
                     label="Or enter any HuggingFace model ID",
                     placeholder="e.g., meta-llama/Llama-2-7b-hf",
                     info="If specified, this model ID will override the 'Base Model' dropdown selection above.",
@@ -53,14 +57,16 @@ def build_train_tab() -> dict:
                     value="SFT (Supervised Fine-Tuning)",
                     label="Fine-Tuning Mode",
                 )
-                dpo_beta = gr.Slider(0.01, 1.0, value=0.1, step=0.01,
-                                     label="DPO Beta (used only in DPO mode)")
+                dpo_beta = gr.Slider(
+                    0.01, 1.0, value=0.1, step=0.01, label="DPO Beta (used only in DPO mode)"
+                )
 
                 with gr.Row():
-                    use_unsloth        = gr.Checkbox(label="🚀 Use Unsloth (2-5× faster)",
-                                                     value=False, interactive=HAS_UNSLOTH)
-                    use_chat_template  = gr.Checkbox(label="💬 Use Smart Chat Template", value=True)
-                    heretic_mode       = gr.Checkbox(
+                    use_unsloth = gr.Checkbox(
+                        label="🚀 Use Unsloth (2-5× faster)", value=False, interactive=HAS_UNSLOTH
+                    )
+                    use_chat_template = gr.Checkbox(label="💬 Use Smart Chat Template", value=True)
+                    heretic_mode = gr.Checkbox(
                         label="🔓 Heretic Mode (remove restrictions — use responsibly)", value=False
                     )
                 system_prompt = gr.Textbox(
@@ -86,16 +92,27 @@ def build_train_tab() -> dict:
                     "(≈70 % VRAM reduction). All other modes use standard precision._"
                 )
                 peft_method = gr.Radio(
-                    choices=["Full Fine-tuning", "Auto", "LoRA", "QLoRA Enhanced",
-                             "Prefix Tuning", "Prompt Tuning", "Adapters"],
+                    choices=[
+                        "Full Fine-tuning",
+                        "Auto",
+                        "LoRA",
+                        "QLoRA Enhanced",
+                        "Prefix Tuning",
+                        "Prompt Tuning",
+                        "Adapters",
+                    ],
                     value="Auto",
                     label="PEFT Adapter Method",
                 )
 
                 gr.Markdown("### Training preset")
                 training_preset = gr.Radio(
-                    choices=["Quick (1 epoch)", "Balanced (3 epochs)",
-                             "Accurate (5 epochs)", "Advanced"],
+                    choices=[
+                        "Quick (1 epoch)",
+                        "Balanced (3 epochs)",
+                        "Accurate (5 epochs)",
+                        "Advanced",
+                    ],
                     value="Balanced (3 epochs)",
                     label="Training Config Preset",
                 )
@@ -104,49 +121,60 @@ def build_train_tab() -> dict:
                     with gr.Group():
                         gr.Markdown("### PEFT Method Settings")
                         with gr.Tab("LoRA"):
-                            use_lora   = gr.Checkbox(label="Enable LoRA", value=True)
-                            lora_rank  = gr.Slider(1, 64, value=8, step=1, label="LoRA Rank")
+                            use_lora = gr.Checkbox(label="Enable LoRA", value=True)
+                            lora_rank = gr.Slider(1, 64, value=8, step=1, label="LoRA Rank")
                             lora_alpha = gr.Slider(1, 128, value=16, step=1, label="LoRA Alpha")
                         with gr.Tab("Prefix Tuning"):
-                            prefix_tuning_num_virtual_tokens = gr.Slider(10, 100, value=30, step=5,
-                                                                          label="Virtual Tokens")
-                            prefix_tuning_token_dim          = gr.Slider(100, 1024, value=512, step=64,
-                                                                          label="Token Dimension")
-                            prefix_tuning_num_layers         = gr.Slider(1, 32, value=2, step=1,
-                                                                          label="Layers")
+                            prefix_tuning_num_virtual_tokens = gr.Slider(
+                                10, 100, value=30, step=5, label="Virtual Tokens"
+                            )
+                            prefix_tuning_token_dim = gr.Slider(
+                                100, 1024, value=512, step=64, label="Token Dimension"
+                            )
+                            prefix_tuning_num_layers = gr.Slider(
+                                1, 32, value=2, step=1, label="Layers"
+                            )
                         with gr.Tab("Prompt Tuning"):
-                            prompt_tuning_num_virtual_tokens = gr.Slider(10, 100, value=20, step=5,
-                                                                          label="Virtual Tokens")
+                            prompt_tuning_num_virtual_tokens = gr.Slider(
+                                10, 100, value=20, step=5, label="Virtual Tokens"
+                            )
                             # Minor Fix 2: PromptTuningConfig has no num_layers — use gr.State.
                             prompt_tuning_num_layers = gr.State(None)
                         with gr.Tab("Adapters"):
-                            adapter_reduction_factor = gr.Slider(2, 64, value=16, step=2,
-                                                                   label="Reduction Factor")
-                    lr         = gr.Number(value=2e-4, label="Learning Rate", precision=6)
-                    epochs     = gr.Slider(1, 20, value=3, step=1, label="Epochs")
-                    bs         = gr.Slider(1, 16, value=2, step=1, label="Batch Size")
-                    grad_accum = gr.Slider(1, 16, value=4, step=1, label="Gradient Accumulation Steps")
-                    max_len    = gr.Slider(64, 2048, value=256, step=64, label="Max Sequence Length")
-                    warmup     = gr.Slider(0, 500, value=100, step=10, label="Warmup Steps")
-                    early_stop = gr.Slider(0, 10, value=3, step=1,
-                                           label="Early Stopping Patience (0 = off)")
-                    lr_sched   = gr.Dropdown(
-                        choices=["linear", "cosine", "cosine_with_restarts", "constant"],
-                        value="cosine", label="LR Scheduler",
+                            adapter_reduction_factor = gr.Slider(
+                                2, 64, value=16, step=2, label="Reduction Factor"
+                            )
+                    lr = gr.Number(value=2e-4, label="Learning Rate", precision=6)
+                    epochs = gr.Slider(1, 20, value=3, step=1, label="Epochs")
+                    bs = gr.Slider(1, 16, value=2, step=1, label="Batch Size")
+                    grad_accum = gr.Slider(
+                        1, 16, value=4, step=1, label="Gradient Accumulation Steps"
                     )
-                    grad_ckpt  = gr.Checkbox(
+                    max_len = gr.Slider(64, 2048, value=256, step=64, label="Max Sequence Length")
+                    warmup = gr.Slider(0, 500, value=100, step=10, label="Warmup Steps")
+                    early_stop = gr.Slider(
+                        0, 10, value=3, step=1, label="Early Stopping Patience (0 = off)"
+                    )
+                    lr_sched = gr.Dropdown(
+                        choices=["linear", "cosine", "cosine_with_restarts", "constant"],
+                        value="cosine",
+                        label="LR Scheduler",
+                    )
+                    grad_ckpt = gr.Checkbox(
                         label="Gradient Checkpointing (saves VRAM, ~20% slower)", value=False
                     )
                     resume_ckpt = gr.Checkbox(label="Resume from last checkpoint", value=False)
 
                 with gr.Row():
                     train_btn = gr.Button("▶  Start Training", variant="primary", scale=3)
-                    stop_btn  = gr.Button("⏹  Stop", variant="stop", scale=1)
+                    stop_btn = gr.Button("⏹  Stop", variant="stop", scale=1)
 
             with gr.Column(scale=3):
                 gr.Markdown("### Training log")
                 log_output = gr.Textbox(
-                    label="Consolidated Training Logs", lines=14, interactive=False,
+                    label="Consolidated Training Logs",
+                    lines=14,
+                    interactive=False,
                     placeholder="Training output will appear here…",
                 )
                 with gr.Column(elem_id="loss-chart-wrap"):
@@ -159,31 +187,52 @@ def build_train_tab() -> dict:
                     # the ETA string column to NaN, making it invisible.
                     # Gradio infers the correct schema from the DataFrame at render time.
                     loss_df = gr.Dataframe(
-                        label="Loss History & ETA metrics", interactive=False,
+                        label="Loss History & ETA metrics",
+                        interactive=False,
                     )
                 clear_gpu_btn = gr.Button("🧹 Clear GPU Cache", variant="secondary")
 
-        model_path_state    = gr.State()
-        log_records_state   = gr.State([])
+        model_path_state = gr.State()
+        log_records_state = gr.State([])
 
     return dict(
-        model_choice=model_choice, custom_model=custom_model, model_info_md=model_info_md,
-        training_mode=training_mode, dpo_beta=dpo_beta,
-        use_unsloth=use_unsloth, use_chat_template=use_chat_template,
-        heretic_mode=heretic_mode, system_prompt=system_prompt,
-        use_flash_attn=use_flash_attn, use_qlora_enhanced=use_qlora_enhanced,
-        peft_method=peft_method, training_preset=training_preset,
-        use_lora=use_lora, lora_rank=lora_rank, lora_alpha=lora_alpha,
+        model_choice=model_choice,
+        custom_model=custom_model,
+        model_info_md=model_info_md,
+        training_mode=training_mode,
+        dpo_beta=dpo_beta,
+        use_unsloth=use_unsloth,
+        use_chat_template=use_chat_template,
+        heretic_mode=heretic_mode,
+        system_prompt=system_prompt,
+        use_flash_attn=use_flash_attn,
+        use_qlora_enhanced=use_qlora_enhanced,
+        peft_method=peft_method,
+        training_preset=training_preset,
+        use_lora=use_lora,
+        lora_rank=lora_rank,
+        lora_alpha=lora_alpha,
         prefix_tuning_num_virtual_tokens=prefix_tuning_num_virtual_tokens,
         prefix_tuning_token_dim=prefix_tuning_token_dim,
         prefix_tuning_num_layers=prefix_tuning_num_layers,
         prompt_tuning_num_virtual_tokens=prompt_tuning_num_virtual_tokens,
         prompt_tuning_num_layers=prompt_tuning_num_layers,
         adapter_reduction_factor=adapter_reduction_factor,
-        lr=lr, epochs=epochs, bs=bs, grad_accum=grad_accum,
-        max_len=max_len, warmup=warmup, early_stop=early_stop,
-        lr_sched=lr_sched, grad_ckpt=grad_ckpt, resume_ckpt=resume_ckpt,
-        train_btn=train_btn, stop_btn=stop_btn,
-        log_output=log_output, loss_df=loss_df, clear_gpu_btn=clear_gpu_btn,
-        model_path_state=model_path_state, log_records_state=log_records_state,
+        lr=lr,
+        epochs=epochs,
+        bs=bs,
+        grad_accum=grad_accum,
+        max_len=max_len,
+        warmup=warmup,
+        early_stop=early_stop,
+        lr_sched=lr_sched,
+        grad_ckpt=grad_ckpt,
+        resume_ckpt=resume_ckpt,
+        train_btn=train_btn,
+        stop_btn=stop_btn,
+        log_output=log_output,
+        loss_df=loss_df,
+        clear_gpu_btn=clear_gpu_btn,
+        model_path_state=model_path_state,
+        log_records_state=log_records_state,
     )

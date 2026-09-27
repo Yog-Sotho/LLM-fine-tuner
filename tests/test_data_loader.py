@@ -12,7 +12,6 @@ Covers:
   - Unknown extensions return None from detect_file_type
 """
 
-import io
 import json
 import os
 import tempfile
@@ -21,11 +20,18 @@ import zipfile
 import pandas as pd
 import pytest
 
+from config.constants import (
+    COL_CHOSEN,
+    COL_INSTRUCTION,
+    COL_OUTPUT,
+    COL_PROMPT,
+    COL_REJECTED,
+    COL_TEXT,
+)
 from data.loader import detect_file_type, load_dataset_from_file, safe_extract_zip
-from config.constants import COL_INSTRUCTION, COL_OUTPUT, COL_TEXT, COL_PROMPT, COL_CHOSEN, COL_REJECTED
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────
+
 
 class DummyFile:
     def __init__(self, name):
@@ -47,6 +53,7 @@ def _write_jsonl(tmp_dir, rows: list[dict], fname="data.jsonl") -> str:
 
 
 # ── detect_file_type ───────────────────────────────────────────────────────
+
 
 def test_detect_csv():
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
@@ -86,6 +93,7 @@ def test_detect_unknown_returns_none():
 
 # ── load_dataset_from_file — SFT ───────────────────────────────────────────
 
+
 def test_load_csv_sft_standard_columns():
     with tempfile.TemporaryDirectory() as d:
         rows = [{"instruction": "Q1", "output": "A1"}, {"instruction": "Q2", "output": "A2"}]
@@ -117,6 +125,7 @@ def test_load_csv_with_column_mapping():
 
 # ── load_dataset_from_file — DPO ───────────────────────────────────────────
 
+
 def test_load_csv_dpo_columns():
     with tempfile.TemporaryDirectory() as d:
         rows = [
@@ -131,6 +140,7 @@ def test_load_csv_dpo_columns():
 
 
 # ── safe_extract_zip ───────────────────────────────────────────────────────
+
 
 def test_safe_extract_zip_normal():
     with tempfile.TemporaryDirectory() as d:
@@ -152,7 +162,7 @@ def test_safe_extract_zip_relative_path_traversal_blocked():
         with zipfile.ZipFile(zip_path, "w") as zf:
             info = zipfile.ZipInfo("../../../etc/passwd")
             zf.writestr(info, "root:x:0:0:root:/root:/bin/bash")
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match="Path traversal"):
             safe_extract_zip(zip_path, extract_dir)
 
 
@@ -219,7 +229,9 @@ def test_safe_extract_zip_bomb_too_large():
     mock_zip.infolist.return_value = [mock_info]
 
     with patch("data.loader.zipfile.ZipFile", return_value=mock_zip):
-        with pytest.raises(ValueError, match="❌ Zip Bomb attempt detected: total uncompressed size"):
+        with pytest.raises(
+            ValueError, match="❌ Zip Bomb attempt detected: total uncompressed size"
+        ):
             safe_extract_zip("dummy.zip", "dummy_dir")
 
 
@@ -231,10 +243,12 @@ def test_safe_extract_zip_bomb_high_ratio():
     mock_zip.__enter__.return_value = mock_zip
     mock_info = MagicMock()
     mock_info.file_size = 11 * 1024 * 1024  # 11 MB
-    mock_info.compress_size = 1000          # extremely compressed
+    mock_info.compress_size = 1000  # extremely compressed
     mock_info.filename = "ratio_bomb.txt"
     mock_zip.infolist.return_value = [mock_info]
 
     with patch("data.loader.zipfile.ZipFile", return_value=mock_zip):
-        with pytest.raises(ValueError, match="❌ Zip Bomb attempt detected: high compression ratio"):
+        with pytest.raises(
+            ValueError, match="❌ Zip Bomb attempt detected: high compression ratio"
+        ):
             safe_extract_zip("dummy.zip", "dummy_dir")

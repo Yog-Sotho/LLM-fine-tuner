@@ -1,5 +1,7 @@
-import torch
 import time
+
+import torch
+
 
 def benchmark_inference_mode_view():
     # Operations that involve views
@@ -15,7 +17,7 @@ def benchmark_inference_mode_view():
     with torch.no_grad():
         for _ in range(num_iterations):
             y = x.view(512, 2048)
-            z = y + 1
+            _ = y + 1
     no_grad_time = time.time() - start_time
     print(f"torch.no_grad(): {no_grad_time:.4f}s")
 
@@ -24,12 +26,13 @@ def benchmark_inference_mode_view():
     with torch.inference_mode():
         for _ in range(num_iterations):
             y = x.view(512, 2048)
-            z = y + 1
+            _ = y + 1
     inference_mode_time = time.time() - start_time
     print(f"torch.inference_mode(): {inference_mode_time:.4f}s")
 
     speedup = (no_grad_time / inference_mode_time - 1) * 100
     print(f"Speedup: {speedup:.2f}%")
+
 
 if __name__ == "__main__":
     benchmark_inference_mode_view()

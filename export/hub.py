@@ -37,11 +37,12 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
     Returns a status string for display in the UI.
     """
     # Sentinel: strip whitespace and validate against path traversal / malformed input.
-    repo_id    = repo_id.strip()    if repo_id    else ""
-    token      = token.strip()      if token      else ""
+    repo_id = repo_id.strip() if repo_id else ""
+    token = token.strip() if token else ""
     model_path = model_path.strip() if model_path else ""
 
     from core.state import validate_path_traversal
+
     if err := (
         validate_path_traversal(model_path)
         or validate_path_traversal(repo_id)
@@ -56,11 +57,7 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
         return "❌ Invalid Repo ID. Format: `username/model-name`"
 
     # M6 FIX: validate the token format properly — HF tokens are `hf_` + 33 chars.
-    if (
-        not token
-        or not token.startswith(HF_TOKEN_PREFIX)
-        or len(token) < HF_TOKEN_MIN_LEN
-    ):
+    if not token or not token.startswith(HF_TOKEN_PREFIX) or len(token) < HF_TOKEN_MIN_LEN:
         return (
             "❌ Invalid Hugging Face write token.\n"
             f"Tokens start with '{HF_TOKEN_PREFIX}' and are at least {HF_TOKEN_MIN_LEN} characters long.\n"

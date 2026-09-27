@@ -22,12 +22,17 @@ import torch
 from transformers import AutoTokenizer
 
 from config.constants import (
+    ALLOW_REMOTE_CODE,
     COL_CHOSEN,
     COL_REJECTED,
     HAS_PPO,
     HAS_REWARD_TRAINER,
 )
-from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
+from core.callbacks import (
+    ETAProgressCallback,
+    LoggingCallback,
+    StopCallback,
+)  # F-2: ETAProgressCallback added
 from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
 
@@ -42,10 +47,11 @@ def train_reward_model_v27(
     rm_eval_steps: int = 100,
     rm_max_length: int = 1024,
     progress=gr.Progress(),
+    request: gr.Request | None = None,
 ) -> str:
     """Train a Reward Model using trl.RewardTrainer.
 
-    Requires trl>=0.7.0 (HAS_REWARD_TRAINER=True).
+    Requires TRL's legacy value-head API (HAS_PPO=True); unavailable on supported TRL.
     Dataset must contain 'chosen' and 'rejected' columns.
 
     Returns a status string for display in the UI.
@@ -62,14 +68,15 @@ def train_reward_model_v27(
     # after the tokenizer was already loaded, causing a ~2s delay before the user
     # saw the error message. Fast-fail at the earliest possible point.
     if not HAS_REWARD_TRAINER:
-        return "❌ RewardTrainer not available. Install: pip install trl>=0.7.0"
+        return '❌ RewardTrainer not available. Install: pip install "trl>=0.29.1,<2"'
     if not HAS_PPO:
-        return "❌ AutoModelForCausalLMWithValueHead not available. Install: pip install trl>=0.7.0"
+        return "❌ Reward model training needs TRL's legacy value-head PPO API, which was removed in TRL 0.12 and is not part of the supported TRL versions. It is being rebuilt on the current TRL API."
     if reward_file is None:
         return "❌ Please upload a reward dataset (CSV/JSONL with 'chosen' & 'rejected' columns)."
 
     # Clear the stop event at the start of every reward training run.
-    app_state.stop_event.clear()
+    stop_event = app_state.session_for(request).stop_event
+    stop_event.clear()
 
     try:
         from trl import RewardConfig, RewardTrainer  # lazy
@@ -99,11 +106,12 @@ def train_reward_model_v27(
             model_name,
             torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
             device_map="auto" if torch.cuda.is_available() else None,
-            trust_remote_code=True,
+            trust_remote_code=ALLOW_REMOTE_CODE,
         )
 
-        from data.preprocessing import tokenize_reward_function
         import os
+
+        from data.preprocessing import tokenize_reward_function
 
         if progress is not None:
             progress(0.15, desc="Tokenising reward pairs…")
@@ -123,17 +131,17 @@ def train_reward_model_v27(
         # v3.2 Fix #1: Guard against datasets too small to produce a non-empty eval split.
         if len(tokenized_ds) < 2:
             rm_train_ds = tokenized_ds
-            rm_eval_ds  = None
+            rm_eval_ds = None
         else:
             split = tokenized_ds.train_test_split(test_size=0.1, seed=42)
             rm_train_ds = split["train"]
-            rm_eval_ds  = split["test"]
+            rm_eval_ds = split["test"]
             if len(rm_eval_ds) == 0:
                 rm_train_ds = tokenized_ds.select(range(len(tokenized_ds) - 1))
-                rm_eval_ds  = tokenized_ds.select([len(tokenized_ds) - 1])
+                rm_eval_ds = tokenized_ds.select([len(tokenized_ds) - 1])
 
         _rm_eval_strategy = "no" if rm_eval_ds is None else "steps"
-        _rm_load_best     = rm_eval_ds is not None
+        _rm_load_best = rm_eval_ds is not None
 
         reward_config = RewardConfig(
             output_dir=output_dir,
@@ -148,11 +156,12 @@ def train_reward_model_v27(
             load_best_model_at_end=_rm_load_best,
             report_to="none",
             fp16=torch.cuda.is_available(),
+            bf16=False,  # explicit: TRL 1.x configs default to bf16=True, which fails on CPU
         )
 
         log_cb = LoggingCallback()
         # Build callback list: stop button, logging, and ETA progress bar
-        rm_callbacks = [StopCallback(), log_cb]
+        rm_callbacks = [StopCallback(stop_event), log_cb]
         # F-2: ETAProgressCallback wired in so the UI stop button and ETA
         # both work for reward training (previously neither did).
         if progress is not None:
@@ -165,7 +174,7 @@ def train_reward_model_v27(
             args=reward_config,
             train_dataset=rm_train_ds,
             eval_dataset=rm_eval_ds,
-            tokenizer=tokenizer,
+            processing_class=tokenizer,
             callbacks=rm_callbacks,
         )
 
@@ -175,7 +184,7 @@ def train_reward_model_v27(
         trainer.train()
         elapsed = time.time() - t0
 
-        status = "stopped by user" if app_state.stop_event.is_set() else "complete"
+        status = "stopped by user" if stop_event.is_set() else "complete"
 
         base_model.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
@@ -189,7 +198,7 @@ def train_reward_model_v27(
             progress(1.0, desc="✅ Complete!")
         return (
             f"✅ Reward model training {status}!\n"
-            f"⏱ Elapsed: {elapsed/60:.1f} min\n"
+            f"⏱ Elapsed: {elapsed / 60:.1f} min\n"
             f"📉 Final train loss: {final_loss}\n"
             f"📁 Saved to: {output_dir}"
         )

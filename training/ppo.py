@@ -15,14 +15,15 @@ from peft import LoraConfig, TaskType, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from config.constants import (
+    ALLOW_REMOTE_CODE,
+    COL_INSTRUCTION,
     COL_PROMPT,
     COL_TEXT,
-    COL_INSTRUCTION,
     HAS_PPO,
     QLORA_ENHANCED_LORA_CONFIG,
 )
-from core.state import app_state, validate_path_traversal
 from core.hardware import get_lora_targets
+from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
 
 
@@ -37,10 +38,11 @@ def run_ppo_v27(
     ppo_epochs: int = 1,
     ppo_max_new_tokens: int = 128,
     progress=gr.Progress(),
+    request: gr.Request | None = None,
 ) -> str:
     """Run PPO fine-tuning using trl.PPOTrainer.
 
-    Requires trl>=0.7.0 (HAS_PPO=True).
+    Requires TRL's legacy value-head API (HAS_PPO=True); unavailable on supported TRL.
     Dataset must contain a 'prompt' column.
     Reward model must have been saved with AutoModelForCausalLMWithValueHead.
 
@@ -49,7 +51,7 @@ def run_ppo_v27(
     # Sentinel: strip whitespace and validate against path traversal.
     policy_model_name = policy_model_name.strip() if policy_model_name else ""
     reward_model_path = reward_model_path.strip() if reward_model_path else ""
-    output_dir        = output_dir.strip()        if output_dir        else ""
+    output_dir = output_dir.strip() if output_dir else ""
 
     if err := (
         validate_path_traversal(policy_model_name)
@@ -59,7 +61,7 @@ def run_ppo_v27(
         return err
 
     if not HAS_PPO:
-        return "❌ PPOTrainer not available. Install: pip install trl>=0.7.0"
+        return "❌ PPO training needs TRL's legacy value-head PPO API, which was removed in TRL 0.12 and is not part of the supported TRL versions. It is being rebuilt on the current TRL API."
     if ppo_file is None:
         return "❌ Please upload a dataset with a 'prompt' column."
     # H-7 FIX: os is now a proper top-level import, not __import__("os") inline.
@@ -67,7 +69,8 @@ def run_ppo_v27(
         return "❌ Reward model path is invalid or does not exist. Train a reward model first."
 
     # A Stop left over from an earlier job would otherwise end this loop instantly.
-    app_state.stop_event.clear()
+    stop_event = app_state.session_for(request).stop_event
+    stop_event.clear()
 
     try:
         from trl import (  # lazy
@@ -102,7 +105,7 @@ def run_ppo_v27(
             policy_model_name,
             device_map="auto" if torch.cuda.is_available() else None,
             torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-            trust_remote_code=True,
+            trust_remote_code=ALLOW_REMOTE_CODE,
         )
 
         ppo_targets = (
@@ -134,7 +137,7 @@ def run_ppo_v27(
             raise RuntimeError(
                 f"Failed to load Reward Model. Ensure it was saved with a ValueHead "
                 f"(train_reward_model_v27). Error: {e}"
-            )
+            ) from e
 
         # v2.9 Fix F: Reference model loaded silently (no debug prints).
         ref_model = AutoModelForCausalLM.from_pretrained(
@@ -187,13 +190,13 @@ def run_ppo_v27(
             progress(0.25, desc="Running PPO training loop…")
 
         for epoch in range(ppo_epochs):
-            if app_state.stop_event.is_set():
+            if stop_event.is_set():
                 break
             for batch_idx in range(0, len(prompts), ppo_batch_size):
-                if app_state.stop_event.is_set():
+                if stop_event.is_set():
                     break
-                batch_prompts = prompts[batch_idx: batch_idx + ppo_batch_size]
-                query_tensors = all_query_tensors[batch_idx: batch_idx + ppo_batch_size]
+                batch_prompts = prompts[batch_idx : batch_idx + ppo_batch_size]
+                query_tensors = all_query_tensors[batch_idx : batch_idx + ppo_batch_size]
 
                 _ppo_gen_result = ppo_trainer.generate(
                     query_tensors,
@@ -204,17 +207,19 @@ def run_ppo_v27(
                 )
                 # Guard: newer TRL versions may return (response_tensors, logprobs).
                 response_tensors = (
-                    _ppo_gen_result[0]
-                    if isinstance(_ppo_gen_result, tuple)
-                    else _ppo_gen_result
+                    _ppo_gen_result[0] if isinstance(_ppo_gen_result, tuple) else _ppo_gen_result
                 )
                 # BOLT OPTIMIZATION: Use tokenizer.batch_decode for faster processing
-                decoded_responses = tokenizer.batch_decode(response_tensors, skip_special_tokens=True)
+                decoded_responses = tokenizer.batch_decode(
+                    response_tensors, skip_special_tokens=True
+                )
 
                 # BOLT OPTIMIZATION: Process reward computation in a single batch forward pass.
                 # v3.2 Fix #2 (Medium): ensure reward values are plain Python floats.
                 with torch.inference_mode():
-                    full_texts = [p + r for p, r in zip(batch_prompts, decoded_responses)]
+                    full_texts = [
+                        p + r for p, r in zip(batch_prompts, decoded_responses, strict=False)
+                    ]
                     inputs = tokenizer(
                         full_texts,
                         return_tensors="pt",
@@ -236,7 +241,7 @@ def run_ppo_v27(
                 if progress is not None:
                     progress(
                         0.2 + 0.7 * done / len(prompts),
-                        desc=f"PPO Epoch {epoch+1} Step {done}/{len(prompts)}…",
+                        desc=f"PPO Epoch {epoch + 1} Step {done}/{len(prompts)}…",
                     )
 
         elapsed = time.time() - t0
@@ -251,7 +256,7 @@ def run_ppo_v27(
 
         return (
             f"✅ PPO fine-tuning complete!\n"
-            f"⏱ Elapsed: {elapsed/60:.1f} min\n"
+            f"⏱ Elapsed: {elapsed / 60:.1f} min\n"
             f"📁 Saved to: {output_dir}"
         )
 

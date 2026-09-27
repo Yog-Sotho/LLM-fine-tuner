@@ -84,25 +84,23 @@ _long_description, _long_desc_content_type = _read_readme()
 # torch is listed without a CUDA variant — the smart installer (install.sh) and
 # the Dockerfiles choose the correct whl index per-machine.
 INSTALL_REQUIRES: list[str] = [
-    "gradio>=5.0.0",
-    "transformers>=4.48.0",
-    "datasets>=3.0.0",
-    "peft>=0.14.0",
-    "accelerate>=1.3.0",
+    "gradio>=6.0.0,<7",
+    "transformers>=4.56.2,<6",
+    "datasets>=4.0.0,<6",
+    "peft>=0.17.0,<1",
+    "accelerate>=1.4.0,<2",
     "bitsandbytes>=0.45.0",
-    "trl>=0.8.0",
-    "torch>=2.5.0",
-    "torchvision>=0.20.0",
-    "torchaudio>=2.5.0",
+    "trl>=0.29.1,<2",
+    "torch>=2.6.0,<3",
     "numpy>=2.0.0",
     "pandas>=2.2.0",
     "safetensors>=0.4.3",
     "tqdm>=4.66.0",
     "einops>=0.8.0",
     "matplotlib>=3.9.0",
-    "huggingface_hub>=0.25.0",
+    "huggingface_hub>=0.34.0,<2",
     "typer>=0.15.0",
-    "PyPDF2>=3.0.0",
+    "pypdf>=6.16.1",
     "openpyxl>=3.1.0",
     "psutil>=6.0.0",
     # heretic-llm intentionally NOT listed here — see [heretic] extra.
@@ -217,73 +215,79 @@ CLASSIFIERS: list[str] = [
 # ── Project URLs ───────────────────────────────────────────────────────────────
 # Mirrors [project.urls] in pyproject.toml.
 PROJECT_URLS: dict[str, str] = {
-    "Homepage":    "https://github.com/Yog-Sotho/LLM-fine-tuner",
-    "Repository":  "https://github.com/Yog-Sotho/LLM-fine-tuner",
-    "Issues":      "https://github.com/Yog-Sotho/LLM-fine-tuner/issues",
-    "Changelog":   "https://github.com/Yog-Sotho/LLM-fine-tuner/releases",
+    "Homepage": "https://github.com/Yog-Sotho/LLM-fine-tuner",
+    "Repository": "https://github.com/Yog-Sotho/LLM-fine-tuner",
+    "Issues": "https://github.com/Yog-Sotho/LLM-fine-tuner/issues",
+    "Changelog": "https://github.com/Yog-Sotho/LLM-fine-tuner/releases",
 }
 
 # ── setup() ────────────────────────────────────────────────────────────────────
 setup(
     # ── Identity ──────────────────────────────────────────────────────────
-    name="llm-fine-tuner",                          # matches pyproject.toml name
-    version=_version,                               # read from pyproject.toml
+    name="llm-fine-tuner",  # matches pyproject.toml name
+    version=_version,  # read from pyproject.toml
     description=(
         "Advanced LLM Fine-Tuner — SFT, DPO, ORPO, PPO, reward modelling and evaluation. "
         "No-code Gradio UI + full CLI. QLoRA, Unsloth, GGUF, vLLM, Heretic Mode."
     ),
     long_description=_long_description,
     long_description_content_type=_long_desc_content_type,
-
     # ── Author ────────────────────────────────────────────────────────────
     author="Yog-Sotho",
     author_email="",
     maintainer="Yog-Sotho",
     maintainer_email="",
-
     # ── URLs ──────────────────────────────────────────────────────────────
     url="https://github.com/Yog-Sotho/LLM-fine-tuner",
     project_urls=PROJECT_URLS,
-
     # ── License ───────────────────────────────────────────────────────────
-    license="MIT",                                  # matches pyproject.toml
-
+    license="MIT",  # matches pyproject.toml
     # ── Python version ────────────────────────────────────────────────────
-    python_requires=">=3.10",                       # matches pyproject.toml
-
+    python_requires=">=3.10",  # matches pyproject.toml
     # ── Packages ──────────────────────────────────────────────────────────
     packages=PACKAGES,
-    package_dir={"": "."},                          # flat layout, no src/
-
+    package_dir={"": "."},  # flat layout, no src/
     # ── Static assets bundled into the wheel ──────────────────────────────
     package_data={
         # Include CSS so ui.css is accessible at runtime via importlib.resources
-        "ui":     ["*.py", "css.py"],
+        "ui": ["*.py", "css.py"],
         # Include docs index so help text can be read from the package
-        "docs":   ["index.md"],
+        "docs": ["index.md"],
         # Include all Python sources for the config layer (needed by some
         # tools that inspect the installed package for constants)
         "config": ["*.py"],
     },
     include_package_data=True,
-
     # ── Dependencies ──────────────────────────────────────────────────────
     install_requires=INSTALL_REQUIRES,
     extras_require=EXTRAS_REQUIRE,
-
     # ── Entry points ──────────────────────────────────────────────────────
     entry_points=ENTRY_POINTS,
-
     # ── Metadata ──────────────────────────────────────────────────────────
     classifiers=CLASSIFIERS,
     keywords=[
-        "llm", "fine-tuning", "machine-learning", "deep-learning",
-        "gradio", "peft", "lora", "qlora", "dpo", "rlhf", "ppo", "orpo",
-        "transformers", "huggingface", "unsloth", "gguf", "vllm",
-        "nlp", "pytorch", "ai",
+        "llm",
+        "fine-tuning",
+        "machine-learning",
+        "deep-learning",
+        "gradio",
+        "peft",
+        "lora",
+        "qlora",
+        "dpo",
+        "rlhf",
+        "ppo",
+        "orpo",
+        "transformers",
+        "huggingface",
+        "unsloth",
+        "gguf",
+        "vllm",
+        "nlp",
+        "pytorch",
+        "ai",
     ],
     platforms=["any"],
-
     # Must be False: gradio, transformers, and huggingface_hub all read their
     # own package resources at runtime (templates, tokeniser files, etc.).
     zip_safe=False,

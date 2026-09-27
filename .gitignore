@@ -82,3 +82,6 @@ runs/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# User datasets mounted into Docker at /app/datasets
+datasets/

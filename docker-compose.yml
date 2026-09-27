@@ -15,11 +15,11 @@
 #
 # CLI (headless training via compose):
 #   docker compose run --rm llm-fine-tuner-gpu \
-#       train --model gpt2 --data /app/data/train.csv --output /app/models/run1
+#       train --model gpt2 --data /app/datasets/train.csv --output /app/models/run1
 #
 # Volumes (persistent across container restarts):
 #   ./cache     → HuggingFace model cache   (saves re-downloading models)
-#   ./data      → Your training datasets
+#   ./datasets  → Your training datasets
 #   ./models    → Trained model outputs
 #   ./outputs   → Evaluation results, exports, ZIPs
 #
@@ -36,11 +36,13 @@ services:
     container_name: llm-fine-tuner-gpu
 
     ports:
-      - "7860:7860"         # Gradio UI
+      # Published on the host's localhost only. To expose it on the network,
+      # change to "7860:7860" AND set GRADIO_AUTH=user:password.
+      - "127.0.0.1:7860:7860"  # Gradio UI
 
     volumes:
       - ./cache:/app/cache/huggingface   # Model cache — survives container restarts
-      - ./data:/app/data                 # Mount your datasets here
+      - ./datasets:/app/datasets                 # Mount your datasets here
       - ./models:/app/models             # Trained models saved here
       - ./outputs:/app/outputs           # Eval results, GGUF exports, ZIPs
 
@@ -49,6 +51,8 @@ services:
       - HF_TOKEN=${HF_TOKEN:-}
       # Set SHARE=true to get a public Gradio URL (useful for remote machines)
       - SHARE=${SHARE:-false}
+      - GRADIO_AUTH=${GRADIO_AUTH:-}
+      - ALLOW_REMOTE_CODE=${ALLOW_REMOTE_CODE:-false}
       # Disable tokenizer parallelism warning inside Docker
       - TOKENIZERS_PARALLELISM=false
       # Point HF cache to the mounted volume
@@ -86,17 +90,19 @@ services:
     container_name: llm-fine-tuner-cpu
 
     ports:
-      - "7860:7860"
+      - "127.0.0.1:7860:7860"
 
     volumes:
       - ./cache:/app/cache/huggingface
-      - ./data:/app/data
+      - ./datasets:/app/datasets
       - ./models:/app/models
       - ./outputs:/app/outputs
 
     environment:
       - HF_TOKEN=${HF_TOKEN:-}
       - SHARE=${SHARE:-false}
+      - GRADIO_AUTH=${GRADIO_AUTH:-}
+      - ALLOW_REMOTE_CODE=${ALLOW_REMOTE_CODE:-false}
       - TOKENIZERS_PARALLELISM=false
       - HF_HOME=/app/cache/huggingface
       - TRANSFORMERS_CACHE=/app/cache/huggingface

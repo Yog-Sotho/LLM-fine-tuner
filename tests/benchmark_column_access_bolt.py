@@ -1,6 +1,7 @@
-
 import time
+
 from datasets import Dataset
+
 
 def benchmark():
     print("Creating a large dataset (100,000 rows)...")
@@ -11,14 +12,14 @@ def benchmark():
 
     COL = "text"
 
-    print(f"Benchmarking [str(x[COL]) for x in ds] (Slow)...")
+    print("Benchmarking [str(x[COL]) for x in ds] (Slow)...")
     start = time.time()
     _ = [str(x[COL]) for x in ds]
     end = time.time()
     slow_time = end - start
     print(f"Slow time: {slow_time:.6f}s")
 
-    print(f"Benchmarking list(ds[COL]) (Fast)...")
+    print("Benchmarking list(ds[COL]) (Fast)...")
     start = time.time()
     _ = list(ds[COL])
     end = time.time()
@@ -26,6 +27,7 @@ def benchmark():
     print(f"Fast time: {fast_time:.6f}s")
 
     print(f"Speedup: {slow_time / fast_time:.2f}x")
+
 
 if __name__ == "__main__":
     benchmark()

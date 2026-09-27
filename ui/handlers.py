@@ -28,6 +28,7 @@ Patch log
 """
 
 import os
+import shutil
 import tempfile
 
 import gradio as gr
@@ -52,32 +53,57 @@ from training.sft import train_model
 
 # ── Training ───────────────────────────────────────────────────────────────
 
+
 def on_train_click(
-    file, model_choice, custom_model, training_preset, peft_method,
-    use_lora, lora_rank, lora_alpha,
-    prefix_tuning_num_virtual_tokens, prefix_tuning_token_dim, prefix_tuning_num_layers,
+    file,
+    model_choice,
+    custom_model,
+    training_preset,
+    peft_method,
+    use_lora,
+    lora_rank,
+    lora_alpha,
+    prefix_tuning_num_virtual_tokens,
+    prefix_tuning_token_dim,
+    prefix_tuning_num_layers,
     prompt_tuning_num_virtual_tokens,
     adapter_reduction_factor,
-    lr, epochs, bs, grad_accum, max_len, warmup,
-    early_stop, lr_sched, grad_ckpt, resume,
-    col_inst, col_out, col_text,
-    use_unsloth, use_chat_template, system_prompt,
-    training_mode, dpo_beta, heretic_mode,
+    lr,
+    epochs,
+    bs,
+    grad_accum,
+    max_len,
+    warmup,
+    early_stop,
+    lr_sched,
+    grad_ckpt,
+    resume,
+    col_inst,
+    col_out,
+    col_text,
+    use_unsloth,
+    use_chat_template,
+    system_prompt,
+    training_mode,
+    dpo_beta,
+    heretic_mode,
     use_flash_attn=False,
-    use_qlora_enhanced=False,   # kept for UI arity — ignored; peft_method drives QLoRA
-    augmented_ds=None,          # C-5 FIX: augmented/filtered dataset from gr.State
+    use_qlora_enhanced=False,  # kept for UI arity — ignored; peft_method drives QLoRA
+    augmented_ds=None,  # C-5 FIX: augmented/filtered dataset from gr.State
     progress=gr.Progress(),
+    request: gr.Request | None = None,
 ):
     """Handler for the Start Training button.
 
     Orchestrates: file load → validate → preset apply → train → card → zip.
     Returns (log_str, zip_file_path, model_dir_path, log_records).
     """
-    app_state.stop_event.clear()
+    session = app_state.session_for(request)
+    session.stop_event.clear()
 
-    # Sentinel: Clean up previous training resources to prevent disk exhaustion (DoS).
-    app_state.cleanup_resource("_last_zip_path")
-    app_state.cleanup_resource("_last_model_dir")
+    # Free this session's previous run (other sessions' results are untouched).
+    session.release("zip")
+    session.release("model_dir")
 
     training_mode = "dpo" if "dpo" in training_mode.lower() else "sft"
 
@@ -90,8 +116,8 @@ def on_train_click(
         return err, None, None, []
 
     model_name = custom_model if custom_model else model_choice
-    device     = "cuda" if torch.cuda.is_available() else "cpu"
-    is_dpo     = training_mode == "dpo"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    is_dpo = training_mode == "dpo"
 
     # C-5 FIX: Use the augmented/filtered dataset from state when available.
     if augmented_ds is not None:
@@ -107,12 +133,12 @@ def on_train_click(
         if is_dpo:
             if col_inst and col_out and col_text:
                 col_map[col_inst] = COL_PROMPT
-                col_map[col_out]  = COL_CHOSEN
+                col_map[col_out] = COL_CHOSEN
                 col_map[col_text] = COL_REJECTED
         else:
             if col_inst and col_out:
                 col_map[col_inst] = COL_INSTRUCTION
-                col_map[col_out]  = COL_OUTPUT
+                col_map[col_out] = COL_OUTPUT
             elif col_text:
                 col_map[col_text] = COL_TEXT
 
@@ -136,10 +162,15 @@ def on_train_click(
 
     # Gradio can deliver ints as floats (e.g. 4.0); DataLoader rejects float batch sizes.
     hyperparams = dict(
-        learning_rate=float(lr), epochs=int(epochs), batch_size=int(bs),
-        grad_accum=int(grad_accum), max_length=int(max_len),
-        warmup_steps=int(warmup), lora_rank=int(lora_rank),
-        lora_alpha=int(lora_alpha), lr_scheduler=str(lr_sched),
+        learning_rate=float(lr),
+        epochs=int(epochs),
+        batch_size=int(bs),
+        grad_accum=int(grad_accum),
+        max_length=int(max_len),
+        warmup_steps=int(warmup),
+        lora_rank=int(lora_rank),
+        lora_alpha=int(lora_alpha),
+        lr_scheduler=str(lr_sched),
         prefix_tuning_num_virtual_tokens=int(prefix_tuning_num_virtual_tokens),
         prefix_tuning_token_dim=int(prefix_tuning_token_dim),
         prefix_tuning_num_layers=int(prefix_tuning_num_layers),
@@ -158,47 +189,69 @@ def on_train_click(
 
     try:
         msg, log_records = train_model(
-            model_name, ds, output_dir, hyperparams,
-            device, peft_method, use_lora, lora_rank, lora_alpha,
-            prefix_tuning_num_virtual_tokens, prefix_tuning_token_dim, prefix_tuning_num_layers,
+            model_name,
+            ds,
+            output_dir,
+            hyperparams,
+            device,
+            peft_method,
+            use_lora,
+            lora_rank,
+            lora_alpha,
+            prefix_tuning_num_virtual_tokens,
+            prefix_tuning_token_dim,
+            prefix_tuning_num_layers,
             prompt_tuning_num_virtual_tokens,
             adapter_reduction_factor,
-            resume, early_stop, lr_sched, grad_ckpt,
-            use_unsloth, use_chat_template, system_prompt,
-            training_mode=training_mode, dpo_beta=dpo_beta, heretic_mode=heretic_mode,
+            resume,
+            early_stop,
+            lr_sched,
+            grad_ckpt,
+            use_unsloth,
+            use_chat_template,
+            system_prompt,
+            training_mode=training_mode,
+            dpo_beta=dpo_beta,
+            heretic_mode=heretic_mode,
             progress=progress,
             use_flash_attn=use_flash_attn,
+            stop_event=session.stop_event,
         )
         create_model_card(
-            model_name, dataset_info, hyperparams,
-            output_dir, peft_method,
-            training_mode=training_mode, heretic_mode=heretic_mode,
+            model_name,
+            dataset_info,
+            hyperparams,
+            output_dir,
+            peft_method,
+            training_mode=training_mode,
+            heretic_mode=heretic_mode,
         )
         zip_path = create_zip_from_folder(output_dir)
 
-        # Sentinel: Track resources so the next run can clean them up.
-        app_state._last_zip_path = zip_path
-        app_state._last_model_dir = output_dir
+        session.track("zip", zip_path)
+        session.track("model_dir", output_dir)
 
-        full_msg  = msg + "\n" + issues_str
+        full_msg = msg + "\n" + issues_str
         return full_msg, zip_path, output_dir, log_records
 
     except Exception as e:
+        shutil.rmtree(output_dir, ignore_errors=True)
         return f"❌ Training failed: {e}\n{issues_str}", None, None, []
 
 
-def on_stop() -> str:
-    """Signal the training loop to halt after the current step."""
-    app_state.stop_event.set()
+def on_stop(request: gr.Request | None = None) -> str:
+    """Signal this session's running job to halt after the current step."""
+    app_state.session_for(request).stop_event.set()
     return "🛑 Stop signal sent — will halt after the current step."
 
 
 # ── Inference ──────────────────────────────────────────────────────────────
 
+
 def on_generate(prompt, model_choice, custom_model, lora_path, max_tok, temp, top_p) -> str:
     # Sentinel: strip whitespace and validate against path traversal.
     custom_model = custom_model.strip() if custom_model else ""
-    lora_path    = lora_path.strip()    if lora_path    else ""
+    lora_path = lora_path.strip() if lora_path else ""
     if err := (validate_path_traversal(custom_model) or validate_path_traversal(lora_path)):
         return err
 
@@ -206,10 +259,12 @@ def on_generate(prompt, model_choice, custom_model, lora_path, max_tok, temp, to
     return generate_text(model_name, lora_path, prompt, int(max_tok), temp, top_p)
 
 
-def on_batch_test(f, model_choice, custom_model, lora_path) -> str:
+def on_batch_test(
+    f, model_choice, custom_model, lora_path, request: gr.Request | None = None
+) -> str:
     # Sentinel: strip whitespace and validate against path traversal.
     custom_model = custom_model.strip() if custom_model else ""
-    lora_path    = lora_path.strip()    if lora_path    else ""
+    lora_path = lora_path.strip() if lora_path else ""
     if err := (validate_path_traversal(custom_model) or validate_path_traversal(lora_path)):
         return err
 
@@ -217,26 +272,27 @@ def on_batch_test(f, model_choice, custom_model, lora_path) -> str:
         if err := validate_path_traversal(f.name):
             return err
 
-    # Sentinel: Clean up previous batch generation results to prevent disk exhaustion (DoS).
-    app_state.cleanup_resource("_last_batch_path")
+    session = app_state.session_for(request)
+    session.release("batch")
 
     model_name = custom_model if custom_model else model_choice
     result = batch_generate(model_name, lora_path, f)
 
-    # Sentinel: Track resources so the next run can clean them up.
     if os.path.isfile(result):
-        app_state._last_batch_path = result
+        session.track("batch", result)
 
     return result
 
 
 # ── Hub ────────────────────────────────────────────────────────────────────
 
+
 def on_push(model_path: str, repo_id: str, token: str) -> str:
     return push_to_hub(model_path, repo_id, token)
 
 
 # ── Data tab helpers ───────────────────────────────────────────────────────
+
 
 def on_file_upload(file, training_mode="sft"):
     """Load, validate, and preview a dataset on file upload.
@@ -246,13 +302,18 @@ def on_file_upload(file, training_mode="sft"):
      preview_df, stats_str, raw_df_state, file_type_state)
     """
     training_mode = "dpo" if "dpo" in training_mode.lower() else "sft"
-    is_dpo        = training_mode == "dpo"
+    is_dpo = training_mode == "dpo"
 
     if file is None:
         return (
             "No file uploaded.",
-            gr.update(visible=False), gr.update(visible=False), gr.update(visible=False),
-            pd.DataFrame(), " ", None, None,
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(visible=False),
+            pd.DataFrame(),
+            " ",
+            None,
+            None,
         )
 
     # Sentinel: validate path traversal on file upload
@@ -260,16 +321,26 @@ def on_file_upload(file, training_mode="sft"):
         if err := validate_path_traversal(file.name):
             return (
                 f"❌ {err}",
-                gr.update(visible=False), gr.update(visible=False), gr.update(visible=False),
-                pd.DataFrame(), " ", None, None,
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                pd.DataFrame(),
+                " ",
+                None,
+                None,
             )
 
     ftype = detect_file_type(file)
     if ftype is None:
         return (
             "⚠️ Unsupported file type.",
-            gr.update(visible=False), gr.update(visible=False), gr.update(visible=False),
-            pd.DataFrame(), " ", None, None,
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(visible=False),
+            pd.DataFrame(),
+            " ",
+            None,
+            None,
         )
 
     try:
@@ -279,23 +350,31 @@ def on_file_upload(file, training_mode="sft"):
         raw_df = None
         if ftype in ("csv", "excel"):
             import pandas as _pd
-            raw_df = _pd.read_csv(file.name) if ftype == "csv" else _pd.read_excel(file.name, engine="openpyxl")
+
+            raw_df = (
+                _pd.read_csv(file.name)
+                if ftype == "csv"
+                else _pd.read_excel(file.name, engine="openpyxl")
+            )
             from data.loader import load_dataset_from_dataframe
+
             ds = load_dataset_from_dataframe(raw_df, is_dpo=is_dpo)
         else:
             ds = load_dataset_from_file(file, ftype, is_dpo=is_dpo)
 
         ds, issues = validate_and_clean_dataset(ds, is_dpo=is_dpo)
-        preview_df  = preview_dataset(ds, is_dpo=is_dpo)
-        issues_txt  = "\n".join(issues) if issues else "✅ No issues."
+        preview_df = preview_dataset(ds, is_dpo=is_dpo)
+        issues_txt = "\n".join(issues) if issues else "✅ No issues."
 
         if ftype in ("csv", "excel"):
-            cols   = list(raw_df.columns)
+            cols = list(raw_df.columns)
 
             if is_dpo:
                 need_map = not all(c in cols for c in [COL_PROMPT, COL_CHOSEN, COL_REJECTED])
             else:
-                need_map = not ((COL_INSTRUCTION in cols and COL_OUTPUT in cols) or COL_TEXT in cols)
+                need_map = not (
+                    (COL_INSTRUCTION in cols and COL_OUTPUT in cols) or COL_TEXT in cols
+                )
 
             if need_map:
                 stats = f"**Total examples:** {len(ds)}\n**Preview ready**"
@@ -304,31 +383,46 @@ def on_file_upload(file, training_mode="sft"):
                     gr.update(visible=True, choices=cols),
                     gr.update(visible=True, choices=cols),
                     gr.update(visible=True, choices=cols),
-                    preview_df, stats + "\n" + issues_txt, raw_df, ftype,
+                    preview_df,
+                    stats + "\n" + issues_txt,
+                    raw_df,
+                    ftype,
                 )
 
         stats = f"**Total examples:** {len(ds)}"
         return (
             f"✅ Loaded {len(ds)} examples. ",
-            gr.update(visible=False), gr.update(visible=False), gr.update(visible=False),
-            preview_df, stats + "\n" + issues_txt, raw_df, ftype,
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(visible=False),
+            preview_df,
+            stats + "\n" + issues_txt,
+            raw_df,
+            ftype,
         )
 
     except Exception as e:
         return (
             f"❌ Error: {e}",
-            gr.update(visible=False), gr.update(visible=False), gr.update(visible=False),
-            pd.DataFrame(), " ", None, None,
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(visible=False),
+            pd.DataFrame(),
+            " ",
+            None,
+            None,
         )
 
 
-def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_state, file_type_state):
+def on_refresh_preview(
+    file, training_mode, col_inst, col_out, col_text, raw_df_state, file_type_state
+):
     """Re-build dataset preview after the user changes column mapping dropdowns."""
     if file is None or raw_df_state is None or file_type_state is None:
         return pd.DataFrame(), "⚠️ No dataset loaded."
 
     training_mode = "dpo" if "dpo" in str(training_mode).lower() else "sft"
-    is_dpo        = training_mode == "dpo"
+    is_dpo = training_mode == "dpo"
 
     from data.loader import load_dataset_from_dataframe
 
@@ -336,12 +430,12 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
     if is_dpo:
         if col_inst and col_out and col_text:
             col_map[col_inst] = COL_PROMPT
-            col_map[col_out]  = COL_CHOSEN
+            col_map[col_out] = COL_CHOSEN
             col_map[col_text] = COL_REJECTED
     else:
         if col_inst and col_out:
             col_map[col_inst] = COL_INSTRUCTION
-            col_map[col_out]  = COL_OUTPUT
+            col_map[col_out] = COL_OUTPUT
         elif col_text:
             col_map[col_text] = COL_TEXT
 
@@ -356,7 +450,7 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
         ds, issues = validate_and_clean_dataset(ds, is_dpo=is_dpo)
         preview_df = preview_dataset(ds, is_dpo=is_dpo)
         issues_txt = "\n".join(issues) if issues else "✅ No issues."
-        stats      = f"**Total examples:** {len(ds)}\n{issues_txt}"
+        stats = f"**Total examples:** {len(ds)}\n{issues_txt}"
         return preview_df, stats
 
     except Exception as e:
@@ -364,6 +458,7 @@ def on_refresh_preview(file, training_mode, col_inst, col_out, col_text, raw_df_
 
 
 # ── Loss chart ─────────────────────────────────────────────────────────────
+
 
 def _fmt_eta(eta_s: float) -> str:
     """Format ETA seconds into a human-readable string.
@@ -396,10 +491,10 @@ def build_loss_chart(log_records: list) -> pd.DataFrame:
         return pd.DataFrame(columns=["Step", "Train Loss", "Eval Loss"])
 
     data: dict = {
-        "Step":       [r["step"]       for r in log_records],
+        "Step": [r["step"] for r in log_records],
         "Train Loss": [r["train_loss"] for r in log_records],
         # NaN (no eval split) renders as a gap rather than a "NaN" cell.
-        "Eval Loss":  [None if pd.isna(r["eval_loss"]) else r["eval_loss"] for r in log_records],
+        "Eval Loss": [None if pd.isna(r["eval_loss"]) else r["eval_loss"] for r in log_records],
     }
 
     # F-2: Include ETA column only when timing data is actually present.

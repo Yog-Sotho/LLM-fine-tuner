@@ -58,6 +58,7 @@ from inference.generate import _load_for_inference
 # Escapes the four characters that are meaningful inside HTML attribute values
 # and element text, preventing XSS from model outputs or user prompts.
 
+
 def _esc(s: str) -> str:
     """Escape HTML special characters in ``s`` for safe inline rendering.
 
@@ -66,14 +67,15 @@ def _esc(s: str) -> str:
     """
     return (
         s.replace("&", "&amp;")
-         .replace("<", "&lt;")
-         .replace(">", "&gt;")
-         .replace('"', "&quot;")
-         .replace("'", "&#x27;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#x27;")
     )
 
 
 # ── BLEU + ROUGE ───────────────────────────────────────────────────────────
+
 
 def _compute_bleu_rouge_chunk(chunk_data: tuple) -> tuple:
     """Helper function to compute BLEU and ROUGE scores for a single chunk.
@@ -89,9 +91,9 @@ def _compute_bleu_rouge_chunk(chunk_data: tuple) -> tuple:
         from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu  # lazy
 
         smoothing = SmoothingFunction().method4
-        for pred, ref in zip(predictions, references):
+        for pred, ref in zip(predictions, references, strict=False):
             pred_tokens = pred.split()
-            ref_tokens  = [ref.split()]
+            ref_tokens = [ref.split()]
             if pred_tokens:
                 try:
                     score = sentence_bleu(ref_tokens, pred_tokens, smoothing_function=smoothing)
@@ -105,7 +107,7 @@ def _compute_bleu_rouge_chunk(chunk_data: tuple) -> tuple:
         from rouge_score import rouge_scorer as rouge_scorer_lib  # lazy
 
         scorer = rouge_scorer_lib.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True)
-        for pred, ref in zip(predictions, references):
+        for pred, ref in zip(predictions, references, strict=False):
             try:
                 scores = scorer.score(ref, pred)
                 r1_scores.append(scores["rouge1"].fmeasure)
@@ -119,7 +121,7 @@ def _compute_bleu_rouge_chunk(chunk_data: tuple) -> tuple:
     return bleu_scores, r1_scores, r2_scores, rl_scores
 
 
-def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
+def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict[str, float | str]:
     """Compute BLEU-1, ROUGE-1, ROUGE-2, ROUGE-L over paired lists.
 
     BOLT OPTIMIZATION: Uses chunk-based multiprocessing via ProcessPoolExecutor on large
@@ -127,7 +129,7 @@ def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
     Uses the high-performance 'fork' start method on Linux/Unix systems to avoid massive PyTorch/Transformers re-import overhead,
     and falls back to sequential execution on small datasets or single-core systems.
     """
-    results = {}
+    results: dict[str, float | str] = {}
     if not predictions or not references:
         results["BLEU-1"] = 0.0
         results["ROUGE-1"] = results["ROUGE-2"] = results["ROUGE-L"] = 0.0
@@ -150,9 +152,13 @@ def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
             # Determine start method: "fork" is highly preferred on Linux/Unix because it is very fast
             # and avoids re-importing torch and transformers in the spawned child processes.
             if "fork" in multiprocessing.get_all_start_methods():
-                mp_context = multiprocessing.get_context("fork")
+                mp_context: multiprocessing.context.BaseContext = multiprocessing.get_context(
+                    "fork"
+                )
             else:
-                mp_context = multiprocessing.get_context()  # fallback to default (spawn or forkserver)
+                mp_context = (
+                    multiprocessing.get_context()
+                )  # fallback to default (spawn or forkserver)
 
             # Cap the number of workers to avoid excessive process creation overhead
             num_workers = min(num_cores, num_items // 50, 8)
@@ -162,8 +168,8 @@ def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
                 chunk_size = (num_items + num_workers - 1) // num_workers
                 chunks = []
                 for i in range(0, num_items, chunk_size):
-                    chunk_preds = predictions[i: i + chunk_size]
-                    chunk_refs = references[i: i + chunk_size]
+                    chunk_preds = predictions[i : i + chunk_size]
+                    chunk_refs = references[i : i + chunk_size]
                     chunks.append((chunk_preds, chunk_refs, has_nltk, has_rouge))
 
                 bleu_scores = []
@@ -171,8 +177,12 @@ def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
                 r2_scores = []
                 rl_scores = []
 
-                with ProcessPoolExecutor(max_workers=num_workers, mp_context=mp_context) as executor:
-                    for chunk_bleu, chunk_r1, chunk_r2, chunk_rl in executor.map(_compute_bleu_rouge_chunk, chunks):
+                with ProcessPoolExecutor(
+                    max_workers=num_workers, mp_context=mp_context
+                ) as executor:
+                    for chunk_bleu, chunk_r1, chunk_r2, chunk_rl in executor.map(
+                        _compute_bleu_rouge_chunk, chunks
+                    ):
                         bleu_scores.extend(chunk_bleu)
                         r1_scores.extend(chunk_r1)
                         r2_scores.extend(chunk_r2)
@@ -188,12 +198,16 @@ def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
                     results["ROUGE-2"] = round(float(np.mean(r2_scores)), 4)
                     results["ROUGE-L"] = round(float(np.mean(rl_scores)), 4)
                 else:
-                    results["ROUGE-1"] = results["ROUGE-2"] = results["ROUGE-L"] = "rouge_score not installed"
+                    results["ROUGE-1"] = results["ROUGE-2"] = results["ROUGE-L"] = (
+                        "rouge_score not installed"
+                    )
 
                 return results
         except Exception as e:
             # Fallback to sequential execution if multiprocessing encounters an error
-            print(f"⚠️ Multiprocessing evaluation failed: {e}. Falling back to sequential execution.")
+            print(
+                f"⚠️ Multiprocessing evaluation failed: {e}. Falling back to sequential execution."
+            )
 
     # ── Sequential Execution / Fallback ──────────────────────────────────────────
     if has_nltk:
@@ -201,9 +215,9 @@ def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
 
         smoothing = SmoothingFunction().method4
         bleu_scores = []
-        for pred, ref in zip(predictions, references):
+        for pred, ref in zip(predictions, references, strict=False):
             pred_tokens = pred.split()
-            ref_tokens  = [ref.split()]
+            ref_tokens = [ref.split()]
             if pred_tokens:
                 try:
                     score = sentence_bleu(ref_tokens, pred_tokens, smoothing_function=smoothing)
@@ -221,7 +235,7 @@ def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
 
         scorer = rouge_scorer_lib.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True)
         r1_scores, r2_scores, rl_scores = [], [], []
-        for pred, ref in zip(predictions, references):
+        for pred, ref in zip(predictions, references, strict=False):
             try:
                 scores = scorer.score(ref, pred)
                 r1_scores.append(scores["rouge1"].fmeasure)
@@ -242,6 +256,7 @@ def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict:
 
 # ── BERTScore ──────────────────────────────────────────────────────────────
 
+
 def compute_bertscore_metric(
     predictions: list[str],
     references: list[str],
@@ -253,8 +268,8 @@ def compute_bertscore_metric(
     """
     if not HAS_BERTSCORE:
         return {
-            "BERTScore-P":  "bert_score not installed",
-            "BERTScore-R":  "N/A",
+            "BERTScore-P": "bert_score not installed",
+            "BERTScore-R": "N/A",
             "BERTScore-F1": "N/A",
         }
     if not predictions or not references:
@@ -265,19 +280,20 @@ def compute_bertscore_metric(
 
         P, R, F1 = bert_score_fn(predictions, references, lang=lang, verbose=False)
         return {
-            "BERTScore-P":  round(float(P.mean()),  4),
-            "BERTScore-R":  round(float(R.mean()),  4),
+            "BERTScore-P": round(float(P.mean()), 4),
+            "BERTScore-R": round(float(R.mean()), 4),
             "BERTScore-F1": round(float(F1.mean()), 4),
         }
     except Exception as e:
         return {
-            "BERTScore-P":  f"Error: {e}",
-            "BERTScore-R":  "N/A",
+            "BERTScore-P": f"Error: {e}",
+            "BERTScore-R": "N/A",
             "BERTScore-F1": "N/A",
         }
 
 
 # ── LLM-as-Judge ──────────────────────────────────────────────────────────
+
 
 def llm_judge_evaluate(
     prompts: list[str],
@@ -310,14 +326,14 @@ def llm_judge_evaluate(
     # to utilize GPU parallelism, significantly speeding up large evaluations.
     batch_size = 8
     for i in range(0, len(prompts), batch_size):
-        batch_prompts = prompts[i: i + batch_size]
-        batch_responses = responses[i: i + batch_size]
+        batch_prompts = prompts[i : i + batch_size]
+        batch_responses = responses[i : i + batch_size]
 
         eval_texts = [
             f"Evaluate the following response based on: {criteria}\n"
             f"Prompt: {p}\nResponse: {r}\n"
             f"Score (1-10) and brief reasoning:"
-            for p, r in zip(batch_prompts, batch_responses)
+            for p, r in zip(batch_prompts, batch_responses, strict=False)
         ]
 
         inputs = tokenizer(
@@ -344,13 +360,14 @@ def llm_judge_evaluate(
         input_len = inputs["input_ids"].shape[1]
         judgments = tokenizer.batch_decode(outputs[:, input_len:], skip_special_tokens=True)
 
-        for p, r, judgment in zip(batch_prompts, batch_responses, judgments):
+        for p, r, judgment in zip(batch_prompts, batch_responses, judgments, strict=False):
             results.append({"prompt": p, "response": r, "judgment": judgment.strip()})
 
     return results
 
 
 # ── F-6: Per-example prediction preview ───────────────────────────────────
+
 
 def build_prediction_preview_html(
     prompts: list[str],
@@ -482,14 +499,18 @@ def build_prediction_preview_html(
     for rank, idx in enumerate(indices, start=1):
         # Truncate very long strings to keep the table readable
         prompt_txt = (prompts[idx][:280] + "…") if len(prompts[idx]) > 280 else prompts[idx]
-        pred_txt   = (predictions[idx][:380] + "…") if len(predictions[idx]) > 380 else predictions[idx]
+        pred_txt = (
+            (predictions[idx][:380] + "…") if len(predictions[idx]) > 380 else predictions[idx]
+        )
 
         row = (
             f'<td><span class="badge-idx">{rank}</span></td>'
             f'<td class="cell-prompt">{_esc(prompt_txt)}</td>'
         )
         if has_references:
-            ref_txt = (references[idx][:280] + "…") if len(references[idx]) > 280 else references[idx]
+            ref_txt = (
+                (references[idx][:280] + "…") if len(references[idx]) > 280 else references[idx]
+            )
             row += f'<td class="cell-ref">{_esc(ref_txt)}</td>'
         row += f'<td class="cell-pred">{_esc(pred_txt)}</td>'
         if has_rouge:
@@ -513,6 +534,7 @@ def build_prediction_preview_html(
 
 # ── Gradio UI handler ──────────────────────────────────────────────────────
 
+
 def on_evaluate_click(
     eval_model_name: str,
     eval_custom_model: str,
@@ -524,6 +546,7 @@ def on_evaluate_click(
     judge_criteria: str,
     eval_max_new_tokens: int = 150,
     progress=gr.Progress(),
+    request: gr.Request | None = None,
 ):
     """Handler for the Evaluation tab Run button.
 
@@ -538,8 +561,8 @@ def on_evaluate_click(
     """
     # Sentinel: strip whitespace and validate against path traversal.
     eval_custom_model = eval_custom_model.strip() if eval_custom_model else ""
-    eval_lora_path    = eval_lora_path.strip()    if eval_lora_path    else ""
-    judge_model_name  = judge_model_name.strip()  if judge_model_name  else ""
+    eval_lora_path = eval_lora_path.strip() if eval_lora_path else ""
+    judge_model_name = judge_model_name.strip() if judge_model_name else ""
 
     if err := (
         validate_path_traversal(eval_custom_model)
@@ -561,6 +584,10 @@ def on_evaluate_click(
             pd.DataFrame(),
             "",
         )
+
+    # A Stop pressed during an earlier job must not cut this evaluation to zero rows.
+    stop_event = app_state.session_for(request).stop_event
+    stop_event.clear()
 
     try:
         progress(0, desc="Loading evaluation dataset…")
@@ -593,8 +620,10 @@ def on_evaluate_click(
                 "",
             )
 
-        prompts    = eval_df["prompt"].astype(str).tolist()
-        references = eval_df["reference"].astype(str).tolist() if "reference" in eval_df.columns else []
+        prompts = eval_df["prompt"].astype(str).tolist()
+        references = (
+            eval_df["reference"].astype(str).tolist() if "reference" in eval_df.columns else []
+        )
 
         # ── Batched generation ─────────────────────────────────────────────
         progress(0.1, desc="Generating predictions (Batched)…")
@@ -608,9 +637,9 @@ def on_evaluate_click(
         batch_size = 8
 
         for i in range(0, len(prompts), batch_size):
-            if app_state.stop_event.is_set():
+            if stop_event.is_set():
                 break
-            batch_prompts = prompts[i: i + batch_size]
+            batch_prompts = prompts[i : i + batch_size]
             inputs = tokenizer(
                 batch_prompts,
                 return_tensors="pt",
@@ -671,20 +700,20 @@ def on_evaluate_click(
             metrics_str += f"\n**LLM-as-Judge:** {len(judge_results)} examples evaluated."
 
         result_data: dict = {
-            "prompt": prompts[:len(predictions)],
+            "prompt": prompts[: len(predictions)],
             "prediction": predictions,
         }
         if references:
-            result_data["reference"] = references[:len(predictions)]
+            result_data["reference"] = references[: len(predictions)]
         if judge_results:
-            result_data["judgment"] = [r["judgment"] for r in judge_results[:len(predictions)]]
+            result_data["judgment"] = [r["judgment"] for r in judge_results[: len(predictions)]]
 
         # F-6: Build the per-example HTML preview (safe — never raises)
         try:
             preview_html = build_prediction_preview_html(
-                prompts=prompts[:len(predictions)],
+                prompts=prompts[: len(predictions)],
                 predictions=predictions,
-                references=references[:len(predictions)] if references else [],
+                references=references[: len(predictions)] if references else [],
                 n=3,
             )
         except Exception:

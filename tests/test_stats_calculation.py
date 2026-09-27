@@ -1,11 +1,16 @@
 import pytest
-import numpy as np
 from datasets import Dataset
-from data.preprocessing import get_dataset_stats
+
 from config.constants import (
-    COL_PROMPT, COL_CHOSEN, COL_REJECTED,
-    COL_TEXT, COL_INSTRUCTION, COL_OUTPUT
+    COL_CHOSEN,
+    COL_INSTRUCTION,
+    COL_OUTPUT,
+    COL_PROMPT,
+    COL_REJECTED,
+    COL_TEXT,
 )
+from data.preprocessing import get_dataset_stats
+
 
 def test_get_dataset_stats_sft_text():
     data = {COL_TEXT: ["hello", "world", "vectorized"]}
@@ -16,11 +21,9 @@ def test_get_dataset_stats_sft_text():
     assert stats["num_examples"] == 3
     assert pytest.approx(stats["avg_length"]) == 20 / 3
 
+
 def test_get_dataset_stats_sft_instruction():
-    data = {
-        COL_INSTRUCTION: ["tell me a joke", "what is 2+2"],
-        COL_OUTPUT: ["no", "4"]
-    }
+    data = {COL_INSTRUCTION: ["tell me a joke", "what is 2+2"], COL_OUTPUT: ["no", "4"]}
     ds = Dataset.from_dict(data)
     stats = get_dataset_stats(ds)
 
@@ -28,12 +31,9 @@ def test_get_dataset_stats_sft_instruction():
     assert stats["num_examples"] == 2
     assert stats["avg_length"] == 14.0
 
+
 def test_get_dataset_stats_dpo():
-    data = {
-        COL_PROMPT: ["p1", "p2"],
-        COL_CHOSEN: ["c1", "c2"],
-        COL_REJECTED: ["r1", "r2"]
-    }
+    data = {COL_PROMPT: ["p1", "p2"], COL_CHOSEN: ["c1", "c2"], COL_REJECTED: ["r1", "r2"]}
     ds = Dataset.from_dict(data)
     stats = get_dataset_stats(ds, is_dpo=True)
 
@@ -41,11 +41,13 @@ def test_get_dataset_stats_dpo():
     assert stats["num_examples"] == 2
     assert stats["avg_length"] == 6.0
 
+
 def test_get_dataset_stats_empty():
     ds = Dataset.from_dict({COL_TEXT: []})
     stats = get_dataset_stats(ds)
     assert stats["num_examples"] == 0
     assert stats["avg_length"] == 0.0
+
 
 def test_get_dataset_stats_fallback():
     # Unknown column

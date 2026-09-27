@@ -1,25 +1,27 @@
-
 import time
+
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer
+
 
 class MockValueHeadModel(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.config = type('Config', (), {'is_encoder_decoder': False})
+        self.config = type("Config", (), {"is_encoder_decoder": False})
         self.device = torch.device("cpu")
 
     def forward(self, input_ids, attention_mask=None, **kwargs):
         # Return dummy values: (batch, seq, 1)
         batch_size, seq_len = input_ids.shape
         values = torch.randn(batch_size, seq_len, 1)
-        return type('Output', (), {'values': values})
+        return type("Output", (), {"values": values})
+
 
 def sequential_reward(reward_model, tokenizer, batch_prompts, decoded_responses):
     rewards = []
     t0 = time.time()
     with torch.no_grad():
-        for prompt, response in zip(batch_prompts, decoded_responses):
+        for prompt, response in zip(batch_prompts, decoded_responses, strict=False):
             full_text = prompt + response
             inputs = tokenizer(
                 full_text,
@@ -36,10 +38,11 @@ def sequential_reward(reward_model, tokenizer, batch_prompts, decoded_responses)
             rewards.append(reward_val)
     return rewards, time.time() - t0
 
+
 def batched_reward(reward_model, tokenizer, batch_prompts, decoded_responses):
     t0 = time.time()
     with torch.no_grad():
-        full_texts = [p + r for p, r in zip(batch_prompts, decoded_responses)]
+        full_texts = [p + r for p, r in zip(batch_prompts, decoded_responses, strict=False)]
         inputs = tokenizer(
             full_texts,
             return_tensors="pt",
@@ -56,6 +59,7 @@ def batched_reward(reward_model, tokenizer, batch_prompts, decoded_responses):
         rewards = values[torch.arange(values.size(0)), last_token_indices].tolist()
     return rewards, time.time() - t0
 
+
 def run_benchmark():
     # Use a small tokenizer
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -64,7 +68,9 @@ def run_benchmark():
 
     batch_size = 16
     prompts = ["Tell me a joke." for _ in range(batch_size)]
-    responses = ["Why did the chicken cross the road? To get to the other side." for _ in range(batch_size)]
+    responses = [
+        "Why did the chicken cross the road? To get to the other side." for _ in range(batch_size)
+    ]
 
     print(f"Benchmarking reward computation with batch_size={batch_size}...")
 
@@ -84,6 +90,7 @@ def run_benchmark():
     # so we can't easily compare the values unless we seed it or make it deterministic.
     # Let's just check length.
     assert len(seq_rewards) == len(batch_rewards) == batch_size
+
 
 if __name__ == "__main__":
     run_benchmark()

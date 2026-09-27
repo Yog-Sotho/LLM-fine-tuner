@@ -25,7 +25,7 @@ LLM-fine-tuner/
 │   └── constants.py         # ALL constants, HAS_* flags, LoRA presets — Layer 0
 │
 ├── core/
-│   ├── state.py             # AppState singleton (caches, stop_event)
+│   ├── state.py             # AppState singleton (shared caches) + per-session SessionState
 │   ├── hardware.py          # VRAM/RAM detection, model recommendation
 │   └── callbacks.py         # Trainer callbacks (Stop, Logging, ETA)
 │
@@ -132,7 +132,12 @@ Tab files (`ui/tabs/*.py`) define **layout only** — no `.click()`, `.change()`
 
 - The inference model cache in `inference/generate.py` is protected by `_cache_lock`.
 - Do not access shared mutable state from Gradio handlers without acquiring the lock.
-- The training stop mechanism uses `app_state.stop_event` (a `threading.Event`). Do not bypass it.
+- Stop signals and temp files are **per browser session**: get them with `app_state.session_for(request)` (handlers take `request: gr.Request | None = None`; the CLI uses the default session). Pass the session's `stop_event` to `StopCallback(stop_event)`. Track temp outputs with `session.track()` / `session.release()`, never with module globals — one session must not stop or delete another's work.
+
+### Security defaults
+
+- Never hardcode `trust_remote_code=True`; pass `trust_remote_code=ALLOW_REMOTE_CODE` from `config/constants.py`.
+- PEFT adapters must be safetensors: call `validate_adapter_dir()` before `PeftModel.from_pretrained` on a local path. Pickle weights (`.bin`/`.pt`) are rejected because loading them can execute code.
 
 ### Optional dependencies
 
@@ -185,6 +190,8 @@ pytest tests/test_cli.py -v
 pytest tests/test_cli.py::test_help_flag_exits_zero -v
 ```
 
+`tests/test_smoke_training.py` trains `hf-internal-testing/tiny-random-LlamaForCausalLM` for real (SFT, DPO, ORPO, CLI, inference). It is skipped when the model can't be downloaded, unless `REQUIRE_SMOKE_MODELS=1` (set in CI). CI lives in `.github/workflows/ci.yml` and runs ruff, mypy, pytest (3.10–3.12), pip-audit, hadolint and a packaging check.
+
 Tests use `CliRunner` (no subprocess spawning) and patch heavy functions so they run without a GPU or downloaded models. `conftest.py` inserts the repo root into `sys.path[0]` — **do not remove this**.
 
 ### Code style
@@ -220,7 +227,10 @@ HF_TOKEN=hf_xxx docker compose up llm-fine-tuner-gpu
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `MAX_VLLM_ENGINES` | `1` | Max concurrent vLLM engines |
+| `MAX_VLLM_ENGINES` | `1` | Max concurrent vLLM engines (clamped to 1–8) |
+| `GRADIO_SERVER_NAME` | `127.0.0.1` | Bind address (Docker images set `0.0.0.0` inside the container) |
+| `GRADIO_AUTH` | — | Require login: `user:password`, comma-separated pairs |
+| `ALLOW_REMOTE_CODE` | `false` | Enables `trust_remote_code` for Hub models with custom code — off by default |
 | `HF_TOKEN` | — | HuggingFace Hub auth (gated models, Hub push) |
 | `SHARE` | `false` | Enable public Gradio link |
 | `TOKENIZERS_PARALLELISM` | `false` | Suppress tokenizer parallelism warning (Docker) |

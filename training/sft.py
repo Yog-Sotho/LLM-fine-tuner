@@ -35,9 +35,8 @@ import gc
 import glob
 import os
 import subprocess
+import threading
 import time
-from datetime import datetime
-from pathlib import Path
 
 import gradio as gr
 import torch
@@ -48,7 +47,6 @@ from peft import (
     # AdapterConfig is now imported lazily and guarded by HAS_ADAPTER_CONFIG inside
     # the Adapters branch of train_model() below.
     LoraConfig,
-    PeftModel,
     PrefixTuningConfig,
     PromptTuningConfig,
     PromptTuningInit,
@@ -66,17 +64,21 @@ from transformers import (
 )
 
 from config.constants import (
+    ALLOW_REMOTE_CODE,
     COL_INSTRUCTION,
     COL_OUTPUT,
-    COL_TEXT,
     HAS_ADAPTER_CONFIG,
-    HAS_HERETIC,    # N-5 FIX: imported so the Heretic Mode branch can guard the subprocess call
+    HAS_HERETIC,  # N-5 FIX: imported so the Heretic Mode branch can guard the subprocess call
     HAS_TRL,
     HAS_UNSLOTH,
     QLORA_ENHANCED_BNB_KWARGS,
     QLORA_ENHANCED_LORA_CONFIG,
 )
-from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
+from core.callbacks import (
+    ETAProgressCallback,
+    LoggingCallback,
+    StopCallback,
+)  # F-2: ETAProgressCallback added
 from core.hardware import get_lora_targets, is_unsloth_supported
 from core.state import app_state, validate_path_traversal
 from data.preprocessing import preprocess_function
@@ -109,6 +111,7 @@ def train_model(
     heretic_mode=False,
     progress=gr.Progress(),
     use_flash_attn=False,
+    stop_event: threading.Event | None = None,
 ):
     """Unified SFT / DPO training pipeline.
 
@@ -128,11 +131,12 @@ def train_model(
         raise ValueError(err)
 
     # v2.9 Major Fix #2: Derive QLoRA Enhanced solely from peft_method.
-    use_qlora_enhanced = (peft_method == "QLoRA Enhanced")
+    use_qlora_enhanced = peft_method == "QLoRA Enhanced"
     # v3.0 Fix #1 (Critical): Define is_dpo here — was previously undefined.
-    is_dpo = (training_mode == "dpo")
+    is_dpo = training_mode == "dpo"
 
-    app_state.stop_event.clear()
+    stop_event = stop_event or app_state.session().stop_event
+    stop_event.clear()
     log_callback = LoggingCallback()
 
     try:
@@ -183,28 +187,32 @@ def train_model(
         # A single example produces an empty test set, crashing the Trainer.
         if len(tokenized) < 2:
             train_ds = tokenized
-            eval_ds  = None
+            eval_ds = None
         else:
             split = tokenized.train_test_split(test_size=0.1, seed=42)
             train_ds, eval_ds = split["train"], split["test"]
             # Edge case: exactly 2 examples → 10% rounds to 0; force 1 eval row.
             if len(eval_ds) == 0:
                 train_ds = tokenized.select(range(len(tokenized) - 1))
-                eval_ds  = tokenized.select([len(tokenized) - 1])
+                eval_ds = tokenized.select([len(tokenized) - 1])
 
         # ── Model loading ──────────────────────────────────────────────────
         if progress is not None:
             progress(0.1, desc="Loading model… ")
-        is_unsloth  = False
         peft_applied = False  # prevent double PEFT application
 
         # ── Path A: QLoRA Enhanced (CUDA only) ────────────────────────────
         if use_qlora_enhanced and device != "cuda":
-            log_callback.records.append({
-                "step": 0, "train_loss": 0.0, "eval_loss": float("nan"),
-                "elapsed_s": 0.0, "eta_s": 0.0,
-                "note": "⚠️ QLoRA Enhanced requested but CUDA unavailable — loading float32.",
-            })
+            log_callback.records.append(
+                {
+                    "step": 0,
+                    "train_loss": 0.0,
+                    "eval_loss": float("nan"),
+                    "elapsed_s": 0.0,
+                    "eta_s": 0.0,
+                    "note": "⚠️ QLoRA Enhanced requested but CUDA unavailable — loading float32.",
+                }
+            )
             if progress is not None:
                 progress(0.1, desc="⚠️ QLoRA Enhanced: CUDA unavailable, loading float32…")
 
@@ -219,7 +227,9 @@ def train_model(
                 bnb = BitsAndBytesConfig(**bnb_kwargs, bnb_4bit_quant_storage=torch.bfloat16)
             except TypeError:
                 bnb = BitsAndBytesConfig(**bnb_kwargs)
-            model_kwargs = dict(quantization_config=bnb, device_map="auto", trust_remote_code=True)
+            model_kwargs = dict(
+                quantization_config=bnb, device_map="auto", trust_remote_code=ALLOW_REMOTE_CODE
+            )
             if use_flash_attn:
                 # v3.1 Fix #2 (Critical): Guard bfloat16 with hardware support check.
                 model_kwargs["attn_implementation"] = "flash_attention_2"
@@ -258,9 +268,8 @@ def train_model(
                 max_seq_length=hyperparams["max_length"],
                 dtype=dtype,
                 load_in_4bit=(device == "cuda"),
-                trust_remote_code=True,
+                trust_remote_code=ALLOW_REMOTE_CODE,
             )
-            is_unsloth = True
             model = FastLanguageModel.get_peft_model(
                 model,
                 r=lora_rank,
@@ -285,7 +294,7 @@ def train_model(
                 model_kwargs = dict(
                     quantization_config=bnb,
                     device_map="auto",
-                    trust_remote_code=True,
+                    trust_remote_code=ALLOW_REMOTE_CODE,
                 )
                 # v3.2 Fix #5: Always set torch_dtype for non-quantised tensors.
                 model_kwargs["torch_dtype"] = (
@@ -302,13 +311,15 @@ def train_model(
                 model = AutoModelForCausalLM.from_pretrained(
                     model_name,
                     torch_dtype=torch.float32,
-                    trust_remote_code=True,
+                    trust_remote_code=ALLOW_REMOTE_CODE,
                 )
 
         # ── Warn if Unsloth + non-LoRA PEFT ───────────────────────────────
         # v2.9 Minor Fix #8
         if use_unsloth and HAS_UNSLOTH and peft_method not in ["LoRA", "Auto"]:
-            print("⚠️ Warning: Unsloth is optimized for LoRA/Auto. Other PEFT methods may cause issues.")
+            print(
+                "⚠️ Warning: Unsloth is optimized for LoRA/Auto. Other PEFT methods may cause issues."
+            )
 
         # ── Apply PEFT (if not already applied) ───────────────────────────
         # v3.1 Fix #5: Warn when Auto + use_lora=False → full fine-tune.
@@ -372,6 +383,7 @@ def train_model(
                         "Install with: pip install adapter-transformers"
                     )
                 from peft import AdapterConfig  # lazy, guarded  # noqa: PLC0415
+
                 adapter_cfg = AdapterConfig(
                     non_linearity="relu",
                     reduction_factor=adapter_reduction_factor,
@@ -398,11 +410,10 @@ def train_model(
 
         # ── TrainingArguments + Trainer ────────────────────────────────────
         _eval_strategy = "no" if eval_ds is None else "steps"
-        _load_best     = eval_ds is not None
+        _load_best = eval_ds is not None
 
         base_training_args = dict(
             output_dir=output_dir,
-            overwrite_output_dir=True,
             num_train_epochs=hyperparams["epochs"],
             per_device_train_batch_size=hyperparams["batch_size"],
             gradient_accumulation_steps=hyperparams["grad_accum"],
@@ -418,18 +429,23 @@ def train_model(
             metric_for_best_model="eval_loss" if _load_best else None,
             greater_is_better=False,
             fp16=(device == "cuda"),
+            bf16=False,  # explicit: TRL 1.x configs default to bf16=True, which fails on CPU
             report_to="none",
             disable_tqdm=False,
             lr_scheduler_type=lr_scheduler_type,
             gradient_checkpointing=gradient_checkpointing,
+            # Reentrant checkpointing gives "does not require grad" with frozen LoRA base weights.
+            gradient_checkpointing_kwargs={"use_reentrant": False}
+            if gradient_checkpointing
+            else None,
         )
 
         if is_dpo:
             if not HAS_TRL:
-                raise ImportError("TRL not installed. Run: pip install trl>=0.7.0")
+                raise ImportError('TRL not installed. Run: pip install "trl>=0.29.1,<2"')
             from trl import DPOConfig, DPOTrainer  # lazy
 
-            dpo_callbacks = [StopCallback(), log_callback]
+            dpo_callbacks = [StopCallback(stop_event), log_callback]
             # Early stopping on < 50 train rows reacts to a 1-row eval set's noise.
             if early_stop > 0 and eval_ds is not None and len(train_ds) >= 50:
                 dpo_callbacks.append(EarlyStoppingCallback(early_stopping_patience=int(early_stop)))
@@ -437,43 +453,25 @@ def train_model(
             if progress is not None:
                 dpo_callbacks.append(ETAProgressCallback(gradio_progress=progress))
 
-            # v2.9: Use DPOConfig for beta — passing beta to DPOTrainer directly
-            # is deprecated in TRL >= 0.9.
+            dpo_config = DPOConfig(**base_training_args, remove_unused_columns=False, beta=dpo_beta)
             import inspect as _inspect
-            try:
-                dpo_config = DPOConfig(**base_training_args, remove_unused_columns=False, beta=dpo_beta)
-                # BOLT OPTIMIZATION: Parallelize internal trainer tokenization.
-                dpo_trainer_kwargs = {
-                    "model": model,
-                    "args": dpo_config,
-                    "train_dataset": train_ds,
-                    "eval_dataset": eval_ds,
-                    "tokenizer": tokenizer,
-                    "callbacks": dpo_callbacks,
-                }
-                if "dataset_num_proc" in _inspect.signature(DPOTrainer.__init__).parameters:
-                    dpo_trainer_kwargs["dataset_num_proc"] = os.cpu_count()
-                trainer = DPOTrainer(**dpo_trainer_kwargs)
-            except TypeError:
-                # Fallback for older TRL versions
-                training_args = TrainingArguments(**base_training_args, remove_unused_columns=False)
-                # BOLT OPTIMIZATION: Parallelize internal trainer tokenization.
-                dpo_trainer_kwargs = {
-                    "model": model,
-                    "args": training_args,
-                    "train_dataset": train_ds,
-                    "eval_dataset": eval_ds,
-                    "tokenizer": tokenizer,
-                    "beta": dpo_beta,
-                    "callbacks": dpo_callbacks,
-                }
-                if "dataset_num_proc" in _inspect.signature(DPOTrainer.__init__).parameters:
-                    dpo_trainer_kwargs["dataset_num_proc"] = os.cpu_count()
-                trainer = DPOTrainer(**dpo_trainer_kwargs)
+
+            dpo_trainer_kwargs = {
+                "model": model,
+                "args": dpo_config,
+                "train_dataset": train_ds,
+                "eval_dataset": eval_ds,
+                "processing_class": tokenizer,
+                "callbacks": dpo_callbacks,
+            }
+            # BOLT OPTIMIZATION: Parallelize internal trainer tokenization.
+            if "dataset_num_proc" in _inspect.signature(DPOTrainer.__init__).parameters:
+                dpo_trainer_kwargs["dataset_num_proc"] = os.cpu_count()
+            trainer = DPOTrainer(**dpo_trainer_kwargs)
         else:
             training_args = TrainingArguments(**base_training_args)
             collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-            sft_callbacks = [StopCallback(), log_callback]
+            sft_callbacks = [StopCallback(stop_event), log_callback]
             if early_stop > 0 and eval_ds is not None and len(train_ds) >= 50:
                 sft_callbacks.append(EarlyStoppingCallback(early_stopping_patience=int(early_stop)))
             # F-2: Add ETA progress callback for SFT training
@@ -481,13 +479,14 @@ def train_model(
                 sft_callbacks.append(ETAProgressCallback(gradio_progress=progress))
             # BOLT OPTIMIZATION: Parallelize internal trainer tokenization.
             import inspect as _inspect
+
             sft_trainer_kwargs = {
                 "model": model,
                 "args": training_args,
                 "train_dataset": train_ds,
                 "eval_dataset": eval_ds,
                 "data_collator": collator,
-                "tokenizer": tokenizer,
+                "processing_class": tokenizer,
                 "callbacks": sft_callbacks,
             }
             if "dataset_num_proc" in _inspect.signature(Trainer.__init__).parameters:
@@ -510,7 +509,7 @@ def train_model(
         t0 = time.time()
         trainer.train(resume_from_checkpoint=resume_path)
         elapsed = time.time() - t0
-        status = "stopped by user" if app_state.stop_event.is_set() else "complete"
+        status = "stopped by user" if stop_event.is_set() else "complete"
 
         # ── Save ───────────────────────────────────────────────────────────
         if progress is not None:
@@ -535,32 +534,34 @@ def train_model(
                     f"✅ Training {status}!\n"
                     f"⚠️ Heretic Mode skipped — binary not found.\n"
                     f"   Install with: pip install heretic-llm\n"
-                    f"⏱ Elapsed: {elapsed/60:.1f} min\n"
+                    f"⏱ Elapsed: {elapsed / 60:.1f} min\n"
                     f"📁 Model saved to: {output_dir}\n"
                 )
             else:
                 try:
                     subprocess.run(
                         ["heretic", output_dir],
-                        capture_output=True, text=True, timeout=600,
+                        capture_output=True,
+                        text=True,
+                        timeout=600,
                     )
                     summary = (
                         f"✅ Training {status}!\n"
                         f"🔓 Heretic Mode applied!\n"
-                        f"⏱ Elapsed: {elapsed/60:.1f} min\n"
+                        f"⏱ Elapsed: {elapsed / 60:.1f} min\n"
                         f"📁 Model saved to: {output_dir}\n"
                     )
                 except Exception as e:
                     summary = (
                         f"✅ Training {status}!\n"
                         f"⚠️ Heretic failed: {e}\n"
-                        f"⏱ Elapsed: {elapsed/60:.1f} min\n"
+                        f"⏱ Elapsed: {elapsed / 60:.1f} min\n"
                         f"📁 Model saved to: {output_dir}\n"
                     )
         else:
             summary = (
                 f"✅ Training {status}!\n"
-                f"⏱ Elapsed: {elapsed/60:.1f} min\n"
+                f"⏱ Elapsed: {elapsed / 60:.1f} min\n"
                 f"📁 Model saved to: {output_dir}\n"
             )
 

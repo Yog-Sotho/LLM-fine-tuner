@@ -1,7 +1,9 @@
-import time
-import pandas as pd
-import tempfile
 import os
+import tempfile
+import time
+
+import pandas as pd
+
 
 def benchmark_csv_usecols(n=100000):
     print(f"⚡ Benchmarking CSV loading with usecols vs full read on {n} rows...")
@@ -12,7 +14,7 @@ def benchmark_csv_usecols(n=100000):
         "reference": ["This is a reference answer " + str(i) for i in range(n)],
         "large_col1": ["Very large text content " * 50 for _ in range(n)],
         "large_col2": ["Another large text content " * 50 for _ in range(n)],
-        "unused_col": [i for i in range(n)]
+        "unused_col": [i for i in range(n)],
     }
     df = pd.DataFrame(data)
 
@@ -43,11 +45,12 @@ def benchmark_csv_usecols(n=100000):
         opt_read_time = t1 - t0
         print(f"⚡ Optimized read took: {opt_read_time:.4f}s")
 
-        speedup = full_read_time / opt_read_time if opt_read_time > 0 else float('inf')
+        speedup = full_read_time / opt_read_time if opt_read_time > 0 else float("inf")
         print(f"🚀 Speedup: {speedup:.2f}x")
 
     finally:
         os.unlink(file_path)
+
 
 if __name__ == "__main__":
     benchmark_csv_usecols()

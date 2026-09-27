@@ -29,8 +29,8 @@ from datetime import datetime
 import gradio as gr
 import torch
 
+from core.state import PICKLE_WEIGHT_SUFFIXES, app_state, validate_adapter_dir
 from data.loader import safe_extract_zip
-from core.state import app_state
 
 
 def create_zip_from_folder(folder_path: str) -> str:
@@ -40,17 +40,15 @@ def create_zip_from_folder(folder_path: str) -> str:
     The archive uses ZIP_DEFLATED compression and preserves relative paths
     rooted at the parent of folder_path.
 
-    M-6 FIX: The caller (ui/handlers.py → on_train_click) stores the returned
-    zip_path in app_state._last_zip_path and deletes the previous zip on the
-    next training run, preventing indefinite accumulation of large ZIP files in
-    the OS temp directory.
+    The caller (ui/handlers.py → on_train_click) tracks the returned path in the
+    session state, which deletes it on the session's next run or when the tab closes.
     """
     with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
         zip_path = tmp.name
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for root, _, files in os.walk(folder_path):
                 for fname in files:
-                    fpath    = os.path.join(root, fname)
+                    fpath = os.path.join(root, fname)
                     arc_name = os.path.relpath(fpath, start=os.path.dirname(folder_path))
                     zf.write(fpath, arc_name)
     return zip_path
@@ -82,12 +80,14 @@ def create_model_card(
     a 400 error when pushing.  Tags are now built as a Python list and rendered
     cleanly — the "heretic" tag is only included when heretic_mode is True.
     """
-    mode          = peft_method if peft_method != "Full Fine-tuning" else "full fine-tune"
+    mode = peft_method if peft_method != "Full Fine-tuning" else "full fine-tune"
     training_type = "DPO Alignment" if training_mode == "dpo" else "Supervised Fine-Tuning"
 
     tag_peft = (
-        "lora"           if peft_method in ["LoRA", "QLoRA Enhanced"]
-        else "peft"      if peft_method != "Full Fine-tuning"
+        "lora"
+        if peft_method in ["LoRA", "QLoRA Enhanced"]
+        else "peft"
+        if peft_method != "Full Fine-tuning"
         else "full-finetune"
     )
     tag_train = "dpo" if training_mode == "dpo" else "sft"
@@ -139,11 +139,11 @@ This model is a {mode} of `{model_name}` trained with **{training_type}**.
         f.write(card)
 
 
-def on_peft_zip_upload(zip_file) -> tuple:
+def on_peft_zip_upload(zip_file, request: gr.Request | None = None) -> tuple:
     """Gradio UI handler: extract an uploaded PEFT adapter ZIP archive.
 
-    Walks the extracted tree looking for adapter_config.json or known weight
-    files to determine the real adapter root (ZIP may contain a top-level folder).
+    Only safetensors adapters are accepted: an archive containing any pickle-based
+    weight file (.bin/.pt/...) is rejected, since loading one can execute code.
 
     Returns (adapter_dir_str, status_str, adapter_dir_str) — the path is
     returned twice so it can update both a text box and a state component.
@@ -153,28 +153,34 @@ def on_peft_zip_upload(zip_file) -> tuple:
 
     if hasattr(zip_file, "name") and zip_file.name:
         from core.state import validate_path_traversal
+
         if err := validate_path_traversal(zip_file.name):
             return " ", err, " "
 
-    # Sentinel: Clean up the previous PEFT extraction directory to prevent disk exhaustion (DoS).
-    app_state.cleanup_resource("_last_peft_dir")
+    session = app_state.session_for(request)
+    session.release("peft_dir")
+    extract_dir = tempfile.mkdtemp(prefix="peft_zip_")
+    session.track("peft_dir", extract_dir)
 
     try:
-        extract_dir = tempfile.mkdtemp(prefix="peft_zip_")
-        # Sentinel: Track the new PEFT directory for future cleanup.
-        app_state._last_peft_dir = extract_dir
         safe_extract_zip(zip_file.name, extract_dir)
 
-        # Walk the extracted tree to find the actual adapter root.
-        adapter_dir = extract_dir
-        for root, dirs, files in os.walk(extract_dir):
-            if (
-                "adapter_config.json" in files
-                or "adapter_model.bin" in files
-                or "pytorch_model.bin" in files
-            ):
+        adapter_dir = None
+        for root, _, files in os.walk(extract_dir):
+            if any(f.lower().endswith(PICKLE_WEIGHT_SUFFIXES) for f in files):
+                session.release("peft_dir")
+                return (
+                    " ",
+                    "❌ Rejected: the ZIP contains pickle-based weights (.bin/.pt). "
+                    "Upload an adapter saved as adapter_model.safetensors.",
+                    " ",
+                )
+            if adapter_dir is None and "adapter_config.json" in files:
                 adapter_dir = root
-                break
+
+        if adapter_dir is None or (err := validate_adapter_dir(adapter_dir)):
+            session.release("peft_dir")
+            return " ", err if adapter_dir else "❌ No adapter_config.json found in the ZIP.", " "
 
         return (
             adapter_dir,
@@ -182,6 +188,7 @@ def on_peft_zip_upload(zip_file) -> tuple:
             adapter_dir,
         )
     except Exception as e:
+        session.release("peft_dir")
         return " ", f"❌ Failed to extract ZIP: {e} ", " "
 
 

@@ -1,4 +1,3 @@
-
 import os
 import sys
 from unittest.mock import MagicMock, patch
@@ -7,19 +6,20 @@ from unittest.mock import MagicMock, patch
 sys.path.append(os.getcwd())
 
 # Mock machine learning libraries that might not be installed
-sys.modules['torch'] = MagicMock()
-sys.modules['transformers'] = MagicMock()
-sys.modules['peft'] = MagicMock()
-sys.modules['vllm'] = MagicMock()
-sys.modules['unsloth'] = MagicMock()
-sys.modules['gradio'] = MagicMock()
-sys.modules['datasets'] = MagicMock()
-sys.modules['pandas'] = MagicMock()
-sys.modules['numpy'] = MagicMock()
-sys.modules['PyPDF2'] = MagicMock()
+sys.modules["torch"] = MagicMock()
+sys.modules["transformers"] = MagicMock()
+sys.modules["peft"] = MagicMock()
+sys.modules["vllm"] = MagicMock()
+sys.modules["unsloth"] = MagicMock()
+sys.modules["gradio"] = MagicMock()
+sys.modules["datasets"] = MagicMock()
+sys.modules["pandas"] = MagicMock()
+sys.modules["numpy"] = MagicMock()
+sys.modules["pypdf"] = MagicMock()
 
-from export.gguf import on_export_gguf
-from inference.vllm_runner import on_vllm_generate
+from export.gguf import on_export_gguf  # noqa: E402 — imported after the sys.modules mocks
+from inference.vllm_runner import on_vllm_generate  # noqa: E402
+
 
 def test_on_export_gguf_hardening():
     print("Testing on_export_gguf hardening...")
@@ -47,6 +47,7 @@ def test_on_export_gguf_hardening():
         assert "❌ No trained model found." in status
 
     print("✅ on_export_gguf tests passed!")
+
 
 def test_on_vllm_generate_hardening():
     print("Testing on_vllm_generate hardening...")
@@ -76,16 +77,18 @@ def test_on_vllm_generate_hardening():
 
     print("✅ on_vllm_generate tests passed!")
 
+
 if __name__ == "__main__":
     try:
         test_on_export_gguf_hardening()
         test_on_vllm_generate_hardening()
         print("\n🎉 All hardening verification tests passed!")
-    except AssertionError as e:
-        print(f"\n❌ Verification failed!")
+    except AssertionError:
+        print("\n❌ Verification failed!")
         sys.exit(1)
     except Exception as e:
         print(f"\n❌ An error occurred: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)

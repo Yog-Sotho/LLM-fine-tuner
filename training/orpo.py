@@ -20,12 +20,17 @@ from peft import LoraConfig, TaskType, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 from config.constants import (
-    COL_PROMPT,
+    ALLOW_REMOTE_CODE,
     COL_CHOSEN,
+    COL_PROMPT,
     COL_REJECTED,
     HAS_ORPO,
 )
-from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback  # F-2: ETAProgressCallback added
+from core.callbacks import (
+    ETAProgressCallback,
+    LoggingCallback,
+    StopCallback,
+)  # F-2: ETAProgressCallback added
 from core.hardware import get_lora_targets
 from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
@@ -42,10 +47,11 @@ def train_orpo_v27(
     orpo_epochs: int = 3,
     orpo_batch_size: int = 2,
     progress=gr.Progress(),
+    request: gr.Request | None = None,
 ) -> str:
     """Train using ORPO (Odds Ratio Preference Optimisation).
 
-    Requires trl>=0.8.0 (HAS_ORPO=True).
+    Requires TRL with ORPO (HAS_ORPO=True).
     Dataset must contain 'prompt', 'chosen', 'rejected' columns.
 
     Returns a status string for display in the UI.
@@ -58,15 +64,19 @@ def train_orpo_v27(
         return err
 
     if not HAS_ORPO:
-        return "❌ ORPOTrainer not available. Install: pip install trl>=0.8.0"
+        return '❌ ORPOTrainer not available. Install: pip install "trl>=0.29.1,<2"'
     if orpo_file is None:
         return "❌ Please upload a preference dataset (prompt, chosen, rejected)."
 
     # Clear the stop event at the start of every ORPO training run.
-    app_state.stop_event.clear()
+    stop_event = app_state.session_for(request).stop_event
+    stop_event.clear()
 
     try:
-        from trl import ORPOConfig, ORPOTrainer  # lazy
+        try:  # lazy; TRL 1.x moved ORPO to trl.experimental
+            from trl.experimental.orpo import ORPOConfig, ORPOTrainer
+        except ImportError:
+            from trl import ORPOConfig, ORPOTrainer
 
         if progress is not None:
             progress(0, desc="Loading ORPO dataset…")
@@ -98,13 +108,13 @@ def train_orpo_v27(
                 model_name,
                 quantization_config=bnb,
                 device_map="auto",
-                trust_remote_code=True,
+                trust_remote_code=ALLOW_REMOTE_CODE,
             )
         else:
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 torch_dtype=torch.float32,
-                trust_remote_code=True,
+                trust_remote_code=ALLOW_REMOTE_CODE,
             )
 
         lora_cfg = LoraConfig(
@@ -120,17 +130,17 @@ def train_orpo_v27(
         # v3.2 Fix #1: Guard against datasets too small to produce a non-empty eval split.
         if len(ds) < 2:
             orpo_train_ds = ds
-            orpo_eval_ds  = None
+            orpo_eval_ds = None
         else:
             split = ds.train_test_split(test_size=0.1, seed=42)
             orpo_train_ds = split["train"]
-            orpo_eval_ds  = split["test"]
+            orpo_eval_ds = split["test"]
             if len(orpo_eval_ds) == 0:
                 orpo_train_ds = ds.select(range(len(ds) - 1))
-                orpo_eval_ds  = ds.select([len(ds) - 1])
+                orpo_eval_ds = ds.select([len(ds) - 1])
 
         _orpo_eval_strategy = "no" if orpo_eval_ds is None else "steps"
-        _orpo_load_best     = orpo_eval_ds is not None
+        _orpo_load_best = orpo_eval_ds is not None
 
         orpo_config_kwargs = dict(
             output_dir=output_dir,
@@ -145,11 +155,13 @@ def train_orpo_v27(
             save_total_limit=2,
             load_best_model_at_end=_orpo_load_best,
             fp16=torch.cuda.is_available(),
+            bf16=False,  # explicit: TRL 1.x configs default to bf16=True, which fails on CPU
             report_to="none",
         )
 
         # Guard alpha — added in TRL >= 0.8.1; silently omit on older installs.
         import inspect as _inspect
+
         try:
             if "alpha" in _inspect.signature(ORPOConfig.__init__).parameters:
                 orpo_config_kwargs["alpha"] = orpo_alpha
@@ -160,7 +172,7 @@ def train_orpo_v27(
         log_cb = LoggingCallback()
 
         # Build callback list: stop button, logging, and ETA progress bar
-        orpo_callbacks = [StopCallback(), log_cb]
+        orpo_callbacks = [StopCallback(stop_event), log_cb]
         # F-2: ETAProgressCallback wired in so users see per-step ETA.
         if progress is not None:
             orpo_callbacks.append(
@@ -174,7 +186,7 @@ def train_orpo_v27(
             "args": orpo_config,
             "train_dataset": orpo_train_ds,
             "eval_dataset": orpo_eval_ds,
-            "tokenizer": tokenizer,
+            "processing_class": tokenizer,
             "callbacks": orpo_callbacks,
         }
         if "dataset_num_proc" in _inspect.signature(ORPOTrainer.__init__).parameters:
@@ -188,7 +200,7 @@ def train_orpo_v27(
         orpo_trainer.train()
         elapsed = time.time() - t0
 
-        status = "stopped by user" if app_state.stop_event.is_set() else "complete"
+        status = "stopped by user" if stop_event.is_set() else "complete"
 
         if progress is not None:
             progress(0.9, desc="Saving ORPO model…")
@@ -204,7 +216,7 @@ def train_orpo_v27(
             progress(1.0, desc="✅ Complete!")
         return (
             f"✅ ORPO training {status}!\n"
-            f"⏱ Elapsed: {elapsed/60:.1f} min\n"
+            f"⏱ Elapsed: {elapsed / 60:.1f} min\n"
             f"📉 Final train loss: {final_loss}\n"
             f"📁 Saved to: {output_dir}"
         )

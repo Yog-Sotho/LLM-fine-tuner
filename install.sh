@@ -110,8 +110,8 @@ if command -v nvidia-smi >/dev/null; then
 
     # [FIX-7]: Guard against unparseable CUDA version (e.g. driver reports N/A)
     if [[ -z "$CUDA_VERSION_FULL" || "$CUDA_VERSION_FULL" == "0" ]]; then
-        print_warning "Could not parse CUDA version from nvidia-smi — defaulting to cu117 PyTorch index"
-        TORCH_INDEX="https://download.pytorch.org/whl/cu117"
+        print_warning "Could not parse CUDA version from nvidia-smi — defaulting to cu118 PyTorch index"
+        TORCH_INDEX="https://download.pytorch.org/whl/cu118"
     else
         print_success "GPU detected: $GPU_NAME (CUDA $CUDA_VERSION_FULL)"
 
@@ -120,7 +120,9 @@ if command -v nvidia-smi >/dev/null; then
         elif [[ "$CUDA_MAJOR" -eq 11 ]]; then
             TORCH_INDEX="https://download.pytorch.org/whl/cu118"
         else
-            TORCH_INDEX="https://download.pytorch.org/whl/cu117"
+            # No PyTorch >= 2.6 build exists for CUDA < 11 (cu117 stops at 2.0.1).
+            print_warning "CUDA $CUDA_VERSION_FULL is too old for PyTorch >= 2.6 — installing CPU wheels"
+            TORCH_INDEX="https://download.pytorch.org/whl/cpu"
         fi
     fi
     CUDA_AVAILABLE=1
@@ -162,7 +164,8 @@ pip install --upgrade pip setuptools wheel
 # PyTorch
 # ----------------------------------------------------------------------------
 print_step "Installing PyTorch"
-pip install torch torchvision torchaudio --index-url "$TORCH_INDEX"
+# torch >= 2.6 is required: <= 2.5.1 is affected by CVE-2025-32434 (torch.load RCE).
+pip install "torch>=2.6.0,<3" --index-url "$TORCH_INDEX"
 print_success "PyTorch installed (${TORCH_INDEX##*/})"
 
 
@@ -171,9 +174,11 @@ print_success "PyTorch installed (${TORCH_INDEX##*/})"
 # [FIX-4]: Added heretic-llm — train_model() calls `heretic` subprocess when
 #          heretic_mode=True. Without it the binary is missing at runtime.
 # ----------------------------------------------------------------------------
+# Version ranges mirror requirements.txt / pyproject.toml.
 CORE_DEPS=(
-    transformers datasets accelerate peft bitsandbytes trl
-    gradio typer pandas numpy matplotlib tqdm huggingface-hub
+    "transformers>=4.56.2,<6" "datasets>=4.0.0,<6" "accelerate>=1.4.0,<2"
+    "peft>=0.17.0,<1" bitsandbytes "trl>=0.29.1,<2"
+    "gradio>=6.0.0,<7" typer pandas numpy matplotlib tqdm "huggingface-hub>=0.34.0,<2"
     safetensors einops hf_transfer heretic-llm
 )
 
@@ -215,7 +220,7 @@ ask "Install quantization tools (AutoGPTQ + exllamav2)?" && {
 
 
 ask "Install evaluation & data tools (nltk, rouge, bert-score, nlpaug, PDF/Excel)?" && {
-    pip install nltk rouge-score bert-score evaluate nlpaug PyPDF2 openpyxl
+    pip install nltk rouge-score bert-score evaluate nlpaug "pypdf>=6.16.1" openpyxl
     python -c "import nltk; nltk.download('punkt', quiet=True)"
     print_success "Evaluation & data tools installed"
 }

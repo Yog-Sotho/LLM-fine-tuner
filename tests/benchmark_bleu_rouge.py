@@ -5,10 +5,13 @@ Measures performance and verifies correctness of multiprocessing vs sequential
 BLEU and ROUGE evaluations.
 """
 
-import time
-import numpy as np
 import os
+import time
+
+import numpy as np
+
 from inference.evaluation import compute_bleu_rouge
+
 
 def generate_dummy_data(n: int = 2000):
     """Generates synthetic predictions and references for evaluation."""
@@ -17,14 +20,14 @@ def generate_dummy_data(n: int = 2000):
         "To be or not to be, that is the question.",
         "A journey of a thousand miles begins with a single step.",
         "All that glitters is not gold.",
-        "Where there is a will, there is a way."
+        "Where there is a will, there is a way.",
     ]
     base_preds = [
         "The fast brown fox leaped over the sleeping dog.",
         "To exist or not to exist, that is the query.",
         "A long trip of thousands of miles starts with one step.",
         "Everything that shines is not gold.",
-        "If you have the will, you can find a way."
+        "If you have the will, you can find a way.",
     ]
 
     predictions = []
@@ -34,6 +37,7 @@ def generate_dummy_data(n: int = 2000):
         predictions.append(base_preds[idx])
         references.append(base_refs[idx])
     return predictions, references
+
 
 def run_sequential_only(predictions: list[str], references: list[str]) -> dict:
     """Helper that runs sequential execution logic exactly as in evaluation.py."""
@@ -45,11 +49,12 @@ def run_sequential_only(predictions: list[str], references: list[str]) -> dict:
 
     if has_nltk:
         from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu
+
         smoothing = SmoothingFunction().method4
         bleu_scores = []
-        for pred, ref in zip(predictions, references):
+        for pred, ref in zip(predictions, references, strict=False):
             pred_tokens = pred.split()
-            ref_tokens  = [ref.split()]
+            ref_tokens = [ref.split()]
             if pred_tokens:
                 try:
                     score = sentence_bleu(ref_tokens, pred_tokens, smoothing_function=smoothing)
@@ -64,9 +69,10 @@ def run_sequential_only(predictions: list[str], references: list[str]) -> dict:
 
     if has_rouge:
         from rouge_score import rouge_scorer as rouge_scorer_lib
+
         scorer = rouge_scorer_lib.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True)
         r1_scores, r2_scores, rl_scores = [], [], []
-        for pred, ref in zip(predictions, references):
+        for pred, ref in zip(predictions, references, strict=False):
             try:
                 scores = scorer.score(ref, pred)
                 r1_scores.append(scores["rouge1"].fmeasure)
@@ -83,6 +89,7 @@ def run_sequential_only(predictions: list[str], references: list[str]) -> dict:
         results["ROUGE-1"] = results["ROUGE-2"] = results["ROUGE-L"] = "rouge_score not installed"
 
     return results
+
 
 def test_multiprocessing_vs_sequential():
     """Verify correctness and performance."""
@@ -106,12 +113,17 @@ def test_multiprocessing_vs_sequential():
     # Assert correctness/equivalence
     for metric in ["BLEU-1", "ROUGE-1", "ROUGE-2", "ROUGE-L"]:
         if isinstance(seq_results[metric], float):
-            assert seq_results[metric] == mp_results[metric], f"Mismatch for {metric}: {seq_results[metric]} vs {mp_results[metric]}"
+            assert seq_results[metric] == mp_results[metric], (
+                f"Mismatch for {metric}: {seq_results[metric]} vs {mp_results[metric]}"
+            )
 
-    print("\\n✅ Correctness check PASSED: Sequential and Multiprocessing results are mathematically identical!")
+    print(
+        "\\n✅ Correctness check PASSED: Sequential and Multiprocessing results are mathematically identical!"
+    )
 
     speedup = t_seq / t_mp if t_mp > 0 else 1.0
     print(f"⚡ Performance gain: {speedup:.2f}x speedup on {os.cpu_count()} cores.")
+
 
 if __name__ == "__main__":
     test_multiprocessing_vs_sequential()

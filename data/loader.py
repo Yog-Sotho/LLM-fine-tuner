@@ -7,12 +7,11 @@ Imports: config.constants, stdlib, pandas, datasets.
 Functions
 ---------
 detect_file_type       — sniff extension from a Gradio file object
-extract_text_from_pdf  — extract raw text from PDF pages via PyPDF2
+extract_text_from_pdf  — extract raw text from PDF pages via pypdf
 load_dataset_from_file — unified loader for csv/jsonl/json/txt/excel/pdf
 safe_extract_zip       — ZIP extraction with path-traversal guard
 """
 
-import json
 import os
 import zipfile
 from pathlib import Path
@@ -21,18 +20,18 @@ import pandas as pd
 from datasets import Dataset
 
 from config.constants import (
+    COL_CHOSEN,
     COL_INSTRUCTION,
     COL_OUTPUT,
-    COL_TEXT,
     COL_PROMPT,
-    COL_CHOSEN,
     COL_REJECTED,
+    COL_TEXT,
     FILE_EXT_CSV,
-    FILE_EXT_JSONL,
     FILE_EXT_JSON,
+    FILE_EXT_JSONL,
+    FILE_EXT_PDF,
     FILE_EXT_TXT,
     FILE_EXT_XLSX,
-    FILE_EXT_PDF,
     HAS_OPENPYXL,
     HAS_PDF,
 )
@@ -43,28 +42,34 @@ def detect_file_type(file) -> str | None:
 
     Returns one of: 'csv', 'jsonl', 'json', 'txt', 'excel', 'pdf', or None.
     'excel' is only returned when openpyxl is installed.
-    'pdf'   is only returned when PyPDF2 is installed.
+    'pdf'   is only returned when pypdf is installed.
     """
     name = Path(file.name).name.lower()
-    if name.endswith(FILE_EXT_CSV):              return "csv"
-    if name.endswith(FILE_EXT_JSONL):            return "jsonl"
-    if name.endswith(FILE_EXT_JSON):             return "json"
-    if name.endswith(FILE_EXT_TXT):              return "txt"
-    if name.endswith(FILE_EXT_XLSX) and HAS_OPENPYXL: return "excel"
-    if name.endswith(FILE_EXT_PDF)  and HAS_PDF:       return "pdf"
+    if name.endswith(FILE_EXT_CSV):
+        return "csv"
+    if name.endswith(FILE_EXT_JSONL):
+        return "jsonl"
+    if name.endswith(FILE_EXT_JSON):
+        return "json"
+    if name.endswith(FILE_EXT_TXT):
+        return "txt"
+    if name.endswith(FILE_EXT_XLSX) and HAS_OPENPYXL:
+        return "excel"
+    if name.endswith(FILE_EXT_PDF) and HAS_PDF:
+        return "pdf"
     return None
 
 
 def extract_text_from_pdf(pdf_path: str) -> str:
     """Extract all text from a PDF file, page by page.
 
-    Requires PyPDF2 (HAS_PDF=True). Caller must guard before calling.
+    Requires pypdf (HAS_PDF=True). Caller must guard before calling.
     """
-    import PyPDF2  # lazy — only imported when actually used
+    import pypdf  # lazy — only imported when actually used
 
     text = []
     with open(pdf_path, "rb") as f:
-        reader = PyPDF2.PdfReader(f)
+        reader = pypdf.PdfReader(f)
         for page in reader.pages:
             t = page.extract_text()
             if t:
@@ -106,9 +111,7 @@ def load_dataset_from_dataframe(
 
         # ── SFT branch ────────────────────────────────────────────────────
         if COL_INSTRUCTION in df.columns and COL_OUTPUT in df.columns:
-            return Dataset.from_pandas(
-                df[[COL_INSTRUCTION, COL_OUTPUT]].fillna("").astype(str)
-            )
+            return Dataset.from_pandas(df[[COL_INSTRUCTION, COL_OUTPUT]].fillna("").astype(str))
         elif COL_TEXT in df.columns:
             return Dataset.from_pandas(df[[COL_TEXT]].fillna("").astype(str))
         else:
@@ -118,7 +121,7 @@ def load_dataset_from_dataframe(
                 f"Please use the column mapping dropdowns above."
             )
     except Exception as e:
-        raise RuntimeError(f"Failed to load dataset from DataFrame: {e}")
+        raise RuntimeError(f"Failed to load dataset from DataFrame: {e}") from e
 
 
 def load_dataset_from_file(
@@ -143,6 +146,7 @@ def load_dataset_from_file(
     try:
         if file and hasattr(file, "name") and file.name:
             from core.state import validate_path_traversal
+
             if err := validate_path_traversal(file.name):
                 raise ValueError(err)
 
@@ -162,7 +166,7 @@ def load_dataset_from_file(
 
         # ── Plain text ────────────────────────────────────────────────────
         if file_type == "txt":
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 lines = [ln.strip() for ln in f if ln.strip()]
             return Dataset.from_dict({COL_TEXT: lines})
 
@@ -205,9 +209,7 @@ def load_dataset_from_file(
 
         # ── SFT branch ────────────────────────────────────────────────────
         if COL_INSTRUCTION in df.columns and COL_OUTPUT in df.columns:
-            return Dataset.from_pandas(
-                df[[COL_INSTRUCTION, COL_OUTPUT]].fillna("").astype(str)
-            )
+            return Dataset.from_pandas(df[[COL_INSTRUCTION, COL_OUTPUT]].fillna("").astype(str))
         elif COL_TEXT in df.columns:
             return Dataset.from_pandas(df[[COL_TEXT]].fillna("").astype(str))
         else:
@@ -218,7 +220,7 @@ def load_dataset_from_file(
             )
 
     except Exception as e:
-        raise RuntimeError(f"Failed to load dataset: {e}")
+        raise RuntimeError(f"Failed to load dataset: {e}") from e
 
 
 def safe_extract_zip(zip_path: str, extract_dir: str) -> str:
@@ -271,9 +273,7 @@ def safe_extract_zip(zip_path: str, extract_dir: str) -> str:
                     )
 
             # Resolve the full absolute target path
-            target = os.path.realpath(
-                os.path.join(abs_extract_dir, file_info.filename)
-            )
+            target = os.path.realpath(os.path.join(abs_extract_dir, file_info.filename))
             # The target must be inside the extract directory
             # (os.sep suffix prevents prefix-collision: /tmp/out vs /tmp/outside)
             if not target.startswith(abs_extract_dir + os.sep) and target != abs_extract_dir:

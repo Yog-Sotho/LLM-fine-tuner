@@ -12,8 +12,8 @@ Patch log
          with a human-readable ETA on every training step.
 """
 
+import threading
 import time
-from typing import Optional
 
 from transformers import TrainerCallback
 
@@ -21,10 +21,13 @@ from core.state import app_state
 
 
 class StopCallback(TrainerCallback):
-    """Signal the Trainer to stop cleanly when the UI stop button is pressed."""
+    """Signal the Trainer to stop cleanly when the session's Stop button is pressed."""
+
+    def __init__(self, stop_event: threading.Event | None = None) -> None:
+        self._stop_event = stop_event or app_state.session().stop_event
 
     def on_step_end(self, args, state, control, **kwargs):
-        if app_state.stop_event.is_set():
+        if self._stop_event.is_set():
             control.should_training_stop = True
         return control
 
@@ -60,14 +63,16 @@ class LoggingCallback(TrainerCallback):
         else:
             eta_s = 0.0
 
-        self.records.append({
-            "step":       state.global_step,
-            "train_loss": round(logs["loss"], 4),
-            "eval_loss":  round(logs.get("eval_loss", float("nan")), 4),
-            # F-2 additions: timing data for ETA display and telemetry
-            "elapsed_s":  round(elapsed, 1),
-            "eta_s":      round(eta_s, 1),
-        })
+        self.records.append(
+            {
+                "step": state.global_step,
+                "train_loss": round(logs["loss"], 4),
+                "eval_loss": round(logs.get("eval_loss", float("nan")), 4),
+                # F-2 additions: timing data for ETA display and telemetry
+                "elapsed_s": round(elapsed, 1),
+                "eta_s": round(eta_s, 1),
+            }
+        )
 
 
 class ETAProgressCallback(TrainerCallback):

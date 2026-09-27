@@ -21,8 +21,8 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from config.constants import FILE_EXT_CSV
-from core.state import app_state
+from config.constants import ALLOW_REMOTE_CODE, FILE_EXT_CSV
+from core.state import app_state, validate_adapter_dir
 
 # H-8 FIX: Thread-safe model cache. Gradio runs in multi-threaded mode; without
 # this lock, concurrent requests could simultaneously evict the cache and trigger
@@ -62,10 +62,13 @@ def _load_for_inference(model_name: str, lora_path: str | None):
     lora_path = lora_path.strip() if lora_path else None
 
     from core.state import validate_path_traversal
+
     if err := validate_path_traversal(model_name):
         raise ValueError(err)
     if lora_path:
         if err := validate_path_traversal(lora_path):
+            raise ValueError(err)
+        if os.path.isdir(lora_path) and (err := validate_adapter_dir(lora_path)):
             raise ValueError(err)
 
     key = (model_name, lora_path)
@@ -102,7 +105,7 @@ def _load_for_inference(model_name: str, lora_path: str | None):
             model_name,
             torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
             device_map="auto" if torch.cuda.is_available() else None,
-            trust_remote_code=True,
+            trust_remote_code=ALLOW_REMOTE_CODE,
         )
         model = (
             PeftModel.from_pretrained(base, lora_path)
@@ -183,6 +186,7 @@ def batch_generate(
     try:
         if prompts_file and hasattr(prompts_file, "name") and prompts_file.name:
             from core.state import validate_path_traversal
+
             if err := validate_path_traversal(prompts_file.name):
                 return err
 
@@ -209,7 +213,7 @@ def batch_generate(
         model, tokenizer = _load_for_inference(model_name, lora_path)
 
         for i in range(0, len(prompts), batch_size):
-            batch_prompts = prompts[i: i + batch_size]
+            batch_prompts = prompts[i : i + batch_size]
             inputs = tokenizer(
                 batch_prompts,
                 return_tensors="pt",

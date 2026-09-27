@@ -1,34 +1,67 @@
 """
-╔══════════════════════════════════════════════════════════════════════════════╗
-║              🧠 Advanced LLM Fine-Tuner  —  v3.2 (PRODUCTION READY)         ║
-║  Entry point: launches Gradio UI (no args) or CLI (any arg).                ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+LLM Fine-Tuner v3.2 — entry point.
 
 Usage
 -----
-  python main.py                        # Launch Gradio UI on :7860
+  python main.py                        # Launch the Gradio UI
   python main.py --help                 # Show CLI help
   python main.py train --model gpt2 …  # Headless training
 
-Fix log
--------
-  C1 (Critical): Removed broken `from llm_fine_tuner.cli.commands` and
-     `from llm_fine_tuner.ui.app` imports that referenced a non-existent
-     package namespace. Replaced with flat-structure imports that match the
-     actual file layout of this repository.
+UI launch settings come from the environment:
+
+  GRADIO_SERVER_NAME  bind address (Gradio default: 127.0.0.1 — local only)
+  GRADIO_SERVER_PORT  port (Gradio default: first free port from 7860)
+  GRADIO_SHARE / SHARE  "true" creates a public share link
+  GRADIO_AUTH         "user:password" pairs, comma-separated, to require a login
 """
 
+import os
 import sys
+
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _parse_auth(raw: str | None) -> list[tuple[str, str]] | None:
+    """Parse GRADIO_AUTH ("user:pass,user2:pass2") into Gradio's auth list."""
+    if not raw or not raw.strip():
+        return None
+    pairs = []
+    for item in raw.split(","):
+        user, sep, password = item.strip().partition(":")
+        if not sep or not user or not password:
+            raise ValueError("GRADIO_AUTH must be 'user:password' pairs separated by commas.")
+        pairs.append((user, password))
+    return pairs
+
+
+def _launch_kwargs(environ: dict[str, str]) -> dict:
+    """Build demo.launch() kwargs; bind address and port are left to Gradio's own env vars."""
+    share_raw = environ.get("GRADIO_SHARE", environ.get("SHARE", "false"))
+    kwargs: dict = {
+        "share": share_raw.strip().lower() in {"1", "true", "yes"},
+        "auth": _parse_auth(environ.get("GRADIO_AUTH")),
+        "show_error": True,
+    }
+    return kwargs
+
+
+def _exposure_warning(environ: dict[str, str], launch_kwargs: dict) -> str | None:
+    """Return a warning when the UI is reachable beyond localhost without a login."""
+    host = environ.get("GRADIO_SERVER_NAME", "127.0.0.1")
+    exposed = launch_kwargs["share"] or host not in _LOOPBACK_HOSTS
+    if exposed and not launch_kwargs["auth"]:
+        return (
+            "⚠️ The UI is reachable from other machines without a login. "
+            "Anyone who can reach it can start training jobs on this server. "
+            "Set GRADIO_AUTH=user:password to require authentication."
+        )
+    return None
 
 
 def main() -> None:
     if len(sys.argv) > 1:
-        # ── CLI mode: delegate everything to Typer ──────────────────────────
-        # This includes --help, train --help, train --model …, reward …, etc.
-        # v3.2 Fix #3: ALL non-zero-argument invocations go to Typer so that
-        # `python main.py --help` shows CLI usage instead of launching Gradio.
-        # C1 FIX: import from flat module `commands`, not `llm_fine_tuner.cli.commands`
-        from commands import app as cli_app  # noqa: PLC0415
+        # Any argument (including --help) goes to the Typer CLI.
+        from cli.commands import app as cli_app
 
         print("\n🧠 LLM Fine-Tuner v3.2 CLI")
         print("=" * 60)
@@ -39,37 +72,33 @@ def main() -> None:
         except Exception as exc:  # noqa: BLE001
             print(f"\n❌ Unhandled CLI error: {exc}")
             sys.exit(1)
-    else:
-        # ── Gradio UI mode ───────────────────────────────────────────────────
-        import torch
-        # C1 FIX: import from flat module `app`, not `llm_fine_tuner.ui.app`
-        from app import build_demo  # noqa: PLC0415
+        return
 
-        print("\n🧠 LLM Fine-Tuner v3.2 — Launching Gradio UI")
-        print("=" * 60)
-        print(
-            f"✅ Hardware: {'GPU available' if torch.cuda.is_available() else 'CPU mode (slow)'}"
-        )
-        print(
-            "✅ v3.2 Fixes: Small Dataset Guard | PPO Reward Float | "
-            "CLI --help | QLoRA Checkbox | CUDA dtype"
-        )
-        demo = build_demo()
-        try:
-            demo.launch(
-                server_name="0.0.0.0",
-                server_port=7860,
-                share=False,
-                show_error=True,
-                prevent_thread_lock=False,
-                quiet=False,
-            )
-            print("\n✅ Server terminated cleanly")
-        except KeyboardInterrupt:
-            print("\n⚠️ Server stopped by user")
-        except Exception as exc:  # noqa: BLE001
-            print(f"\n❌ Launch failed: {exc}")
-            sys.exit(1)
+    import torch
+
+    from ui.app import build_demo, build_theme
+    from ui.css import CUSTOM_CSS
+
+    try:
+        launch_kwargs = _launch_kwargs(dict(os.environ))
+    except ValueError as exc:
+        print(f"\n❌ {exc}")
+        sys.exit(1)
+
+    print("\n🧠 LLM Fine-Tuner v3.2 — Launching Gradio UI")
+    print("=" * 60)
+    print(f"✅ Hardware: {'GPU available' if torch.cuda.is_available() else 'CPU mode (slow)'}")
+    if warning := _exposure_warning(dict(os.environ), launch_kwargs):
+        print(warning)
+
+    demo = build_demo()
+    try:
+        demo.launch(css=CUSTOM_CSS, theme=build_theme(), **launch_kwargs)
+    except KeyboardInterrupt:
+        print("\n⚠️ Server stopped by user")
+    except Exception as exc:  # noqa: BLE001
+        print(f"\n❌ Launch failed: {exc}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
