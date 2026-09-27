@@ -4,7 +4,7 @@ tests/test_cli.py
 Unit tests for cli/commands.py.
 
 Uses Typer's CliRunner so no subprocess is spawned.
-Heavy functions (train_model, run_ppo_v27, etc.) are patched so tests
+Heavy functions (train_model, train_grpo, etc.) are patched so tests
 run without GPU, models, or real datasets.
 
 Covers:
@@ -14,7 +14,7 @@ Covers:
   - --qlora-enhanced overrides --peft (Minor Fix 1)
   - reward exits 1 when HAS_REWARD_TRAINER is False
   - orpo exits 1 when HAS_ORPO is False
-  - ppo exits 1 when reward model path does not exist
+  - grpo exits 1 when the reward model path is not a saved model
   - evaluate exits 1 when data file is missing
   - DummyFile proxy carries .name attribute correctly
 """
@@ -176,26 +176,34 @@ def test_orpo_exits_when_no_orpo(monkeypatch):
     assert "trl" in _plain(result.output).lower() or "install" in _plain(result.output).lower()
 
 
-# ── ppo — invalid reward model path ───────────────────────────────────────
+# ── grpo — invalid reward model path ──────────────────────────────────────
 
 
-def test_ppo_exits_on_invalid_reward_model_path(monkeypatch):
-    import cli.commands as cmd_mod
-
-    monkeypatch.setattr(cmd_mod, "HAS_PPO", True)
+def test_grpo_exits_on_invalid_reward_model_path(tmp_path):
+    data = tmp_path / "prompts.csv"
+    data.write_text("prompt\nhello\n")
     result = runner.invoke(
         app,
         [
-            "ppo",
+            "grpo",
             "--policy-model",
             "gpt2",
             "--reward-model",
-            "/nonexistent/reward",
+            str(tmp_path / "not_a_model"),
             "--data",
-            "fake.csv",
+            str(data),
         ],
     )
-    assert result.exit_code != 0
+    assert result.exit_code == 1
+    assert "Reward model path must be a saved model directory" in _plain(result.output)
+
+
+def test_grpo_requires_a_reward_source(tmp_path):
+    data = tmp_path / "prompts.csv"
+    data.write_text("prompt\nhello\n")
+    result = runner.invoke(app, ["grpo", "--policy-model", "gpt2", "--data", str(data)])
+    assert result.exit_code == 1
+    assert "GRPO needs a reward" in _plain(result.output)
 
 
 # ── evaluate — missing data file ──────────────────────────────────────────

@@ -132,13 +132,13 @@ You selected DPO training mode but your dataset doesn't have the right columns.
 
 ---
 
-### ❌ `Install: pip install trl>=0.7.0`
+### ❌ `Install: pip install "trl>=0.29.1,<2"`
 
-The reward trainer or PPO/ORPO isn't available because `trl` is too old or not installed.
+The reward trainer, GRPO, ORPO or KTO isn't available because `trl` is too old or not installed.
 
 **Fix:**
 ```bash
-pip install trl>=0.8.0 --upgrade
+pip install "trl>=0.29.1,<2" --upgrade
 ```
 
 ---

@@ -13,6 +13,7 @@ Contains:
 Rule: nothing in this file may import from any other llm_fine_tuner module.
 """
 
+import importlib.util
 import os
 import shutil
 import warnings
@@ -51,6 +52,12 @@ COL_TEXT = "text"
 COL_PROMPT = "prompt"
 COL_CHOSEN = "chosen"
 COL_REJECTED = "rejected"
+COL_COMPLETION = "completion"  # TRL prompt-completion / KTO format
+COL_LABEL = "label"  # KTO: True = desirable completion, False = undesirable
+COL_REFERENCE = "reference"  # GRPO: expected answer used by the reference-match reward
+
+# Prompt layout for instruction data when no chat template is used.
+SFT_PROMPT_TEMPLATE = "### Instruction:\n{instruction}\n\n### Response:\n"
 
 # ── File extension constants ───────────────────────────────────────────────
 FILE_EXT_CSV = ".csv"
@@ -196,18 +203,30 @@ try:
 except ImportError:
     HAS_REWARD_TRAINER = False
 
-# ── TRL legacy PPO (value-head) API ──────────────────────────────────────
-# training/ppo.py and training/reward.py are written against PPOTrainer(config=...)
-# and AutoModelForCausalLMWithValueHead. TRL 0.12 replaced that API and TRL 1.x
-# removed it, so on supported TRL versions this is False.
+# ── TRL GRPO (online RL with reward functions; replaces PPO) ───────────────
 try:
-    import inspect as _inspect
+    from trl import GRPOConfig, GRPOTrainer  # noqa: F401
 
-    from trl import AutoModelForCausalLMWithValueHead, PPOConfig, PPOTrainer  # noqa: F401
-
-    HAS_PPO = "config" in _inspect.signature(PPOTrainer.__init__).parameters
+    HAS_GRPO = True
 except ImportError:
-    HAS_PPO = False
+    HAS_GRPO = False
+
+# ── TRL KTO (top-level in TRL 0.x/1.x, trl.experimental.kto also in 1.x) ──
+try:
+    from trl import KTOConfig, KTOTrainer  # noqa: F401
+
+    HAS_KTO = True
+except ImportError:
+    try:
+        from trl.experimental.kto import KTOConfig, KTOTrainer  # noqa: F401
+
+        HAS_KTO = True
+    except ImportError:
+        HAS_KTO = False
+
+# ── Liger kernels (fused Triton kernels; CUDA only) ───────────────────────
+# find_spec, not import: importing liger_kernel initialises Triton at startup.
+HAS_LIGER: bool = importlib.util.find_spec("liger_kernel") is not None
 
 # ── TRL ORPO (top-level in TRL 0.x, trl.experimental.orpo in TRL 1.x) ────
 warnings.filterwarnings("ignore", message=".*importing from 'trl.experimental'.*")

@@ -1,17 +1,13 @@
 """
 training/reward.py
 ===================
-Layer 3 — Reward Model training via trl.RewardTrainer.
-Imports: config, core, data.
+Layer 3 — Reward model training with TRL's RewardTrainer.
 
-Patch log
----------
-  H-4  : ``if not HAS_PPO`` guard moved to the very top of the function,
-         before any tokenizer or dataset loading. Previously it fired only
-         after the tokenizer was already loaded (~2s), giving users a
-         confusing delayed error message.
-  F-2  : ETAProgressCallback added to the RewardTrainer callback list so the
-         Gradio progress bar shows per-step ETA during reward model training.
+The reward model is a sequence classifier with a single score output
+(AutoModelForSequenceClassification, num_labels=1) trained on prompt / chosen /
+rejected pairs, so it scores a response *in the context of its prompt*. LoRA is
+trained and then merged, and the full model is saved: GRPO loads a reward-model
+path directly as a sequence classifier.
 """
 
 import gc
@@ -19,22 +15,21 @@ import time
 
 import gradio as gr
 import torch
-from transformers import AutoTokenizer
+from peft import LoraConfig, TaskType
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from config.constants import (
     ALLOW_REMOTE_CODE,
     COL_CHOSEN,
+    COL_PROMPT,
     COL_REJECTED,
-    HAS_PPO,
     HAS_REWARD_TRAINER,
 )
-from core.callbacks import (
-    ETAProgressCallback,
-    LoggingCallback,
-    StopCallback,
-)  # F-2: ETAProgressCallback added
+from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback
+from core.hardware import compute_dtype, get_lora_targets, select_precision
 from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
+from data.preprocessing import validate_and_clean_dataset
 
 
 def train_reward_model_v27(
@@ -42,140 +37,108 @@ def train_reward_model_v27(
     reward_file,
     output_dir: str,
     rm_epochs: int = 3,
-    rm_lr: float = 1.4e-5,
+    rm_lr: float = 1e-4,
     rm_batch_size: int = 4,
     rm_eval_steps: int = 100,
     rm_max_length: int = 1024,
     progress=gr.Progress(),
     request: gr.Request | None = None,
 ) -> str:
-    """Train a Reward Model using trl.RewardTrainer.
-
-    Requires TRL's legacy value-head API (HAS_PPO=True); unavailable on supported TRL.
-    Dataset must contain 'chosen' and 'rejected' columns.
+    """Train a prompt-aware reward model from prompt/chosen/rejected data.
 
     Returns a status string for display in the UI.
     """
-    # Sentinel: strip whitespace and validate against path traversal.
     model_name = model_name.strip() if model_name else ""
     output_dir = output_dir.strip() if output_dir else ""
-
     if err := (validate_path_traversal(model_name) or validate_path_traversal(output_dir)):
         return err
 
-    # H-4 FIX: Both HAS_REWARD_TRAINER and HAS_PPO are checked at the very top,
-    # before any tokenizer or model loading. Previously HAS_PPO was checked only
-    # after the tokenizer was already loaded, causing a ~2s delay before the user
-    # saw the error message. Fast-fail at the earliest possible point.
     if not HAS_REWARD_TRAINER:
         return '❌ RewardTrainer not available. Install: pip install "trl>=0.29.1,<2"'
-    if not HAS_PPO:
-        return "❌ Reward model training needs TRL's legacy value-head PPO API, which was removed in TRL 0.12 and is not part of the supported TRL versions. It is being rebuilt on the current TRL API."
     if reward_file is None:
-        return "❌ Please upload a reward dataset (CSV/JSONL with 'chosen' & 'rejected' columns)."
+        return "❌ Please upload a preference dataset (prompt, chosen, rejected)."
 
-    # Clear the stop event at the start of every reward training run.
     stop_event = app_state.session_for(request).stop_event
     stop_event.clear()
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
     try:
         from trl import RewardConfig, RewardTrainer  # lazy
 
         if progress is not None:
             progress(0, desc="Loading reward dataset…")
-        ftype = detect_file_type(reward_file)
-        ds = load_dataset_from_file(reward_file, ftype, is_dpo=True)
-
-        if COL_CHOSEN not in ds.column_names or COL_REJECTED not in ds.column_names:
-            return f"❌ Dataset must contain '{COL_CHOSEN}' and '{COL_REJECTED}' columns."
+        ds = load_dataset_from_file(reward_file, detect_file_type(reward_file), is_dpo=True)
+        missing = [c for c in (COL_PROMPT, COL_CHOSEN, COL_REJECTED) if c not in ds.column_names]
+        if missing:
+            return f"❌ Dataset is missing columns: {missing}. Needs prompt, chosen, rejected."
+        ds, _ = validate_and_clean_dataset(ds, is_dpo=True)
+        if len(ds) == 0:
+            return "❌ Dataset is empty after cleaning."
 
         if progress is not None:
-            progress(0.05, desc="Loading tokenizer…")
+            progress(0.05, desc="Loading tokenizer and model…")
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
-
-        if progress is not None:
-            progress(0.1, desc="Loading base model for reward training…")
-
-        from trl import AutoModelForCausalLMWithValueHead  # lazy
-
-        # v2.9 Fix A: Load with AutoModelForCausalLMWithValueHead so the saved
-        # checkpoint is directly loadable by run_ppo_v27 without architecture mismatch.
-        base_model = AutoModelForCausalLMWithValueHead.from_pretrained(
+        model = AutoModelForSequenceClassification.from_pretrained(
             model_name,
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-            device_map="auto" if torch.cuda.is_available() else None,
+            num_labels=1,
+            torch_dtype=compute_dtype(device),
             trust_remote_code=ALLOW_REMOTE_CODE,
         )
+        # Sequence classifiers score the last non-pad token, so they need a pad id.
+        model.config.pad_token_id = tokenizer.pad_token_id
 
-        import os
-
-        from data.preprocessing import tokenize_reward_function
-
-        if progress is not None:
-            progress(0.15, desc="Tokenising reward pairs…")
-        # BOLT OPTIMIZATION: num_proc=os.cpu_count() parallelises tokenisation
-        # Using top-level tokenize_reward_function and fn_kwargs for picklability
-        tokenized_ds = ds.map(
-            tokenize_reward_function,
-            batched=True,
-            fn_kwargs={
-                "tokenizer": tokenizer,
-                "rm_max_length": rm_max_length,
-            },
-            remove_columns=ds.column_names,
-            num_proc=os.cpu_count(),
-        )
-
-        # v3.2 Fix #1: Guard against datasets too small to produce a non-empty eval split.
-        if len(tokenized_ds) < 2:
-            rm_train_ds = tokenized_ds
-            rm_eval_ds = None
+        # Guard against datasets too small to produce a non-empty eval split.
+        if len(ds) < 2:
+            train_ds, eval_ds = ds, None
         else:
-            split = tokenized_ds.train_test_split(test_size=0.1, seed=42)
-            rm_train_ds = split["train"]
-            rm_eval_ds = split["test"]
-            if len(rm_eval_ds) == 0:
-                rm_train_ds = tokenized_ds.select(range(len(tokenized_ds) - 1))
-                rm_eval_ds = tokenized_ds.select([len(tokenized_ds) - 1])
+            split = ds.train_test_split(test_size=0.1, seed=42)
+            train_ds, eval_ds = split["train"], split["test"]
+            if len(eval_ds) == 0:
+                train_ds = ds.select(range(len(ds) - 1))
+                eval_ds = ds.select([len(ds) - 1])
 
-        _rm_eval_strategy = "no" if rm_eval_ds is None else "steps"
-        _rm_load_best = rm_eval_ds is not None
-
-        reward_config = RewardConfig(
+        config = RewardConfig(
             output_dir=output_dir,
             per_device_train_batch_size=rm_batch_size,
             num_train_epochs=rm_epochs,
             learning_rate=rm_lr,
-            eval_strategy=_rm_eval_strategy,
-            eval_steps=rm_eval_steps if rm_eval_ds is not None else None,
+            max_length=rm_max_length,
+            eval_strategy="no" if eval_ds is None else "steps",
+            eval_steps=rm_eval_steps if eval_ds is not None else None,
             save_strategy="steps",
             save_steps=rm_eval_steps * 2,
             save_total_limit=2,
-            load_best_model_at_end=_rm_load_best,
+            load_best_model_at_end=eval_ds is not None,
             report_to="none",
-            fp16=torch.cuda.is_available(),
-            bf16=False,  # explicit: TRL 1.x configs default to bf16=True, which fails on CPU
+            **select_precision(device),
+        )
+        # LoRA on the backbone; PEFT keeps the new score head trainable for SEQ_CLS.
+        peft_config = LoraConfig(
+            task_type=TaskType.SEQ_CLS,
+            r=16,
+            lora_alpha=32,
+            target_modules=get_lora_targets(model_name),
+            lora_dropout=0.05,
+            bias="none",
         )
 
         log_cb = LoggingCallback()
-        # Build callback list: stop button, logging, and ETA progress bar
-        rm_callbacks = [StopCallback(stop_event), log_cb]
-        # F-2: ETAProgressCallback wired in so the UI stop button and ETA
-        # both work for reward training (previously neither did).
+        callbacks = [StopCallback(stop_event), log_cb]
         if progress is not None:
-            rm_callbacks.append(
+            callbacks.append(
                 ETAProgressCallback(gradio_progress=progress, progress_start=0.3, progress_end=0.9)
             )
 
         trainer = RewardTrainer(
-            model=base_model,
-            args=reward_config,
-            train_dataset=rm_train_ds,
-            eval_dataset=rm_eval_ds,
+            model=model,
+            args=config,
+            train_dataset=train_ds,
+            eval_dataset=eval_ds,
             processing_class=tokenizer,
-            callbacks=rm_callbacks,
+            callbacks=callbacks,
+            peft_config=peft_config,
         )
 
         if progress is not None:
@@ -183,15 +146,14 @@ def train_reward_model_v27(
         t0 = time.time()
         trainer.train()
         elapsed = time.time() - t0
-
         status = "stopped by user" if stop_event.is_set() else "complete"
 
-        base_model.save_pretrained(output_dir)
+        if progress is not None:
+            progress(0.9, desc="Merging LoRA and saving reward model…")
+        # Save a full sequence-classification model so GRPO can load the path directly.
+        merged = trainer.model.merge_and_unload()
+        merged.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
-        del base_model
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            gc.collect()
 
         final_loss = log_cb.records[-1]["train_loss"] if log_cb.records else "N/A"
         if progress is not None:
@@ -200,7 +162,7 @@ def train_reward_model_v27(
             f"✅ Reward model training {status}!\n"
             f"⏱ Elapsed: {elapsed / 60:.1f} min\n"
             f"📉 Final train loss: {final_loss}\n"
-            f"📁 Saved to: {output_dir}"
+            f"📁 Saved to: {output_dir} (use this path as the GRPO reward model)"
         )
 
     except Exception as e:
@@ -208,7 +170,15 @@ def train_reward_model_v27(
     finally:
         # Free VRAM on failure too; names are unbound if loading never happened.
         try:
-            del base_model
+            del merged
+        except (NameError, UnboundLocalError):
+            pass
+        try:
+            del trainer
+        except (NameError, UnboundLocalError):
+            pass
+        try:
+            del model
         except (NameError, UnboundLocalError):
             pass
         if torch.cuda.is_available():

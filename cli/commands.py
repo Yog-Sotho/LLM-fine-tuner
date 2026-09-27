@@ -10,7 +10,8 @@ Commands
 train     — headless SFT / DPO training
 reward    — train a reward model from preference data
 orpo      — ORPO alignment training
-ppo       — PPO fine-tuning with a trained reward model
+grpo      — GRPO fine-tuning with a reward model and/or reference answers
+kto       — KTO alignment from desirable / undesirable examples
 evaluate  — batched BLEU / ROUGE / BERTScore evaluation
 
 Fix history preserved inline:
@@ -34,12 +35,11 @@ import typer
 
 from config.constants import (
     COL_CHOSEN,
-    COL_INSTRUCTION,
     COL_PROMPT,
     COL_REJECTED,
-    COL_TEXT,
+    HAS_GRPO,
+    HAS_KTO,
     HAS_ORPO,
-    HAS_PPO,
     HAS_REWARD_TRAINER,
 )
 from core.state import validate_path_traversal
@@ -47,8 +47,9 @@ from data.loader import load_dataset_from_file
 from data.preprocessing import validate_and_clean_dataset
 from inference.evaluation import compute_bertscore_metric, compute_bleu_rouge
 from inference.generate import _load_for_inference
+from training.grpo import train_grpo
+from training.kto import train_kto
 from training.orpo import train_orpo_v27
-from training.ppo import run_ppo_v27
 from training.reward import train_reward_model_v27
 from training.sft import train_model
 
@@ -88,6 +89,9 @@ def train(
         help="Activate QLoRA Enhanced (NF4 + double quant). Overrides --peft.",
     ),
     use_flash_attn: bool = typer.Option(False, "--flash-attn", help="Enable Flash Attention 2"),
+    packing: bool = typer.Option(
+        False, "--packing", help="Pack short samples together (needs --flash-attn on CUDA)"
+    ),
 ):
     """Headless SFT training — reuses the same pipeline as the Gradio UI."""
     # Minor Fix 1: --qlora-enhanced actually overrides --peft instead of being ignored.
@@ -135,6 +139,7 @@ def train(
             "lora_rank": lora_rank,
             "lora_alpha": lora_rank * 2,
             "lr_scheduler": "cosine",
+            "packing": packing,
         }
         msg, _ = train_model(
             model_name=model,
@@ -180,14 +185,16 @@ def train(
 @app.command()
 def reward(
     model: str = typer.Option(..., "--model", help="Base model ID for reward training"),
-    data: str = typer.Option(..., "--data", help="Preference dataset (chosen/rejected columns)"),
+    data: str = typer.Option(
+        ..., "--data", help="Preference dataset (prompt / chosen / rejected columns)"
+    ),
     output: str = typer.Option("./reward_model", "--output", help="Output directory"),
     epochs: int = typer.Option(3, "--epochs"),
-    lr: float = typer.Option(1.4e-5, "--lr"),
+    lr: float = typer.Option(1e-4, "--lr"),
     max_length: int = typer.Option(1024, "--max-length", help="Max sequence length (FIX 2c)"),
     batch_size: int = typer.Option(4, "--batch-size"),
 ):
-    """Train a Reward Model from preference data (FIX 3c: full implementation)."""
+    """Train a prompt-aware reward model (sequence classifier) for GRPO."""
     if err := (
         validate_path_traversal(model)
         or validate_path_traversal(data)
@@ -198,10 +205,9 @@ def reward(
 
     typer.echo(f"🎖️  Training reward model: {model} | Max Length: {max_length}")
 
-    if not (HAS_REWARD_TRAINER and HAS_PPO):
+    if not HAS_REWARD_TRAINER:
         typer.echo(
-            "❌ Reward model training needs TRL's legacy value-head PPO API, which was removed in TRL 0.12 and is not part of the supported TRL versions. It is being rebuilt on the current TRL API.",
-            err=True,
+            '❌ RewardTrainer not available. Install: pip install "trl>=0.29.1,<2"', err=True
         )
         raise typer.Exit(code=1)
 
@@ -219,11 +225,6 @@ def reward(
         raise typer.Exit(code=1)
 
     try:
-        ds = load_dataset_from_file(DummyFile(data), ftype, is_dpo=True)
-        if not (COL_CHOSEN in ds.column_names and COL_REJECTED in ds.column_names):
-            typer.echo(f"❌ Dataset requires '{COL_CHOSEN}' and '{COL_REJECTED}' columns", err=True)
-            raise typer.Exit(code=1)
-
         result = train_reward_model_v27(
             model_name=model,
             reward_file=DummyFile(data),
@@ -320,24 +321,27 @@ def orpo(
         raise typer.Exit(code=1) from e
 
 
-# ── ppo ────────────────────────────────────────────────────────────────────
+# ── grpo ───────────────────────────────────────────────────────────────────
 
 
 @app.command()
-def ppo(
-    policy_model: str = typer.Option(..., "--policy-model", help="Policy model ID"),
-    reward_model: str = typer.Option(..., "--reward-model", help="Trained reward model path"),
-    data: str = typer.Option(..., "--data", help="Prompts dataset (prompt column)"),
-    output: str = typer.Option("./ppo_model", "--output", help="Output directory"),
-    epochs: int = typer.Option(1, "--epochs", help="PPO epochs"),
-    lr: float = typer.Option(1.4e-5, "--lr"),
-    batch_size: int = typer.Option(1, "--batch-size"),
-    mini_batch_size: int = typer.Option(1, "--mini-batch-size"),
-    max_new_tokens: int = typer.Option(
-        128, "--max-new-tokens", help="Max tokens per generated response"
+def grpo(
+    policy_model: str = typer.Option(..., "--policy-model", help="Policy model ID or path"),
+    data: str = typer.Option(
+        ..., "--data", help="Prompts dataset: 'prompt' column, optional 'reference' answers"
     ),
+    reward_model: str = typer.Option(
+        "", "--reward-model", help="Reward model directory (from the reward command)"
+    ),
+    output: str = typer.Option("./grpo_model", "--output", help="Output directory"),
+    epochs: int = typer.Option(1, "--epochs"),
+    lr: float = typer.Option(1e-5, "--lr"),
+    num_generations: int = typer.Option(4, "--num-generations", help="Completions per prompt"),
+    prompts_per_step: int = typer.Option(1, "--prompts-per-step"),
+    max_completion_length: int = typer.Option(128, "--max-completion-length"),
+    beta: float = typer.Option(0.0, "--beta", help="KL penalty (0 = no reference model)"),
 ):
-    """PPO fine-tuning with a trained reward model (FIX 3c: full implementation)."""
+    """GRPO fine-tuning with a reward model and/or reference answers (replaces PPO)."""
     if err := (
         validate_path_traversal(policy_model)
         or validate_path_traversal(reward_model)
@@ -346,67 +350,82 @@ def ppo(
     ):
         typer.echo(err, err=True)
         raise typer.Exit(code=1)
-
-    typer.echo(f"🔁 PPO: Policy={policy_model} | Reward={reward_model}")
-
-    if not HAS_PPO:
-        typer.echo(
-            "❌ PPO training needs TRL's legacy value-head PPO API, which was removed in TRL 0.12 and is not part of the supported TRL versions. It is being rebuilt on the current TRL API.",
-            err=True,
-        )
+    if not HAS_GRPO:
+        typer.echo('❌ GRPO not available. Install: pip install "trl>=0.29.1,<2"', err=True)
         raise typer.Exit(code=1)
-    if not os.path.isdir(reward_model):
-        typer.echo(f"❌ Reward model path invalid: {reward_model}", err=True)
-        raise typer.Exit(code=1)
-
-    # N-4 FIX: Added ftype guard (was missing for reward/orpo/ppo — only train had it).
     if not os.path.exists(data):
         typer.echo(f"❌ Dataset not found: {data}", err=True)
         raise typer.Exit(code=1)
 
-    ftype = _infer_ftype(data)
-    if ftype is None:
-        typer.echo("❌ Unsupported format. Use .csv or .jsonl", err=True)
+    typer.echo(f"🎯 GRPO: Policy={policy_model} | Reward model={reward_model or '—'}")
+    result = train_grpo(
+        policy_model_name=policy_model,
+        reward_model_path=reward_model,
+        prompts_file=DummyFile(data),
+        output_dir=output,
+        learning_rate=lr,
+        epochs=epochs,
+        num_generations=num_generations,
+        prompts_per_step=prompts_per_step,
+        max_completion_length=max_completion_length,
+        beta=beta,
+        progress=None,
+    )
+    if "✅" not in result:
+        typer.echo(result, err=True)
+        raise typer.Exit(code=1)
+    typer.echo(f"\n{result}")
+
+
+# ── kto ────────────────────────────────────────────────────────────────────
+
+
+@app.command()
+def kto(
+    model: str = typer.Option(..., "--model", help="Base model ID or path"),
+    data: str = typer.Option(
+        ...,
+        "--data",
+        help="prompt/completion/label (true/false) or prompt/chosen/rejected dataset",
+    ),
+    output: str = typer.Option("./kto_model", "--output", help="Output directory"),
+    epochs: int = typer.Option(1, "--epochs"),
+    lr: float = typer.Option(5e-5, "--lr"),
+    beta: float = typer.Option(0.1, "--beta"),
+    batch_size: int = typer.Option(4, "--batch-size", help="At least 2"),
+    max_length: int = typer.Option(512, "--max-length"),
+):
+    """KTO alignment from thumbs-up / thumbs-down feedback."""
+    if err := (
+        validate_path_traversal(model)
+        or validate_path_traversal(data)
+        or validate_path_traversal(output)
+    ):
+        typer.echo(err, err=True)
+        raise typer.Exit(code=1)
+    if not HAS_KTO:
+        typer.echo('❌ KTO not available. Install: pip install "trl>=0.29.1,<2"', err=True)
+        raise typer.Exit(code=1)
+    if not os.path.exists(data):
+        typer.echo(f"❌ Dataset not found: {data}", err=True)
         raise typer.Exit(code=1)
 
-    try:
-        ds = load_dataset_from_file(DummyFile(data), ftype)
-        # Normalise column name to COL_PROMPT
-        if COL_PROMPT not in ds.column_names:
-            if COL_TEXT in ds.column_names:
-                ds = ds.rename_column(COL_TEXT, COL_PROMPT)
-            elif COL_INSTRUCTION in ds.column_names:
-                ds = ds.rename_column(COL_INSTRUCTION, COL_PROMPT)
-            else:
-                typer.echo(
-                    f"❌ Dataset requires 'prompt' column. Found: {ds.column_names}", err=True
-                )
-                raise typer.Exit(code=1)
-
-        result = run_ppo_v27(
-            policy_model_name=policy_model,
-            reward_model_path=reward_model,
-            ppo_file=DummyFile(data),
-            output_dir=output,
-            ppo_lr=lr,
-            ppo_batch_size=batch_size,
-            ppo_mini_batch_size=mini_batch_size,
-            ppo_epochs=epochs,
-            ppo_max_new_tokens=max_new_tokens,
-            progress=None,
-        )
-        if "✅" in result:
-            typer.echo(f"\n{result}")
-            typer.echo(f"📁 PPO model saved to: {os.path.abspath(output)}")
-        else:
-            typer.echo(result, err=True)
-            raise typer.Exit(code=1)
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        typer.echo(f"\n❌ PPO training failed: {e}", err=True)
-        raise typer.Exit(code=1) from e
+    typer.echo(f"👍 KTO: {model} | Beta: {beta}")
+    result = train_kto(
+        model_name=model,
+        kto_file=DummyFile(data),
+        output_dir=output,
+        learning_rate=lr,
+        beta=beta,
+        epochs=epochs,
+        batch_size=batch_size,
+        max_length=max_length,
+        progress=None,
+    )
+    if "✅" not in result:
+        typer.echo(result, err=True)
+        raise typer.Exit(code=1)
+    typer.echo(f"\n{result}")
 
 
 # ── evaluate ───────────────────────────────────────────────────────────────

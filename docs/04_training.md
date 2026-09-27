@@ -187,6 +187,13 @@ The log on the right side shows:
 
 The **📉 Loss Curve** below the log plots these values visually.
 
+### What the model is trained on
+
+- **Instruction data** (`instruction` / `output`): the loss is computed on the **response only** — the model is not trained to reproduce your prompts — and an end-of-sequence token is added, so the fine-tuned model learns when to stop.
+- **Plain text** (`text`): the model is trained on the whole text.
+- **Mixed precision** is chosen automatically: bfloat16 on GPUs that support it, float16 on older GPUs, full precision on CPU.
+- **📦 Sequence packing** (optional): packs short examples into full-length sequences, which is much faster on short data. It needs **⚡ Flash Attention 2** on a CUDA GPU; without it the setting is skipped, because packed examples would leak into each other.
+
 ---
 
 ## Stopping Training Early
@@ -203,5 +210,5 @@ If you get out-of-memory errors or want to free up VRAM between runs, click **�
 
 ## Next Step
 
-→ [05 — RLHF Pipeline](05_rlhf_pipeline.md): Advanced alignment with Reward Models, PPO, and ORPO.  
+→ [05 — RLHF Pipeline](05_rlhf_pipeline.md): Advanced alignment with Reward Models, GRPO, ORPO and KTO.  
 → [06 — Inference](06_inference.md): Test your trained model.

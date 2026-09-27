@@ -183,8 +183,9 @@ You don't need to understand all of these to get started — the defaults work g
 |---|---|---|
 | **Standard Training (SFT)** | Teaches the model using your question-answer examples | Starting point for almost everyone |
 | **Preference Training (DPO)** | Teaches the model which answers are better vs worse | After standard training, to improve quality |
-| **Reward + PPO** | Advanced alignment with a scoring system | When you want the highest quality alignment |
-| **ORPO** | Modern single-step alignment | Faster alternative to full Reward + PPO |
+| **Reward model + GRPO** | Reinforcement learning against a scoring model or checkable answers | When you want the strongest alignment, or your task has verifiable answers |
+| **ORPO** | Modern single-step alignment from ranked pairs | Faster alternative to reward + RL |
+| **KTO** | Alignment from thumbs-up / thumbs-down feedback | When you have good/bad labels but no ranked pairs |
 
 ---
 

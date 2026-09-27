@@ -8,7 +8,6 @@ Covers:
   - validate_and_clean_dataset works for DPO datasets
   - Duplicate rows are REMOVED and the issue is reported  ← N-6 FIX
   - preview_dataset returns a DataFrame with at most 10 rows
-  - preprocess_function builds expected token keys
 """
 
 import datasets

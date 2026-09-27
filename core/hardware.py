@@ -22,13 +22,15 @@ import torch
 from config.constants import (
     HAS_BERTSCORE,
     HAS_EVALUATE,
+    HAS_GRPO,
     HAS_HUB,
+    HAS_KTO,
+    HAS_LIGER,
     HAS_NLPAUG,
     HAS_NLTK,
     HAS_OPENPYXL,
     HAS_ORPO,
     HAS_PDF,
-    HAS_PPO,
     HAS_PSUTIL,
     HAS_REWARD_TRAINER,
     HAS_TRL,
@@ -79,10 +81,10 @@ def get_hardware_summary() -> str:
 
     # v2.7 RLHF / eval deps
     v27 = []
-    v27.append(
-        "Reward model ✓" if HAS_REWARD_TRAINER and HAS_PPO else "Reward model ✗ (being rebuilt)"
-    )
-    v27.append("PPO ✓" if HAS_PPO else "PPO ✗ (being rebuilt)")
+    v27.append("Reward model ✓" if HAS_REWARD_TRAINER else "Reward model ✗")
+    v27.append("GRPO ✓" if HAS_GRPO else "GRPO ✗")
+    v27.append("KTO ✓" if HAS_KTO else "KTO ✗")
+    v27.append("Liger ✓" if HAS_LIGER else "Liger ✗ (optional, CUDA)")
     v27.append("ORPO ✓" if HAS_ORPO else "ORPO ✗")
     v27.append("evaluate ✓" if HAS_EVALUATE else "evaluate ✗")
     v27.append("bert_score ✓" if HAS_BERTSCORE else "bert_score ✗")
@@ -163,3 +165,25 @@ def is_unsloth_supported(model_name: str) -> bool:
     """Return True if Unsloth natively supports this model family."""
     supported = ["llama", "mistral", "gemma", "qwen", "phi", "tinyllama", "opt"]
     return any(s in model_name.lower() for s in supported)
+
+
+def select_precision(device: str) -> dict[str, bool]:
+    """Mixed-precision flags for TrainingArguments: bf16 where the GPU supports it, else fp16.
+
+    CPU training runs in full precision (both False).
+    """
+    if device != "cuda" or not torch.cuda.is_available():
+        return {"bf16": False, "fp16": False}
+    if torch.cuda.is_bf16_supported():
+        return {"bf16": True, "fp16": False}
+    return {"bf16": False, "fp16": True}
+
+
+def compute_dtype(device: str) -> torch.dtype:
+    """Weight/compute dtype matching ``select_precision`` (so AMP and model dtype agree)."""
+    precision = select_precision(device)
+    if precision["bf16"]:
+        return torch.bfloat16
+    if precision["fp16"]:
+        return torch.float16
+    return torch.float32

@@ -30,8 +30,9 @@ from export.registry import on_registry_list, on_registry_upload
 from export.utils import clear_gpu_cache, on_peft_zip_upload
 from inference.evaluation import on_evaluate_click
 from inference.vllm_runner import on_merge_adapter_click, on_vllm_generate
+from training.grpo import train_grpo
+from training.kto import train_kto
 from training.orpo import train_orpo_v27
-from training.ppo import run_ppo_v27
 from training.reward import train_reward_model_v27
 from ui.handlers import (
     build_loss_chart,
@@ -191,6 +192,7 @@ def build_demo() -> gr.Blocks:
             use_flash_attn,
             use_qlora_enhanced,
             augmented_ds,  # C-5 FIX: augmented dataset state injected here
+            packing,
             progress=gr.Progress(),
             request: gr.Request | None = None,
         ):
@@ -230,6 +232,7 @@ def build_demo() -> gr.Blocks:
                 use_flash_attn,
                 use_qlora_enhanced,
                 augmented_ds=augmented_ds,  # C-5 FIX
+                packing=packing,
                 progress=progress,
                 request=request,
             )
@@ -273,6 +276,7 @@ def build_demo() -> gr.Blocks:
                 tt["use_flash_attn"],
                 tt["use_qlora_enhanced"],
                 dt["augmented_ds_state"],  # C-5 FIX: new input
+                tt["packing"],
             ],
             outputs=[
                 tt["log_output"],
@@ -360,20 +364,37 @@ def build_demo() -> gr.Blocks:
             ],
             outputs=[rlt["rm_status"]],
         )
-        rlt["ppo_train_btn"].click(
-            fn=run_ppo_v27,
+        # Input order matches train_grpo's positional parameters.
+        rlt["grpo_train_btn"].click(
+            fn=train_grpo,
             inputs=[
-                rlt["ppo_policy_model"],
-                rlt["ppo_reward_path"],
-                rlt["ppo_file"],
-                rlt["ppo_output_dir"],
-                rlt["ppo_lr"],
-                rlt["ppo_batch"],
-                rlt["ppo_mini_batch"],
-                rlt["ppo_epochs"],
-                rlt["ppo_max_new_tokens"],
+                rlt["grpo_policy_model"],
+                rlt["grpo_reward_path"],
+                rlt["grpo_file"],
+                rlt["grpo_output_dir"],
+                rlt["grpo_lr"],
+                rlt["grpo_epochs"],
+                rlt["grpo_num_generations"],
+                rlt["grpo_prompts_per_step"],
+                rlt["grpo_max_completion"],
+                rlt["grpo_beta"],
             ],
-            outputs=[rlt["ppo_status"]],
+            outputs=[rlt["grpo_status"]],
+        )
+        # Input order matches train_kto's positional parameters.
+        rlt["kto_train_btn"].click(
+            fn=train_kto,
+            inputs=[
+                rlt["kto_model_choice"],
+                rlt["kto_file"],
+                rlt["kto_output_dir"],
+                rlt["kto_lr"],
+                rlt["kto_beta"],
+                rlt["kto_epochs"],
+                rlt["kto_batch"],
+                rlt["kto_max_length"],
+            ],
+            outputs=[rlt["kto_status"]],
         )
         rlt["orpo_train_btn"].click(
             fn=train_orpo_v27,

@@ -90,6 +90,7 @@ def on_train_click(
     use_flash_attn=False,
     use_qlora_enhanced=False,  # kept for UI arity — ignored; peft_method drives QLoRA
     augmented_ds=None,  # C-5 FIX: augmented/filtered dataset from gr.State
+    packing=False,
     progress=gr.Progress(),
     request: gr.Request | None = None,
 ):
@@ -177,6 +178,7 @@ def on_train_click(
         prompt_tuning_num_virtual_tokens=int(prompt_tuning_num_virtual_tokens),
         adapter_reduction_factor=int(adapter_reduction_factor),
         dpo_beta=float(dpo_beta),
+        packing=bool(packing),
     )
     output_dir = tempfile.mkdtemp()
 

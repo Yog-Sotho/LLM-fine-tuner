@@ -35,6 +35,7 @@ from config.constants import (
     HAS_OPENPYXL,
     HAS_PDF,
 )
+from core.state import validate_path_traversal
 
 
 def detect_file_type(file) -> str | None:
@@ -221,6 +222,28 @@ def load_dataset_from_file(
 
     except Exception as e:
         raise RuntimeError(f"Failed to load dataset: {e}") from e
+
+
+def load_table_dataset(file) -> Dataset:
+    """Load a CSV/JSON/JSONL file with all of its columns, for trainers with their own schema.
+
+    Used by GRPO (prompt [+ reference]) and KTO (prompt/completion/label or
+    prompt/chosen/rejected), whose columns the SFT/DPO loader does not accept.
+    Missing text values become empty strings.
+    """
+    name = file.name if hasattr(file, "name") else str(file)
+    if err := validate_path_traversal(name):
+        raise ValueError(err)
+    ftype = detect_file_type(file)
+    if ftype == "csv":
+        df = pd.read_csv(name)
+    elif ftype in ("json", "jsonl"):
+        df = pd.read_json(name, lines=ftype == "jsonl")
+    else:
+        raise ValueError("Expected a .csv, .json or .jsonl file.")
+    text_cols = [c for c in df.columns if df[c].dtype == object]
+    df[text_cols] = df[text_cols].fillna("")
+    return Dataset.from_pandas(df, preserve_index=False)
 
 
 def safe_extract_zip(zip_path: str, extract_dir: str) -> str:

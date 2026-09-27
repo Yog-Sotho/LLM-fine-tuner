@@ -56,11 +56,11 @@ def test_cli_data_path_traversal():
     )
     assert "❌ Path traversal attempt detected." in result.stderr
 
-    # Test ppo command
+    # Test grpo command
     result = runner.invoke(
         app,
         [
-            "ppo",
+            "grpo",
             "--policy-model",
             "gpt2",
             "--reward-model",

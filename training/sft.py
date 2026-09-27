@@ -57,18 +57,14 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
-    DataCollatorForLanguageModeling,
     EarlyStoppingCallback,
-    Trainer,
-    TrainingArguments,
 )
 
 from config.constants import (
     ALLOW_REMOTE_CODE,
-    COL_INSTRUCTION,
-    COL_OUTPUT,
     HAS_ADAPTER_CONFIG,
     HAS_HERETIC,  # N-5 FIX: imported so the Heretic Mode branch can guard the subprocess call
+    HAS_LIGER,
     HAS_TRL,
     HAS_UNSLOTH,
     QLORA_ENHANCED_BNB_KWARGS,
@@ -79,9 +75,9 @@ from core.callbacks import (
     LoggingCallback,
     StopCallback,
 )  # F-2: ETAProgressCallback added
-from core.hardware import get_lora_targets, is_unsloth_supported
+from core.hardware import compute_dtype, get_lora_targets, is_unsloth_supported, select_precision
 from core.state import app_state, validate_path_traversal
-from data.preprocessing import preprocess_function
+from data.preprocessing import to_sft_dataset
 
 
 def train_model(
@@ -154,32 +150,18 @@ def train_model(
                 tokenizer.eos_token = "</s>"
         tokenizer.pad_token = tokenizer.eos_token
 
-        # ── Tokenise dataset ───────────────────────────────────────────────
+        # ── Prepare dataset ────────────────────────────────────────────────
+        # SFT: TRL prompt-completion / text format; SFTTrainer tokenises, masks the
+        # prompt out of the loss and appends EOS. DPO data is already prompt/chosen/rejected.
         if progress is not None:
-            progress(0.05, desc="Tokenising dataset… ")
+            progress(0.05, desc="Preparing dataset… ")
         if is_dpo:
             tokenized = dataset
         else:
-            task_type = (
-                COL_INSTRUCTION
-                if COL_INSTRUCTION in dataset.column_names and COL_OUTPUT in dataset.column_names
-                else "lm"
-            )
-            # BOLT OPTIMIZATION: num_proc=os.cpu_count() parallelises tokenisation
-            # Using fn_kwargs instead of lambda to ensure picklability for multiprocessing
-            tokenized = dataset.map(
-                preprocess_function,
-                batched=True,
-                fn_kwargs={
-                    "tokenizer": tokenizer,
-                    "max_length": hyperparams["max_length"],
-                    "task_type": task_type,
-                    "use_chat_template": use_chat_template,
-                    "system_prompt": system_prompt,
-                },
-                remove_columns=dataset.column_names,
-                num_proc=os.cpu_count(),
-                desc="Tokenising",
+            tokenized = to_sft_dataset(
+                dataset,
+                use_chat_template=bool(use_chat_template and tokenizer.chat_template),
+                system_prompt=system_prompt,
             )
 
         # ── Train / eval split ─────────────────────────────────────────────
@@ -288,7 +270,7 @@ def train_model(
                 bnb = BitsAndBytesConfig(
                     load_in_4bit=True,
                     bnb_4bit_quant_type="nf4",
-                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_compute_dtype=compute_dtype(device),
                     bnb_4bit_use_double_quant=True,
                 )
                 model_kwargs = dict(
@@ -296,16 +278,10 @@ def train_model(
                     device_map="auto",
                     trust_remote_code=ALLOW_REMOTE_CODE,
                 )
-                # v3.2 Fix #5: Always set torch_dtype for non-quantised tensors.
-                model_kwargs["torch_dtype"] = (
-                    torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-                )
+                # Non-quantised tensors use the same dtype as the mixed-precision mode.
+                model_kwargs["torch_dtype"] = compute_dtype(device)
                 if use_flash_attn:
                     model_kwargs["attn_implementation"] = "flash_attention_2"
-                    # v3.1 Fix #2
-                    model_kwargs["torch_dtype"] = (
-                        torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-                    )
                 model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
             else:
                 model = AutoModelForCausalLM.from_pretrained(
@@ -428,8 +404,9 @@ def train_model(
             load_best_model_at_end=_load_best,
             metric_for_best_model="eval_loss" if _load_best else None,
             greater_is_better=False,
-            fp16=(device == "cuda"),
-            bf16=False,  # explicit: TRL 1.x configs default to bf16=True, which fails on CPU
+            # bf16 on GPUs that support it, else fp16; full precision on CPU. Always
+            # explicit: TRL configs default to bf16=True, which fails on CPU.
+            **select_precision(device),
             report_to="none",
             disable_tqdm=False,
             lr_scheduler_type=lr_scheduler_type,
@@ -469,29 +446,44 @@ def train_model(
                 dpo_trainer_kwargs["dataset_num_proc"] = os.cpu_count()
             trainer = DPOTrainer(**dpo_trainer_kwargs)
         else:
-            training_args = TrainingArguments(**base_training_args)
-            collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+            from trl import SFTConfig, SFTTrainer  # lazy
+
+            # Packing concatenates short samples; without Flash Attention the packed
+            # samples attend to each other (TRL warns about cross-contamination).
+            packing = bool(hyperparams.get("packing")) and use_flash_attn and device == "cuda"
+            if hyperparams.get("packing") and not packing:
+                log_callback.records.append(
+                    {
+                        "step": 0,
+                        "train_loss": 0.0,
+                        "eval_loss": float("nan"),
+                        "elapsed_s": 0.0,
+                        "eta_s": 0.0,
+                        "note": "⚠️ Packing skipped: it needs Flash Attention 2 on a CUDA GPU.",
+                    }
+                )
+            sft_config = SFTConfig(
+                **base_training_args,
+                max_length=hyperparams["max_length"],
+                packing=packing,
+                dataset_num_proc=os.cpu_count(),
+                # Fused Triton kernels (lower memory, faster) when installed on CUDA.
+                use_liger_kernel=HAS_LIGER and device == "cuda",
+            )
             sft_callbacks = [StopCallback(stop_event), log_callback]
             if early_stop > 0 and eval_ds is not None and len(train_ds) >= 50:
                 sft_callbacks.append(EarlyStoppingCallback(early_stopping_patience=int(early_stop)))
             # F-2: Add ETA progress callback for SFT training
             if progress is not None:
                 sft_callbacks.append(ETAProgressCallback(gradio_progress=progress))
-            # BOLT OPTIMIZATION: Parallelize internal trainer tokenization.
-            import inspect as _inspect
-
-            sft_trainer_kwargs = {
-                "model": model,
-                "args": training_args,
-                "train_dataset": train_ds,
-                "eval_dataset": eval_ds,
-                "data_collator": collator,
-                "processing_class": tokenizer,
-                "callbacks": sft_callbacks,
-            }
-            if "dataset_num_proc" in _inspect.signature(Trainer.__init__).parameters:
-                sft_trainer_kwargs["dataset_num_proc"] = os.cpu_count()
-            trainer = Trainer(**sft_trainer_kwargs)
+            trainer = SFTTrainer(
+                model=model,
+                args=sft_config,
+                train_dataset=train_ds,
+                eval_dataset=eval_ds,
+                processing_class=tokenizer,
+                callbacks=sft_callbacks,
+            )
 
         # ── Resume from checkpoint ─────────────────────────────────────────
         resume_path = None
