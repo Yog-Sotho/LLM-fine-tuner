@@ -80,6 +80,9 @@ python main.py train \
 | `--qlora-enhanced` | off | Enable QLoRA Enhanced (overrides `--peft`) |
 | `--flash-attn` | off | Enable Flash Attention 2 |
 | `--packing` | off | Pack short samples into full-length sequences (needs `--flash-attn` on a CUDA GPU; ignored otherwise) |
+| `--seed` | `42` | Random seed for the data split and training (same seed + data + settings = same weights) |
+| `--report-to` | `none` | Experiment tracker: `trackio`, `wandb`, `mlflow` or `tensorboard` (must be installed) |
+| `--config` | — | Replay a saved `run_config.yaml`: model, mode (SFT/DPO) and all settings come from the file; only `--data`/`--output` are used. Warns if the data differs from the recorded fingerprint |
 
 **Example — fine-tune TinyLlama on a JSONL dataset:**
 ```bash

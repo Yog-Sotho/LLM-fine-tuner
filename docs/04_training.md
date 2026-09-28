@@ -187,6 +187,13 @@ The log on the right side shows:
 
 The **📉 Loss Curve** below the log plots these values visually.
 
+### Runs, resuming and reproducibility
+
+- Every training run is saved in its own folder: `runs/<run name>/` (Docker: `/app/models/<run name>/`). Leave **Run name** empty for an automatic `date-time-mode` name.
+- To **continue** a run, enter its name and tick **Resume from last checkpoint**. Using an existing name without Resume is refused, so a run is never overwritten by accident.
+- Each run folder contains `run_config.yaml`: the base model, every setting, the **seed**, a fingerprint (row count + SHA-256) of the exact data used, and the library versions. The same seed with the same data and settings reproduces the same weights. Replay a run from the CLI with `python main.py train --config runs/<name>/run_config.yaml --data <file>`.
+- **Experiment tracking**: pick a tracker (Trackio, Weights & Biases, MLflow or TensorBoard) to log loss curves and settings. Only trackers installed in your environment are listed, e.g. `pip install trackio` then `trackio show` to open its dashboard.
+
 ### What the model is trained on
 
 - **Instruction data** (`instruction` / `output`): the loss is computed on the **response only** — the model is not trained to reproduce your prompts — and an end-of-sequence token is added, so the fine-tuned model learns when to stop.

@@ -45,6 +45,28 @@ ALLOW_REMOTE_CODE: bool = os.environ.get("ALLOW_REMOTE_CODE", "false").strip().l
     "yes",
 }
 
+# ── Reproducibility ────────────────────────────────────────────────────────
+# UI training runs are saved as <RUNS_DIR>/<run name>/ so they persist and can be resumed.
+RUNS_DIR: str = os.environ.get("LFT_RUNS_DIR", "runs")
+RUN_CONFIG_FILENAME = "run_config.yaml"
+RUN_NAME_PATTERN = r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
+DEFAULT_SEED = 42
+
+# Experiment trackers usable as TrainingArguments.report_to — only those installed.
+# (Trackio needs huggingface_hub>=1.10, i.e. Transformers 5; it is simply absent otherwise.)
+TRACKING_BACKENDS: list[str] = ["none"] + [
+    name
+    for name, module in (
+        ("trackio", "trackio"),
+        ("wandb", "wandb"),
+        ("mlflow", "mlflow"),
+        ("tensorboard", "tensorboard"),
+    )
+    if importlib.util.find_spec(module) is not None
+]
+_env_report_to = os.environ.get("LFT_REPORT_TO", "none").strip().lower()
+DEFAULT_REPORT_TO: str = _env_report_to if _env_report_to in TRACKING_BACKENDS else "none"
+
 # ── Column name constants ──────────────────────────────────────────────────
 COL_INSTRUCTION = "instruction"
 COL_OUTPUT = "output"

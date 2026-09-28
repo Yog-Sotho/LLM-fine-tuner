@@ -243,6 +243,7 @@ jobs:
             --cov-report=xml:coverage.xml \
             --cov-report=term-missing \
             --timeout=120 \
+            --timeout-method=thread \
             -p no:warnings
 
       - name: "Upload coverage to Codecov"

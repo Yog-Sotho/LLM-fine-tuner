@@ -32,16 +32,21 @@ from datetime import datetime
 
 import torch
 import typer
+import yaml
 
 from config.constants import (
     COL_CHOSEN,
     COL_PROMPT,
     COL_REJECTED,
+    DEFAULT_REPORT_TO,
+    DEFAULT_SEED,
     HAS_GRPO,
     HAS_KTO,
     HAS_ORPO,
     HAS_REWARD_TRAINER,
+    TRACKING_BACKENDS,
 )
+from core.run_config import dataset_fingerprint, load_run_config, resolve_report_to
 from core.state import validate_path_traversal
 from data.loader import load_dataset_from_file
 from data.preprocessing import validate_and_clean_dataset
@@ -72,7 +77,9 @@ class DummyFile:
 
 @app.command()
 def train(
-    model: str = typer.Option(..., "--model", help="Base model ID or local path"),
+    model: str = typer.Option(
+        "", "--model", help="Base model ID or local path (required unless --config)"
+    ),
     data: str = typer.Option(..., "--data", help="Dataset file (.csv or .jsonl)"),
     output: str = typer.Option("./output", "--output", help="Output directory"),
     epochs: int = typer.Option(3, "--epochs", help="Number of training epochs"),
@@ -92,8 +99,45 @@ def train(
     packing: bool = typer.Option(
         False, "--packing", help="Pack short samples together (needs --flash-attn on CUDA)"
     ),
+    seed: int = typer.Option(DEFAULT_SEED, "--seed", help="Random seed (data split + training)"),
+    report_to: str = typer.Option(
+        DEFAULT_REPORT_TO,
+        "--report-to",
+        help=f"Experiment tracking backend. Installed: {', '.join(TRACKING_BACKENDS)}",
+    ),
+    config: str = typer.Option(
+        "",
+        "--config",
+        help="Replay a saved run_config.yaml (model, mode and all settings come from it)",
+    ),
 ):
-    """Headless SFT training — reuses the same pipeline as the Gradio UI."""
+    """Headless SFT/DPO training — reuses the same pipeline as the Gradio UI."""
+    if err := validate_path_traversal(config):
+        typer.echo(err, err=True)
+        raise typer.Exit(code=1)
+    replay = None
+    if config:
+        try:
+            replay = load_run_config(config)
+        except (OSError, ValueError, yaml.YAMLError) as e:
+            typer.echo(f"❌ Cannot read run config: {e}", err=True)
+            raise typer.Exit(code=1) from e
+        if replay["mode"] not in ("sft", "dpo"):
+            typer.echo(
+                f"❌ {config} is a '{replay['mode']}' run; the train command replays sft/dpo runs.",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        model = replay["model"]
+        typer.echo(f"🔁 Replaying {config}: training flags come from the config file.")
+    if not model:
+        typer.echo("❌ Give --model or --config.", err=True)
+        raise typer.Exit(code=1)
+    try:
+        report_to = resolve_report_to(replay.get("report_to") if replay else report_to)
+    except ValueError as e:
+        typer.echo(f"❌ {e}", err=True)
+        raise typer.Exit(code=1) from e
     # Minor Fix 1: --qlora-enhanced actually overrides --peft instead of being ignored.
     if use_qlora_enhanced:
         if peft_method != "QLoRA Enhanced":
@@ -121,13 +165,53 @@ def train(
         typer.echo("❌ Unsupported format. Use .csv or .jsonl", err=True)
         raise typer.Exit(code=1)
 
+    is_dpo = bool(replay and replay["mode"] == "dpo")
     try:
-        ds = load_dataset_from_file(DummyFile(data), ftype)
-        ds, issues = validate_and_clean_dataset(ds)
+        ds = load_dataset_from_file(DummyFile(data), ftype, is_dpo=is_dpo)
+        ds, issues = validate_and_clean_dataset(ds, is_dpo=is_dpo)
         if len(ds) == 0:
             typer.echo("❌ Dataset empty after validation", err=True)
             raise typer.Exit(code=1)
         _print_issues(issues)
+
+        if replay:
+            recorded = replay.get("dataset", {}).get("sha256")
+            if recorded and recorded != dataset_fingerprint(ds)["sha256"]:
+                typer.echo("⚠️  Dataset differs from the one recorded in the run config.")
+            peft = replay.get("peft", {})
+            msg, _ = train_model(
+                model_name=model,
+                dataset=ds,
+                output_dir=output,
+                hyperparams=replay["hyperparams"],
+                device="cuda" if torch.cuda.is_available() else "cpu",
+                peft_method=peft.get("method", "LoRA"),
+                use_lora=True,
+                lora_rank=peft.get("lora_rank", 8),
+                lora_alpha=peft.get("lora_alpha", 16),
+                prefix_tuning_num_virtual_tokens=30,
+                prefix_tuning_token_dim=512,
+                prefix_tuning_num_layers=2,
+                prompt_tuning_num_virtual_tokens=20,
+                adapter_reduction_factor=16,
+                resume_from_checkpoint=False,
+                early_stop=replay.get("early_stop", 0),
+                lr_scheduler_type=replay.get("lr_scheduler_type", "cosine"),
+                gradient_checkpointing=replay.get("gradient_checkpointing", True),
+                use_unsloth=False,
+                use_chat_template=replay.get("use_chat_template", False),
+                system_prompt=replay.get("system_prompt", ""),
+                training_mode=replay["mode"],
+                dpo_beta=replay.get("dpo_beta") or 0.1,
+                heretic_mode=False,
+                progress=None,
+                use_flash_attn=replay.get("use_flash_attn", False),
+                seed=replay.get("seed", DEFAULT_SEED),
+                report_to=report_to,
+            )
+            typer.echo(f"\n✅ {msg}")
+            typer.echo(f"📁 Model saved to: {os.path.abspath(output)}")
+            return
 
         hyperparams = {
             "learning_rate": learning_rate,
@@ -168,6 +252,8 @@ def train(
             heretic_mode=False,
             progress=None,
             use_flash_attn=use_flash_attn,
+            seed=seed,
+            report_to=report_to,
         )
         typer.echo(f"\n✅ {msg}")
         typer.echo(f"📁 Model saved to: {os.path.abspath(output)}")

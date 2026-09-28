@@ -11,19 +11,20 @@ Patch log
 """
 
 import gc
-import os
 import time
 
 import gradio as gr
 import torch
 from peft import LoraConfig, TaskType, get_peft_model
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, set_seed
 
 from config.constants import (
     ALLOW_REMOTE_CODE,
     COL_CHOSEN,
     COL_PROMPT,
     COL_REJECTED,
+    DEFAULT_REPORT_TO,
+    DEFAULT_SEED,
     HAS_ORPO,
 )
 from core.callbacks import (
@@ -32,6 +33,7 @@ from core.callbacks import (
     StopCallback,
 )  # F-2: ETAProgressCallback added
 from core.hardware import get_lora_targets
+from core.run_config import save_run_config
 from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
 from data.preprocessing import validate_and_clean_dataset
@@ -71,6 +73,7 @@ def train_orpo_v27(
     # Clear the stop event at the start of every ORPO training run.
     stop_event = app_state.session_for(request).stop_event
     stop_event.clear()
+    set_seed(DEFAULT_SEED)  # before model/LoRA creation, so runs are reproducible
 
     try:
         try:  # lazy; TRL 1.x moved ORPO to trl.experimental
@@ -132,7 +135,7 @@ def train_orpo_v27(
             orpo_train_ds = ds
             orpo_eval_ds = None
         else:
-            split = ds.train_test_split(test_size=0.1, seed=42)
+            split = ds.train_test_split(test_size=0.1, seed=DEFAULT_SEED)
             orpo_train_ds = split["train"]
             orpo_eval_ds = split["test"]
             if len(orpo_eval_ds) == 0:
@@ -156,7 +159,8 @@ def train_orpo_v27(
             load_best_model_at_end=_orpo_load_best,
             fp16=torch.cuda.is_available(),
             bf16=False,  # explicit: TRL 1.x configs default to bf16=True, which fails on CPU
-            report_to="none",
+            report_to=DEFAULT_REPORT_TO,
+            seed=DEFAULT_SEED,
         )
 
         # Guard alpha — added in TRL >= 0.8.1; silently omit on older installs.
@@ -179,8 +183,6 @@ def train_orpo_v27(
                 ETAProgressCallback(gradio_progress=progress, progress_start=0.3, progress_end=0.9)
             )
 
-        # BOLT OPTIMIZATION: Parallelize internal trainer tokenization.
-        # Use inspect to ensure compatibility with older TRL versions.
         orpo_trainer_kwargs = {
             "model": model,
             "args": orpo_config,
@@ -189,8 +191,6 @@ def train_orpo_v27(
             "processing_class": tokenizer,
             "callbacks": orpo_callbacks,
         }
-        if "dataset_num_proc" in _inspect.signature(ORPOTrainer.__init__).parameters:
-            orpo_trainer_kwargs["dataset_num_proc"] = os.cpu_count()
 
         orpo_trainer = ORPOTrainer(**orpo_trainer_kwargs)
 
@@ -206,6 +206,22 @@ def train_orpo_v27(
             progress(0.9, desc="Saving ORPO model…")
         model.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
+        save_run_config(
+            output_dir,
+            mode="orpo",
+            model=model_name,
+            dataset=ds,
+            seed=DEFAULT_SEED,
+            report_to=DEFAULT_REPORT_TO,
+            hyperparams={
+                "learning_rate": orpo_lr,
+                "beta": orpo_beta,
+                "alpha": orpo_alpha,
+                "epochs": orpo_epochs,
+                "batch_size": orpo_batch_size,
+            },
+            peft={"method": "LoRA", "lora_rank": 16, "lora_alpha": 32},
+        )
         del model
         if torch.cuda.is_available():
             torch.cuda.empty_cache()

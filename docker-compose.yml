@@ -53,6 +53,7 @@ services:
       - SHARE=${SHARE:-false}
       - GRADIO_AUTH=${GRADIO_AUTH:-}
       - ALLOW_REMOTE_CODE=${ALLOW_REMOTE_CODE:-false}
+      - LFT_REPORT_TO=${LFT_REPORT_TO:-none}
       # Disable tokenizer parallelism warning inside Docker
       - TOKENIZERS_PARALLELISM=false
       # Point HF cache to the mounted volume
@@ -103,6 +104,7 @@ services:
       - SHARE=${SHARE:-false}
       - GRADIO_AUTH=${GRADIO_AUTH:-}
       - ALLOW_REMOTE_CODE=${ALLOW_REMOTE_CODE:-false}
+      - LFT_REPORT_TO=${LFT_REPORT_TO:-none}
       - TOKENIZERS_PARALLELISM=false
       - HF_HOME=/app/cache/huggingface
       - TRANSFORMERS_CACHE=/app/cache/huggingface

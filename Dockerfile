@@ -123,7 +123,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH="/opt/llama.cpp/build/bin:${PATH}" \
     # Gradio
     GRADIO_SERVER_NAME=0.0.0.0 \
-    GRADIO_SERVER_PORT=7860
+    GRADIO_SERVER_PORT=7860 \
+    LFT_RUNS_DIR=/app/models
 
 # ── Minimal runtime system packages ──────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \

@@ -193,6 +193,9 @@ def build_demo() -> gr.Blocks:
             use_qlora_enhanced,
             augmented_ds,  # C-5 FIX: augmented dataset state injected here
             packing,
+            run_name,
+            seed,
+            report_to,
             progress=gr.Progress(),
             request: gr.Request | None = None,
         ):
@@ -233,6 +236,9 @@ def build_demo() -> gr.Blocks:
                 use_qlora_enhanced,
                 augmented_ds=augmented_ds,  # C-5 FIX
                 packing=packing,
+                run_name=run_name,
+                seed=seed,
+                report_to=report_to,
                 progress=progress,
                 request=request,
             )
@@ -277,6 +283,9 @@ def build_demo() -> gr.Blocks:
                 tt["use_qlora_enhanced"],
                 dt["augmented_ds_state"],  # C-5 FIX: new input
                 tt["packing"],
+                tt["run_name"],
+                tt["seed"],
+                tt["report_to"],
             ],
             outputs=[
                 tt["log_output"],
