@@ -1170,3 +1170,62 @@ def test_vision_rejects_dpo_and_prompt_tuning(tiny_vlm, tmp_path):
         train_model(*args, "LoRA", *rest, training_mode="dpo", progress=None)
     with pytest.raises(RuntimeError, match="not supported for vision"):
         train_model(*args, "Prompt Tuning", *rest, progress=None)
+
+
+# ── Multi-process (data-parallel) training ─────────────────────────────────
+
+_DDP_PROBE = """
+import hashlib, json, os, sys
+sys.path.insert(0, {repo!r})
+import transformers
+from datasets import Dataset
+from training.sft import train_model
+
+original = transformers.Trainer.train
+
+def spy(self, *args, **kwargs):
+    out = original(self, *args, **kwargs)
+    digest = hashlib.sha256()
+    for name, param in sorted(self.model.named_parameters()):
+        if param.requires_grad:
+            digest.update(name.encode() + param.detach().cpu().numpy().tobytes())
+    with open(os.path.join({report!r}, f"rank{{os.environ['RANK']}}.json"), "w") as f:
+        json.dump({{"world_size": self.args.world_size, "steps": self.state.global_step,
+                   "weights": digest.hexdigest()}}, f)
+    return out
+
+transformers.Trainer.train = spy
+ds = Dataset.from_dict({{"instruction": [f"Say {{i}}" for i in range(8)],
+                        "output": [str(i) for i in range(8)]}})
+hp = {{"learning_rate": 1e-2, "epochs": 1, "batch_size": 2, "grad_accum": 1,
+      "max_length": 64, "warmup_steps": 0, "eval_split": 0.0}}
+train_model({model!r}, ds, {out!r}, hp, "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16,
+            False, 0, "linear", False, False, False, "", progress=None)
+"""
+
+
+def test_two_process_training_is_data_parallel(tiny_model, tmp_path):
+    """torchrun with 2 CPU processes: gradients are synchronised, rank 0 alone saves."""
+    import json
+    import subprocess
+    import sys
+
+    report, out = tmp_path / "report", tmp_path / "out"
+    report.mkdir()
+    script = tmp_path / "probe.py"
+    repo = str(pathlib.Path(__file__).resolve().parents[1])
+    script.write_text(_DDP_PROBE.format(repo=repo, report=str(report), out=str(out),
+                                        model=tiny_model))  # fmt: skip
+    result = subprocess.run(
+        [sys.executable, "-m", "torch.distributed.run", "--nproc_per_node", "2", str(script)],
+        capture_output=True, text=True, timeout=600,
+        env={**os.environ, "HF_HUB_OFFLINE": "1", "OMP_NUM_THREADS": "1"},
+    )  # fmt: skip
+    assert result.returncode == 0, result.stderr[-3000:]
+    ranks = [json.loads((report / f"rank{r}.json").read_text()) for r in (0, 1)]
+    assert [r["world_size"] for r in ranks] == [2, 2]
+    # 8 rows, batch 2 per process, 2 processes → 2 optimiser steps (not 4).
+    assert [r["steps"] for r in ranks] == [2, 2]
+    assert ranks[0]["weights"] == ranks[1]["weights"]  # DDP kept the copies identical
+    _assert_safetensors_adapter(out)
+    _assert_run_config(out, "sft", tiny_model)

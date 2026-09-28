@@ -28,7 +28,7 @@ from config.constants import (
     HAS_REWARD_TRAINER,
 )
 from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback
-from core.hardware import compute_dtype, get_lora_targets, select_precision
+from core.hardware import compute_dtype, get_lora_targets, is_main_process, training_device_args
 from core.run_config import save_run_config
 from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
@@ -117,7 +117,7 @@ def train_reward_model_v27(
             load_best_model_at_end=eval_ds is not None,
             report_to=DEFAULT_REPORT_TO,
             seed=DEFAULT_SEED,
-            **select_precision(device),
+            **training_device_args(device),
         )
         # LoRA on the backbone; PEFT keeps the new score head trainable for SEQ_CLS.
         peft_config = LoraConfig(
@@ -157,24 +157,26 @@ def train_reward_model_v27(
             progress(0.9, desc="Merging LoRA and saving reward model…")
         # Save a full sequence-classification model so GRPO can load the path directly.
         merged = trainer.model.merge_and_unload()
-        merged.save_pretrained(output_dir)
-        tokenizer.save_pretrained(output_dir)
-        save_run_config(
-            output_dir,
-            mode="reward",
-            model=model_name,
-            dataset=ds,
-            seed=DEFAULT_SEED,
-            report_to=DEFAULT_REPORT_TO,
-            hyperparams={
-                "epochs": rm_epochs,
-                "learning_rate": rm_lr,
-                "batch_size": rm_batch_size,
-                "eval_steps": rm_eval_steps,
-                "max_length": rm_max_length,
-            },
-            peft={"method": "LoRA (merged)", "lora_rank": 16, "lora_alpha": 32},
-        )
+        # One process writes the outputs (multi-process runs: every rank holds the same weights).
+        if is_main_process():
+            merged.save_pretrained(output_dir)
+            tokenizer.save_pretrained(output_dir)
+            save_run_config(
+                output_dir,
+                mode="reward",
+                model=model_name,
+                dataset=ds,
+                seed=DEFAULT_SEED,
+                report_to=DEFAULT_REPORT_TO,
+                hyperparams={
+                    "epochs": rm_epochs,
+                    "learning_rate": rm_lr,
+                    "batch_size": rm_batch_size,
+                    "eval_steps": rm_eval_steps,
+                    "max_length": rm_max_length,
+                },
+                peft={"method": "LoRA (merged)", "lora_rank": 16, "lora_alpha": 32},
+            )
 
         final_loss = log_cb.records[-1]["train_loss"] if log_cb.records else "N/A"
         if progress is not None:

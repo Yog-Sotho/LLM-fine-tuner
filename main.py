@@ -74,6 +74,15 @@ def main() -> None:
             sys.exit(1)
         return
 
+    if int(os.environ.get("WORLD_SIZE") or 1) > 1:
+        # torchrun / accelerate launch start one copy per GPU: that trains data-parallel
+        # from the CLI, but would start one web UI per process.
+        print(
+            "\n❌ Multi-GPU runs use the CLI, e.g. "
+            "`accelerate launch main.py train --model ... --data ...` (see docs/10_advanced.md)."
+        )
+        sys.exit(2)
+
     import torch
 
     from ui.app import build_demo, build_theme

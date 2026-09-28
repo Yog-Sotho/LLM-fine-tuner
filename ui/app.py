@@ -22,6 +22,7 @@ Patch log
 
 import gradio as gr
 
+from config.constants import GPU_JOB_CONCURRENCY, GPU_QUEUE_ID
 from core.hardware import get_hardware_summary, get_model_info
 from core.state import app_state
 from data.augmentation import on_augment_click, on_quality_filter_click
@@ -62,6 +63,11 @@ def build_theme() -> gr.themes.Base:
         neutral_hue=gr.themes.colors.slate,
         font=gr.themes.GoogleFont("Inter"),
     )
+
+
+# Heavy GPU jobs share one queue: extra requests wait (Gradio shows their place in line)
+# instead of loading a second model onto the same GPU.
+GPU_JOB = {"concurrency_id": GPU_QUEUE_ID, "concurrency_limit": GPU_JOB_CONCURRENCY}
 
 
 def build_demo() -> gr.Blocks:
@@ -269,6 +275,7 @@ def build_demo() -> gr.Blocks:
 
         tt["train_btn"].click(
             fn=_on_train_and_chart,
+            **GPU_JOB,  # one shared GPU queue (see config.constants)
             inputs=[
                 dt["file_input"],
                 tt["model_choice"],
@@ -333,6 +340,7 @@ def build_demo() -> gr.Blocks:
         # ── GGUF Export Tab ────────────────────────────────────────────────
         gt["export_btn"].click(
             fn=on_export_gguf,
+            **GPU_JOB,  # one shared GPU queue (see config.constants)
             inputs=[gt["export_model_path"], gt["quantization"]],
             outputs=[gt["export_status"], gt["gguf_file"]],
         )
@@ -363,6 +371,7 @@ def build_demo() -> gr.Blocks:
         )
         it["merge_btn"].click(
             fn=on_merge_adapter_click,
+            **GPU_JOB,  # one shared GPU queue (see config.constants)
             inputs=[
                 it["merge_base_model_in"],
                 it["merge_adapter_path_in"],
@@ -372,6 +381,7 @@ def build_demo() -> gr.Blocks:
         )
         it["vllm_gen_btn"].click(
             fn=on_vllm_generate,
+            **GPU_JOB,  # one shared GPU queue (see config.constants)
             inputs=[
                 it["merged_model_path_state"],
                 it["vllm_prompt_in"],
@@ -386,6 +396,7 @@ def build_demo() -> gr.Blocks:
         # ── RLHF Pipeline Tab ──────────────────────────────────────────────
         rlt["rm_train_btn"].click(
             fn=train_reward_model_v27,
+            **GPU_JOB,  # one shared GPU queue (see config.constants)
             inputs=[
                 rlt["rm_model_choice"],
                 rlt["rm_file"],
@@ -401,6 +412,7 @@ def build_demo() -> gr.Blocks:
         # Input order matches train_grpo's positional parameters.
         rlt["grpo_train_btn"].click(
             fn=train_grpo,
+            **GPU_JOB,  # one shared GPU queue (see config.constants)
             inputs=[
                 rlt["grpo_policy_model"],
                 rlt["grpo_reward_path"],
@@ -426,6 +438,7 @@ def build_demo() -> gr.Blocks:
         # Input order matches train_kto's positional parameters.
         rlt["kto_train_btn"].click(
             fn=train_kto,
+            **GPU_JOB,  # one shared GPU queue (see config.constants)
             inputs=[
                 rlt["kto_model_choice"],
                 rlt["kto_file"],
@@ -441,6 +454,7 @@ def build_demo() -> gr.Blocks:
         )
         rlt["orpo_train_btn"].click(
             fn=train_orpo_v27,
+            **GPU_JOB,  # one shared GPU queue (see config.constants)
             inputs=[
                 rlt["orpo_model_choice"],
                 rlt["orpo_file"],
@@ -459,6 +473,7 @@ def build_demo() -> gr.Blocks:
         # HTML prediction preview which populates eval_preview_html.
         et["eval_btn"].click(
             fn=on_evaluate_click,
+            **GPU_JOB,  # one shared GPU queue (see config.constants)
             inputs=[
                 et["eval_model_choice"],
                 et["eval_custom_model"],
@@ -479,6 +494,7 @@ def build_demo() -> gr.Blocks:
         )
         et["bench_btn"].click(
             fn=on_benchmark_click,
+            **GPU_JOB,  # one shared GPU queue (see config.constants)
             inputs=[
                 et["eval_model_choice"],
                 et["eval_custom_model"],

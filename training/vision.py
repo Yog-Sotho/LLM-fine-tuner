@@ -26,8 +26,10 @@ from core.hardware import (
     compute_dtype,
     full_finetune_dtype,
     get_lora_targets,
+    is_main_process,
     lora_variant_kwargs,
-    select_precision,
+    quantized_device_map,
+    training_device_args,
 )
 from core.run_config import latest_checkpoint, save_run_config
 from data.preprocessing import to_sft_dataset
@@ -105,7 +107,7 @@ def train_vision_sft(
                 bnb_4bit_compute_dtype=compute_dtype(device),
                 bnb_4bit_use_double_quant=True,
             ),
-            device_map="auto",
+            device_map=quantized_device_map(),
             torch_dtype=compute_dtype(device),
         )
     else:
@@ -147,7 +149,7 @@ def train_vision_sft(
         load_best_model_at_end=eval_ds is not None,
         metric_for_best_model="eval_loss" if eval_ds is not None else None,
         greater_is_better=False,
-        **select_precision(device),
+        **training_device_args(device),
         report_to=report_to,
         run_name=run_name,
         seed=seed,
@@ -176,27 +178,29 @@ def train_vision_sft(
     elapsed = time.time() - t0
     status = "stopped by user" if stop_event.is_set() else "complete"
 
-    trainer.model.save_pretrained(output_dir)
-    processor.save_pretrained(output_dir)
-    save_run_config(
-        output_dir,
-        mode="sft",
-        model=model_name,
-        dataset=dataset,
-        seed=seed,
-        report_to=report_to,
-        vision=True,
-        hyperparams=dict(hyperparams),
-        peft={
-            "method": peft_method,
-            "lora_rank": lora_rank,
-            "lora_alpha": lora_alpha,
-            "lora_variant": lora_variant,
-        },
-        gradient_checkpointing=bool(gradient_checkpointing),
-        lr_scheduler_type=lr_scheduler_type,
-        early_stop=int(early_stop),
-    )
+    # One process writes the outputs (multi-process runs: every rank holds the same weights).
+    if is_main_process():
+        trainer.model.save_pretrained(output_dir)
+        processor.save_pretrained(output_dir)
+        save_run_config(
+            output_dir,
+            mode="sft",
+            model=model_name,
+            dataset=dataset,
+            seed=seed,
+            report_to=report_to,
+            vision=True,
+            hyperparams=dict(hyperparams),
+            peft={
+                "method": peft_method,
+                "lora_rank": lora_rank,
+                "lora_alpha": lora_alpha,
+                "lora_variant": lora_variant,
+            },
+            gradient_checkpointing=bool(gradient_checkpointing),
+            lr_scheduler_type=lr_scheduler_type,
+            early_stop=int(early_stop),
+        )
     summary = (
         f"✅ Training {status}!\n"
         f"🖼️ Vision-language fine-tuning ({len(train_ds)} image + text examples)\n"

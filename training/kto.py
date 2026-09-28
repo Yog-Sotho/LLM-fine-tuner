@@ -33,7 +33,7 @@ from config.constants import (
     HAS_KTO,
 )
 from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback
-from core.hardware import compute_dtype, get_lora_targets, select_precision
+from core.hardware import compute_dtype, get_lora_targets, is_main_process, training_device_args
 from core.run_config import latest_checkpoint, save_run_config
 from core.state import app_state, validate_path_traversal
 from data.loader import load_table_dataset
@@ -155,7 +155,7 @@ def train_kto(
             remove_unused_columns=False,
             report_to=DEFAULT_REPORT_TO,
             seed=DEFAULT_SEED,
-            **select_precision(device),
+            **training_device_args(device),
         )
 
         log_cb = LoggingCallback()
@@ -182,24 +182,26 @@ def train_kto(
 
         if progress is not None:
             progress(0.95, desc="Saving adapter…")
-        model.save_pretrained(output_dir)
-        tokenizer.save_pretrained(output_dir)
-        save_run_config(
-            output_dir,
-            mode="kto",
-            model=model_name,
-            dataset=ds,
-            seed=DEFAULT_SEED,
-            report_to=DEFAULT_REPORT_TO,
-            hyperparams={
-                "learning_rate": learning_rate,
-                "beta": beta,
-                "epochs": epochs,
-                "batch_size": int(batch_size),
-                "max_length": int(max_length),
-            },
-            peft={"method": "LoRA", "lora_rank": 16, "lora_alpha": 32},
-        )
+        # One process writes the outputs (multi-process runs: every rank holds the same weights).
+        if is_main_process():
+            model.save_pretrained(output_dir)
+            tokenizer.save_pretrained(output_dir)
+            save_run_config(
+                output_dir,
+                mode="kto",
+                model=model_name,
+                dataset=ds,
+                seed=DEFAULT_SEED,
+                report_to=DEFAULT_REPORT_TO,
+                hyperparams={
+                    "learning_rate": learning_rate,
+                    "beta": beta,
+                    "epochs": epochs,
+                    "batch_size": int(batch_size),
+                    "max_length": int(max_length),
+                },
+                peft={"method": "LoRA", "lora_rank": 16, "lora_alpha": 32},
+            )
 
         final_loss = log_cb.records[-1]["train_loss"] if log_cb.records else "N/A"
         if progress is not None:

@@ -46,7 +46,13 @@ from config.constants import (
     HAS_VLLM,
 )
 from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback
-from core.hardware import compute_dtype, get_lora_targets, lora_variant_kwargs, select_precision
+from core.hardware import (
+    compute_dtype,
+    get_lora_targets,
+    is_main_process,
+    lora_variant_kwargs,
+    training_device_args,
+)
 from core.run_config import latest_checkpoint, save_run_config
 from core.state import app_state, validate_path_traversal
 from data.loader import load_table_dataset
@@ -278,7 +284,7 @@ def train_grpo(
             save_total_limit=CHECKPOINT_TOTAL_LIMIT,
             report_to=DEFAULT_REPORT_TO,
             seed=DEFAULT_SEED,
-            **select_precision(device),
+            **training_device_args(device),
             # vllm_mode is set explicitly: its default differs between TRL versions.
             **(
                 {"use_vllm": True, "vllm_mode": "colocate",
@@ -322,36 +328,38 @@ def train_grpo(
 
         if progress is not None:
             progress(0.95, desc="Saving policy adapter…")
-        trainer.model.save_pretrained(output_dir)
-        tokenizer.save_pretrained(output_dir)
-        save_run_config(
-            output_dir,
-            mode="grpo",
-            model=policy_model_name,
-            dataset=ds,
-            seed=DEFAULT_SEED,
-            report_to=DEFAULT_REPORT_TO,
-            reward=reward_desc,
-            reward_model=reward_model_path or None,
-            rewards=rewards,
-            regex_pattern=regex_pattern.strip() if "regex" in rewards else None,
-            loss_type=loss_type,
-            use_vllm=bool(use_vllm),
-            hyperparams={
-                "learning_rate": learning_rate,
-                "epochs": epochs,
-                "num_generations": num_generations,
-                "prompts_per_step": int(prompts_per_step),
-                "max_completion_length": int(max_completion_length),
-                "beta": beta,
-            },
-            peft={
-                "method": "LoRA",
-                "lora_rank": int(lora_rank),
-                "lora_alpha": int(lora_alpha),
-                "lora_variant": lora_variant,
-            },
-        )
+        # One process writes the outputs (multi-process runs: every rank holds the same weights).
+        if is_main_process():
+            trainer.model.save_pretrained(output_dir)
+            tokenizer.save_pretrained(output_dir)
+            save_run_config(
+                output_dir,
+                mode="grpo",
+                model=policy_model_name,
+                dataset=ds,
+                seed=DEFAULT_SEED,
+                report_to=DEFAULT_REPORT_TO,
+                reward=reward_desc,
+                reward_model=reward_model_path or None,
+                rewards=rewards,
+                regex_pattern=regex_pattern.strip() if "regex" in rewards else None,
+                loss_type=loss_type,
+                use_vllm=bool(use_vllm),
+                hyperparams={
+                    "learning_rate": learning_rate,
+                    "epochs": epochs,
+                    "num_generations": num_generations,
+                    "prompts_per_step": int(prompts_per_step),
+                    "max_completion_length": int(max_completion_length),
+                    "beta": beta,
+                },
+                peft={
+                    "method": "LoRA",
+                    "lora_rank": int(lora_rank),
+                    "lora_alpha": int(lora_alpha),
+                    "lora_variant": lora_variant,
+                },
+            )
 
         if progress is not None:
             progress(1.0, desc="✅ Complete!")

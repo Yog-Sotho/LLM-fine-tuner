@@ -369,6 +369,15 @@ BENCHMARK_TASKS: dict[str, str] = {
 BENCHMARK_DEFAULT_LIMIT = 100  # examples per task; full sets take hours on CPU
 BENCHMARK_MAX_LIMIT = 10_000
 
+# ── GPU job queue (web UI) ─────────────────────────────────────────────────
+# Training, evaluation, benchmarks, GGUF export, merging and vLLM runs share one queue,
+# so two users (or two tabs) never load models onto the GPU at the same time.
+GPU_QUEUE_ID = "gpu"
+try:
+    GPU_JOB_CONCURRENCY = min(max(int(os.environ.get("LFT_GPU_JOBS", "1")), 1), 8)
+except ValueError:
+    GPU_JOB_CONCURRENCY = 1
+
 # ── GRPO ──────────────────────────────────────────────────────────────────
 # Loss formulations supported by every TRL version in range (0.29.1 – 1.x).
 # dapo (TRL's default) and dr_grpo remove the length bias of the original grpo loss.

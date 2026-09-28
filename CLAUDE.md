@@ -139,6 +139,11 @@ Tab files (`ui/tabs/*.py`) define **layout only** — no `.click()`, `.change()`
 - Do not access shared mutable state from Gradio handlers without acquiring the lock.
 - Stop signals and temp files are **per browser session**: get them with `app_state.session_for(request)` (handlers take `request: gr.Request | None = None`; the CLI uses the default session). Pass the session's `stop_event` to `StopCallback(stop_event)`. Track temp outputs with `session.track()` / `session.release()`, never with module globals — one session must not stop or delete another's work.
 
+### Multi-process training and the GPU queue
+
+- Trainers must work under `accelerate launch` / `torchrun` (data-parallel): load 4-bit models with `device_map=quantized_device_map()` (never `"auto"`), pass `**training_device_args(device)` to the TRL config, and write outputs (`save_pretrained`, `save_run_config`, subprocesses) only `if is_main_process():` — all from `core/hardware.py`.
+- New heavy GPU event handlers in `ui/app.py` get `**GPU_JOB` so they join the shared queue; Stop must stay outside it.
+
 ### Security defaults
 
 - Never hardcode `trust_remote_code=True`; pass `trust_remote_code=ALLOW_REMOTE_CODE` from `config/constants.py`.
@@ -245,6 +250,7 @@ HF_TOKEN=hf_xxx docker compose up llm-fine-tuner-gpu
 | `GRADIO_AUTH` | — | Require login: `user:password`, comma-separated pairs |
 | `ALLOW_REMOTE_CODE` | `false` | Enables `trust_remote_code` for Hub models with custom code — off by default |
 | `LFT_RUNS_DIR` | `runs` (Docker: `/app/models`) | Where UI training runs are saved (`<dir>/<run name>/`) |
+| `LFT_GPU_JOBS` | `1` | Heavy GPU jobs (training, eval, benchmarks, export, merge, vLLM) the web UI runs at once (1–8) |
 | `LFT_REPORT_TO` | `none` | Default experiment tracker (`trackio`, `wandb`, `mlflow`, `tensorboard`) if installed |
 | `HF_TOKEN` | — | HuggingFace Hub auth (gated models, Hub push) |
 | `SHARE` | `false` | Enable public Gradio link |
