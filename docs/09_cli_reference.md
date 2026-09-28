@@ -205,6 +205,7 @@ python main.py grpo \
 | `--prompts-per-step` | `1` | Prompts per optimisation step |
 | `--max-completion-length` | `128` | Tokens generated per completion |
 | `--beta` | `0.0` | KL penalty towards the original model (0 = off) |
+| `--resume` | off | Continue from the newest checkpoint in `--output` (saved every 50 steps) |
 
 **Data format** (`prompts.csv`):
 ```csv
@@ -241,6 +242,7 @@ python main.py kto \
 | `--beta` | `0.1` | How far the model may move from the original |
 | `--batch-size` | `4` | At least 2 |
 | `--max-length` | `512` | Max tokens for prompt + response |
+| `--resume` | off | Continue from the newest checkpoint in `--output` (saved every 50 steps) |
 
 **Data format** (`feedback.csv`):
 ```csv

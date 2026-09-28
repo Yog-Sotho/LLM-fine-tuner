@@ -29,7 +29,7 @@ You upload your data, click a button, and get back a custom model ready to use.
 | [02 — Quick Start](02_quick_start.md) | Train your first model in 5 minutes |
 | [03 — Data Preparation](03_data_preparation.md) | How to format your data, upload it, and fix column issues |
 | [04 — Training](04_training.md) | All training modes, presets, and settings explained |
-| [05 — RLHF Pipeline](05_rlhf_pipeline.md) | Reward models, PPO, and ORPO alignment |
+| [05 — RLHF Pipeline](05_rlhf_pipeline.md) | Reward models, GRPO, KTO and ORPO alignment |
 | [06 — Inference](06_inference.md) | Testing your model, batch runs, and vLLM serving |
 | [07 — Evaluation](07_evaluation.md) | Measuring quality with BLEU, ROUGE, BERTScore |
 | [08 — Export & Deploy](08_export_and_deploy.md) | Download, push to HuggingFace Hub, export to GGUF |

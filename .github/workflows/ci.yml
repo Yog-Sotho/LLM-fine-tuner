@@ -364,7 +364,7 @@ jobs:
           restore-keys: "pkg-"
 
       - name: "Install build toolchain"
-        run: pip install --quiet "build>=1.2.0" twine "setuptools>=68" wheel
+        run: pip install --quiet "build>=1.2.0" twine "setuptools>=77" wheel
 
       - name: "Build sdist + wheel"
         # --no-isolation: reuse the current env (avoids a redundant heavy install)
@@ -372,6 +372,28 @@ jobs:
 
       - name: "Verify dist with twine --strict"
         run: twine check --strict dist/*
+
+      # A plain (non-editable) install must ship main.py — the console scripts
+      # point at main:main — and must not install tests/, archive/ or docs/ as
+      # top-level packages. --no-deps keeps this job fast; the test job covers
+      # the runtime dependencies.
+      - name: "Check wheel contents and entry points"
+        run: |
+          python -m venv /tmp/wheel-venv
+          /tmp/wheel-venv/bin/pip install --quiet --no-deps dist/*.whl
+          cd /tmp && /tmp/wheel-venv/bin/python - << 'EOF'
+          import importlib.util
+          from importlib.metadata import distribution, entry_points
+
+          top = {f.parts[0] for f in distribution("llm-fine-tuner").files}
+          stray = top & {"tests", "archive", "docs", "build"}
+          assert not stray, f"wheel installs non-application packages: {sorted(stray)}"
+          scripts = entry_points(group="console_scripts")
+          for name in ("llm-finetune", "app"):
+              (ep,) = [e for e in scripts if e.name == name]
+              assert importlib.util.find_spec(ep.module), f"{name}: module {ep.module} missing"
+          print("wheel OK:", sorted(top))
+          EOF
 
   # =========================================================================
   # JOB 7 — CI SUMMARY  (the only job that needs branch protection)

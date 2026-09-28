@@ -409,6 +409,7 @@ def build_demo() -> gr.Blocks:
                 rlt["grpo_prompts_per_step"],
                 rlt["grpo_max_completion"],
                 rlt["grpo_beta"],
+                rlt["grpo_resume"],
             ],
             outputs=[rlt["grpo_status"]],
         )
@@ -424,6 +425,7 @@ def build_demo() -> gr.Blocks:
                 rlt["kto_epochs"],
                 rlt["kto_batch"],
                 rlt["kto_max_length"],
+                rlt["kto_resume"],
             ],
             outputs=[rlt["kto_status"]],
         )

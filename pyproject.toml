@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]  # 77+: SPDX `license` (PEP 639)
 # C-1 FIX: "setuptools.backends.legacy:build" does not exist — correct value is "setuptools.build_meta"
 build-backend = "setuptools.build_meta"
 
@@ -10,7 +10,8 @@ version = "3.2.0"
 description = "Advanced LLM Fine-Tuner — SFT, DPO, ORPO, KTO, GRPO, reward modelling and evaluation"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Yog-Sotho" }]
 keywords = ["llm", "fine-tuning", "peft", "lora", "qlora", "dpo", "grpo", "kto", "orpo", "rlhf"]
 classifiers = [
@@ -18,7 +19,6 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
@@ -97,9 +97,16 @@ Repository = "https://github.com/Yog-Sotho/LLM-fine-tuner"
 Issues     = "https://github.com/Yog-Sotho/LLM-fine-tuner/issues"
 
 
+[tool.setuptools]
+# main.py is a top-level module (the `llm-finetune` entry point), not a package.
+py-modules = ["main"]
+
 [tool.setuptools.packages.find]
-# The modular repo keeps all modules flat at the project root.
+# The modular repo keeps all modules flat at the project root. List the
+# application packages explicitly so tests/, archive/ and docs/ are never
+# installed as top-level packages.
 where = ["."]
+include = ["cli*", "config*", "core*", "data*", "export*", "inference*", "training*", "ui*"]
 
 
 [tool.pytest.ini_options]

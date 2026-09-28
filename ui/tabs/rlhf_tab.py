@@ -108,6 +108,11 @@ def build_rlhf_tab() -> dict:
                             grpo_max_completion = gr.Slider(
                                 16, 1024, value=128, step=16, label="Max Completion Tokens"
                             )
+                        grpo_resume = gr.Checkbox(
+                            label="Resume from last checkpoint",
+                            value=False,
+                            info="Continue from the newest checkpoint in the output directory.",
+                        )
                         grpo_train_btn = gr.Button("🎯 Run GRPO", variant="primary")
                     with gr.Column():
                         grpo_status = gr.Textbox(
@@ -175,6 +180,11 @@ def build_rlhf_tab() -> dict:
                             kto_max_length = gr.Slider(
                                 64, 4096, value=512, step=64, label="Max Length"
                             )
+                        kto_resume = gr.Checkbox(
+                            label="Resume from last checkpoint",
+                            value=False,
+                            info="Continue from the newest checkpoint in the output directory.",
+                        )
                         kto_train_btn = gr.Button("👍 Run KTO Training", variant="primary")
                     with gr.Column():
                         kto_status = gr.Textbox(
@@ -202,6 +212,7 @@ def build_rlhf_tab() -> dict:
         grpo_num_generations=grpo_num_generations,
         grpo_prompts_per_step=grpo_prompts_per_step,
         grpo_max_completion=grpo_max_completion,
+        grpo_resume=grpo_resume,
         grpo_train_btn=grpo_train_btn,
         grpo_status=grpo_status,
         orpo_model_choice=orpo_model_choice,
@@ -222,6 +233,7 @@ def build_rlhf_tab() -> dict:
         kto_epochs=kto_epochs,
         kto_batch=kto_batch,
         kto_max_length=kto_max_length,
+        kto_resume=kto_resume,
         kto_train_btn=kto_train_btn,
         kto_status=kto_status,
     )

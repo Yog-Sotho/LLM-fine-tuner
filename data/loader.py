@@ -306,7 +306,9 @@ def load_hub_dataset(
             "Unsupported dataset layout. Needs 'messages', 'text' or 'instruction'+'output' "
             f"columns (DPO: prompt/chosen/rejected); found {sorted(columns)}"
         )
-    return Dataset.from_list([{c: row[c] for c in keep} for row in rows])
+    ds = Dataset.from_list([{c: row[c] for c in keep} for row in rows])
+    ds.info.dataset_name = repo_id  # recorded in run_config.yaml and the model card
+    return ds
 
 
 def safe_extract_zip(zip_path: str, extract_dir: str) -> str:

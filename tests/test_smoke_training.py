@@ -77,6 +77,13 @@ def _assert_run_config(directory: pathlib.Path, mode: str, model: str) -> dict:
     cfg = load_run_config(str(directory / "run_config.yaml"))
     assert cfg["mode"] == mode and cfg["model"] == model
     assert cfg["seed"] == 42 and len(cfg["dataset"]["sha256"]) == 64
+    # Every trainer writes our model card last (after TRL/PEFT wrote theirs).
+    from huggingface_hub import ModelCard
+
+    card = ModelCard.load(str(directory / "README.md")).data
+    assert card.base_model == model and mode in card.tags and "llm-fine-tuner" in card.tags
+    adapter = (directory / "adapter_config.json").is_file()
+    assert card.library_name == ("peft" if adapter else "transformers")
     return cfg
 
 
@@ -105,6 +112,7 @@ def test_sft_trains_and_saves_safetensors_adapter(tiny_model, tmp_path):
     summary, records = _train(tiny_model, ds, tmp_path, "sft")
     assert summary.startswith("✅ Training complete")
     _assert_safetensors_adapter(tmp_path)
+    _assert_run_config(tmp_path, "sft", tiny_model)
 
 
 def test_dpo_trains_and_saves_safetensors_adapter(tiny_model, tmp_path):
@@ -118,6 +126,7 @@ def test_dpo_trains_and_saves_safetensors_adapter(tiny_model, tmp_path):
     summary, _ = _train(tiny_model, ds, tmp_path, "dpo")
     assert summary.startswith("✅ Training complete")
     _assert_safetensors_adapter(tmp_path)
+    _assert_run_config(tmp_path, "dpo", tiny_model)
 
 
 def test_orpo_trains_and_saves_adapter(tiny_model, tmp_path):
@@ -737,3 +746,120 @@ def test_ui_evaluation_compares_with_base(tiny_model, random_lora, tmp_path):
         "judge_score", "judgment", "base_judge_score", "base_judgment",
     ]  # fmt: skip
     assert len(table) == 3
+
+
+# ── GGUF export: llama.cpp fallback ────────────────────────────────────────
+
+
+def test_gguf_fallback_converts_the_merged_model(tiny_model, random_lora, tmp_path, monkeypatch):
+    """llama.cpp converts full models only: an adapter is merged into its base first."""
+    import subprocess
+    import sys
+
+    import export.gguf as gguf
+
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        model_dir = cmd[2]
+        seen.update(cmd=cmd, files=sorted(os.listdir(model_dir)), model_dir=model_dir)
+        pathlib.Path(cmd[cmd.index("--outfile") + 1]).write_bytes(b"GGUF")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(gguf, "HAS_UNSLOTH", False)
+    monkeypatch.setattr(gguf.shutil, "which", lambda name: "/x/convert_hf_to_gguf.py"
+                        if name == "convert_hf_to_gguf.py" else None)  # fmt: skip
+    monkeypatch.setattr(gguf.subprocess, "run", fake_run)
+
+    status = gguf.export_to_gguf(random_lora, str(tmp_path / "out"), "q4_k_m")
+    assert status.startswith("✅ GGUF exported (FP16 only)"), status
+    assert seen["cmd"][0] == sys.executable  # not whatever "python" is on PATH
+    assert "config.json" in seen["files"] and "adapter_config.json" not in seen["files"]
+    assert any(f.endswith(".safetensors") for f in seen["files"])
+    assert not os.path.exists(seen["model_dir"])  # temporary merge removed
+
+
+def test_gguf_fallback_rejects_non_lora_adapters(tmp_path, monkeypatch):
+    import json
+
+    import export.gguf as gguf
+
+    (tmp_path / "adapter_config.json").write_text(json.dumps({"peft_type": "PROMPT_TUNING"}))
+    monkeypatch.setattr(gguf, "HAS_UNSLOTH", False)
+    monkeypatch.setattr(gguf.shutil, "which", lambda name: "/x/convert_hf_to_gguf.py")
+    status = gguf.export_to_gguf(str(tmp_path), str(tmp_path / "out"), "q4_k_m")
+    assert "PROMPT_TUNING adapters cannot be merged" in status
+
+
+# ── GRPO / KTO checkpoints and resume ──────────────────────────────────────
+
+
+@pytest.mark.parametrize("trainer_name", ["grpo", "kto"])
+def test_grpo_and_kto_save_checkpoints_and_resume(tiny_model, tmp_path, monkeypatch,
+                                                   trainer_name):  # fmt: skip
+    import transformers
+
+    import training.grpo as grpo
+    import training.kto as kto
+    from core.run_config import latest_checkpoint
+
+    resumed_from = []
+    original_train = transformers.Trainer.train
+
+    def spy_train(self, resume_from_checkpoint=None, **kwargs):
+        resumed_from.append(resume_from_checkpoint)
+        return original_train(self, resume_from_checkpoint=resume_from_checkpoint, **kwargs)
+
+    monkeypatch.setattr(transformers.Trainer, "train", spy_train)
+    monkeypatch.setattr(grpo, "CHECKPOINT_SAVE_STEPS", 1)
+    monkeypatch.setattr(kto, "CHECKPOINT_SAVE_STEPS", 1)
+    out = tmp_path / trainer_name
+
+    def run(epochs: int, resume: bool) -> str:
+        if trainer_name == "grpo":
+            data = tmp_path / "prompts.csv"
+            pd.DataFrame({"prompt": ["2+2=", "3+3="], "reference": ["4", "6"]}).to_csv(
+                data, index=False
+            )
+            return grpo.train_grpo(
+                tiny_model, "", _Upload(data), str(out), epochs=epochs,
+                num_generations=2, max_completion_length=8, resume=resume, progress=None,
+            )  # fmt: skip
+        data = tmp_path / "kto.csv"
+        pd.DataFrame(PREFS).to_csv(data, index=False)
+        return kto.train_kto(
+            tiny_model, _Upload(data), str(out), epochs=epochs, batch_size=2,
+            max_length=64, resume=resume, progress=None,
+        )  # fmt: skip
+
+    assert "✅" in run(epochs=1, resume=False)
+    first = latest_checkpoint(str(out))
+    assert first is not None and resumed_from == [None]
+    assert "✅" in run(epochs=2, resume=True)
+    assert resumed_from[-1] == first  # continued from the newest checkpoint
+    assert int(latest_checkpoint(str(out)).rsplit("-", 1)[-1]) > int(first.rsplit("-", 1)[-1])
+    assert len(list(out.glob("checkpoint-*"))) <= 2  # older checkpoints are pruned
+
+
+@pytest.mark.parametrize(("exit_code", "expected"), [(0, "🔓 Heretic Mode applied!"),
+                                                     (1, "⚠️ Heretic failed (exit code 1)")])  # fmt: skip
+def test_heretic_result_follows_its_exit_code(tiny_model, tmp_path, monkeypatch, exit_code,
+                                              expected):  # fmt: skip
+    import training.sft as sft
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake = bin_dir / "heretic"
+    fake.write_text(f"#!/bin/sh\necho 'ValueError: model too small' >&2\nexit {exit_code}\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(sft, "HAS_HERETIC", True)
+
+    ds = Dataset.from_dict({"text": ["alpha beta", "gamma delta", "epsilon zeta", "eta theta"]})
+    summary, _ = sft.train_model(
+        tiny_model, ds, str(tmp_path / "out"), _hyperparams(), "cpu", "LoRA", True, 4, 8,
+        10, 64, 1, 10, 16, False, 0, "linear", False, False, False, "",
+        heretic_mode=True, progress=None,
+    )  # fmt: skip
+    assert expected in summary
+    assert ("model too small" in summary) == (exit_code != 0)

@@ -187,3 +187,12 @@ def compute_dtype(device: str) -> torch.dtype:
     if precision["fp16"]:
         return torch.float16
     return torch.float32
+
+
+def full_finetune_dtype(device: str) -> torch.dtype:
+    """Weight dtype for full fine-tuning (every weight trained, no quantisation).
+
+    bf16 where supported; otherwise fp32 — fp16 mixed precision needs fp32 master
+    weights (the Trainer refuses to unscale fp16 gradients).
+    """
+    return torch.bfloat16 if select_precision(device)["bf16"] else torch.float32

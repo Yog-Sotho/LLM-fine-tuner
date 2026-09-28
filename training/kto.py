@@ -21,6 +21,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
 from config.constants import (
     ALLOW_REMOTE_CODE,
+    CHECKPOINT_SAVE_STEPS,
+    CHECKPOINT_TOTAL_LIMIT,
     COL_CHOSEN,
     COL_COMPLETION,
     COL_LABEL,
@@ -32,7 +34,7 @@ from config.constants import (
 )
 from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback
 from core.hardware import compute_dtype, get_lora_targets, select_precision
-from core.run_config import save_run_config
+from core.run_config import latest_checkpoint, save_run_config
 from core.state import app_state, validate_path_traversal
 from data.loader import load_table_dataset
 
@@ -85,6 +87,7 @@ def train_kto(
     epochs: int = 1,
     batch_size: int = 4,
     max_length: int = 512,
+    resume: bool = False,
     progress=gr.Progress(),
     request: gr.Request | None = None,
 ) -> str:
@@ -146,7 +149,9 @@ def train_kto(
             per_device_train_batch_size=int(batch_size),
             max_length=int(max_length),
             logging_steps=1,
-            save_strategy="no",
+            save_strategy="steps",
+            save_steps=CHECKPOINT_SAVE_STEPS,
+            save_total_limit=CHECKPOINT_TOTAL_LIMIT,
             remove_unused_columns=False,
             report_to=DEFAULT_REPORT_TO,
             seed=DEFAULT_SEED,
@@ -171,7 +176,7 @@ def train_kto(
         if progress is not None:
             progress(0.2, desc="KTO training started… calculating ETA…")
         t0 = time.time()
-        trainer.train()
+        trainer.train(resume_from_checkpoint=latest_checkpoint(output_dir) if resume else None)
         elapsed = time.time() - t0
         status = "stopped by user" if stop_event.is_set() else "complete"
 

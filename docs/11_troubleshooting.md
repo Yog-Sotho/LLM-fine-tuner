@@ -207,11 +207,12 @@ The model isn't following the format of your prompts.
 ❌ GGUF export failed: llama.cpp not found
 ```
 
-**Fix:** Install llama.cpp:
+**Fix:** Install llama.cpp (it builds with CMake; the old `make` build was removed):
 ```bash
-git clone https://github.com/ggerganov/llama.cpp
-cd llama.cpp
-make -j$(nproc)
+git clone --depth 1 https://github.com/ggml-org/llama.cpp
+cmake -S llama.cpp -B llama.cpp/build
+cmake --build llama.cpp/build --target llama-quantize -j$(nproc)
+export PATH="$PATH:$PWD/llama.cpp:$PWD/llama.cpp/build/bin"
 ```
 Or re-run the installer and say yes to the llama.cpp step.
 

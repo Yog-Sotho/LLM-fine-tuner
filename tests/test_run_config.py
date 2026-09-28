@@ -77,3 +77,12 @@ def test_new_run_name_is_valid():
     import re
 
     assert re.fullmatch(RUN_NAME_PATTERN, rc.new_run_name("sft"))
+
+
+def test_latest_checkpoint_orders_by_step_number(tmp_path):
+    from core.run_config import latest_checkpoint
+
+    assert latest_checkpoint(str(tmp_path)) is None
+    for name in ("checkpoint-9", "checkpoint-10", "checkpoint-2", "checkpoint-final"):
+        (tmp_path / name).mkdir()
+    assert latest_checkpoint(str(tmp_path)) == str(tmp_path / "checkpoint-10")
