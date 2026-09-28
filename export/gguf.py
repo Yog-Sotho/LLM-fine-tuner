@@ -12,6 +12,7 @@ on_export_gguf   — Gradio UI handler for the GGUF Export button
 
 import glob
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -23,6 +24,8 @@ import gradio as gr
 from config.constants import HAS_UNSLOTH
 from core.state import app_state, validate_path_traversal
 from inference.vllm_runner import merge_adapter_for_inference
+
+logger = logging.getLogger(__name__)
 
 
 def merge_adapter_to_temp(adapter_dir: str) -> tuple[str | None, str]:
@@ -67,7 +70,7 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
 
     Returns a status string for display in the UI.
     """
-    # Sentinel: strip whitespace and validate inputs for defense-in-depth API level security
+    # Strip whitespace and validate inputs for defense-in-depth API level security
     model_path = model_path.strip() if model_path else ""
     output_dir = output_dir.strip() if output_dir else ""
     quantization = quantization.strip() if quantization else ""
@@ -107,8 +110,8 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
                 # H-6 FIX: Log the Unsloth failure before falling through.
                 # Previously `except Exception: pass` silently swallowed CUDA OOM,
                 # disk-full, and corrupt-model errors, making diagnosis impossible.
-                print(
-                    f"⚠️ Unsloth GGUF export failed ({unsloth_err!r}), trying llama.cpp fallback..."
+                logger.warning(
+                    "Unsloth GGUF export failed (%r), trying the llama.cpp fallback", unsloth_err
                 )
 
         # ── Path B: llama.cpp ─────────────────────────────────────────────
@@ -197,7 +200,7 @@ def on_export_gguf(model_path: str, quantization: str, request: gr.Request | Non
 
     Returns (status_str, gguf_file_path_or_None).
     """
-    # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
+    # Strip whitespace and validate against path traversal (blocking '..' and '\').
     model_path = model_path.strip() if model_path else ""
     quantization = quantization.strip() if quantization else ""
 

@@ -39,7 +39,7 @@ def merge_adapter_for_inference(
 
     Returns a status string for display in the UI.
     """
-    # Sentinel: strip and validate inputs for Defense-in-Depth
+    # Strip and validate inputs for Defense-in-Depth
     base_model_name = base_model_name.strip() if base_model_name else ""
     adapter_path = adapter_path.strip() if adapter_path else ""
     merged_output_dir = merged_output_dir.strip() if merged_output_dir else ""
@@ -106,7 +106,7 @@ def on_merge_adapter_click(
     Falls back to model_path_state when adapter_path is empty.
     On success, also updates the merged model path state component.
     """
-    # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
+    # Strip whitespace and validate against path traversal (blocking '..' and '\').
     base = base_model_name.strip() if base_model_name and base_model_name.strip() else ""
     adapter = (
         adapter_path.strip() if adapter_path and adapter_path.strip() else (model_path_state or "")
@@ -160,7 +160,7 @@ def vllm_generate_v27(
 
     Raises ImportError when vLLM is not installed.
     """
-    # Sentinel: strip and validate inputs for Defense-in-Depth
+    # Strip and validate inputs for Defense-in-Depth
     model_path = model_path.strip() if model_path else ""
     vllm_quantization = vllm_quantization.strip() if vllm_quantization else ""
 
@@ -214,7 +214,7 @@ def on_vllm_generate(
     vllm_top_p: float,
 ) -> str:
     """Gradio UI handler for the vLLM Generate button."""
-    # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
+    # Strip whitespace and validate against path traversal (blocking '..' and '\').
     model_path_state = model_path_state.strip() if model_path_state else ""
     vllm_quant = vllm_quant.strip() if vllm_quant else ""
 

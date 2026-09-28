@@ -1,7 +1,7 @@
 """
 ui/css.py
 ==========
-Full custom CSS for the LLM Fine-Tuner v3.2 dark-purple UI theme.
+Full custom CSS for the LLM Fine-Tuner dark-purple UI theme.
 Import CUSTOM_CSS and pass it directly to gr.Blocks(css=CUSTOM_CSS).
 """
 
@@ -178,7 +178,7 @@ input[type="range"] {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg-main); }
 ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
-/* ── v2.7 RLHF section highlight ───────────── */
+/* ── RLHF section highlight ────────────────── */
 #rlhf-banner {
     background: linear-gradient(135deg, #0a2b2b 0%, #0a1e3c 100%);
     border: 1px solid var(--success);
@@ -186,7 +186,7 @@ input[type="range"] {
     padding: 14px 18px;
     margin-bottom: 12px;
 }
-/* ── v2.7 evaluation section ───────────────── */
+/* ── evaluation section ────────────────────── */
 #eval-banner {
     background: linear-gradient(135deg, #1a0a3c 0%, #0f2a1e 100%);
     border: 1px solid var(--warn);

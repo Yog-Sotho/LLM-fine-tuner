@@ -18,7 +18,7 @@ import json
 import os
 from datetime import datetime
 
-from config.constants import HAS_HUB, HF_TOKEN_MIN_LEN, HF_TOKEN_PREFIX
+from config.constants import APP_NAME, HAS_HUB, HF_TOKEN_MIN_LEN, HF_TOKEN_PREFIX
 from core.state import redact_sensitive_info
 
 
@@ -34,7 +34,7 @@ class ModelRegistry:
         if not HAS_HUB:
             raise ImportError("huggingface_hub not installed. Run: pip install huggingface-hub")
 
-        # Sentinel: strip and validate repo_id and token for Defense-in-Depth
+        # Strip and validate repo_id and token for Defense-in-Depth
         repo_id = repo_id.strip() if repo_id else ""
         token = token.strip() if token else ""
 
@@ -72,7 +72,7 @@ class ModelRegistry:
 
         Returns a status string.
         """
-        # Sentinel: strip and validate model_path and version for Defense-in-Depth
+        # Strip and validate model_path and version for Defense-in-Depth
         model_path = model_path.strip() if model_path else ""
         version = version.strip() if version else ""
 
@@ -183,7 +183,7 @@ def on_registry_upload(
     registry_notes: str,
 ) -> str:
     """Handler for the Registry Upload button in the Share tab."""
-    # Sentinel: strip whitespace and validate against path traversal / malformed input.
+    # Strip whitespace and validate against path traversal / malformed input.
     registry_repo_id = registry_repo_id.strip() if registry_repo_id else ""
     registry_token = registry_token.strip() if registry_token else ""
     registry_version = registry_version.strip() if registry_version else ""
@@ -205,7 +205,7 @@ def on_registry_upload(
     if not registry_repo_id or "/" not in registry_repo_id:
         return "❌ Invalid Repo ID. Format: username/model-name"
 
-    # Sentinel: standardized robust token validation.
+    # Standardized robust token validation.
     if (
         not registry_token
         or not registry_token.startswith(HF_TOKEN_PREFIX)
@@ -222,7 +222,7 @@ def on_registry_upload(
         reg = ModelRegistry(registry_repo_id, registry_token)
         metadata = {
             "notes": registry_notes or "",
-            "trained_with": "LLM Fine-Tuner v3.2",
+            "trained_with": APP_NAME,
         }
         return reg.upload_model(model_path_state, registry_version, metadata)
     except Exception as e:
@@ -232,7 +232,7 @@ def on_registry_upload(
 
 def on_registry_list(registry_repo_id: str, registry_token: str) -> str:
     """Handler for the List Versions button in the Share tab."""
-    # Sentinel: strip whitespace and validate against path traversal.
+    # Strip whitespace and validate against path traversal.
     registry_repo_id = registry_repo_id.strip() if registry_repo_id else ""
     registry_token = registry_token.strip() if registry_token else ""
 
@@ -246,7 +246,7 @@ def on_registry_list(registry_repo_id: str, registry_token: str) -> str:
     if not registry_repo_id or "/" not in registry_repo_id:
         return "❌ Invalid Repo ID."
 
-    # Sentinel: standardized robust token validation.
+    # Standardized robust token validation.
     if (
         not registry_token
         or not registry_token.startswith(HF_TOKEN_PREFIX)

@@ -66,7 +66,7 @@ def build_data_tab() -> dict:
         augmented_ds_state = gr.State(None)
 
         gr.Markdown("---")
-        gr.Markdown("### 🔧 v2.7 Dataset Enhancement")
+        gr.Markdown("### 🔧 Dataset Enhancement")
         # C-5 FIX: Added info banner so non-technical users understand the workflow.
         gr.Markdown(
             "_💡 After augmenting or filtering, click **▶ Start Training** — "

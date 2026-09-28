@@ -1,7 +1,7 @@
 <div align="center">
   <img src="Images/llm_terminal.png" alt="LLM Fine-Tuner Terminal" width="800"/>
 
-  <h1>🧠 LLM Fine-Tuner v3.2 — Technical Reference</h1>
+  <h1>🧠 LLM Fine-Tuner — Technical Reference</h1>
 
   <p><em>For the ones who actually read the loss curves.</em><br>
   Full parameter reference · Architecture notes · Suggested configs · Fix history · CLI deep dive</p>
@@ -13,18 +13,18 @@
     <img src="https://img.shields.io/github/license/Yog-Sotho/LLM-fine-tuner?style=for-the-badge&color=10b981" alt="License">
   </a>
   <a href="https://github.com/Yog-Sotho/LLM-fine-tuner/releases">
-    <img src="https://img.shields.io/badge/version-v3.2-3b82f6?style=for-the-badge" alt="v3.2">
+    <img src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2FYog-Sotho%2FLLM-fine-tuner%2Fmain%2Fconfig%2Fconstants.py&search=APP_VERSION%20%3D%20%22(%5B%5E%22%5D%2B)%22&replace=v%241&label=version&style=for-the-badge&color=3b82f6" alt="Version">
   </a>
   <img src="https://img.shields.io/badge/Python-3.10%2B-yellow?style=for-the-badge&logo=python" alt="Python">
-  <img src="https://img.shields.io/badge/PyTorch-2.5%2B-ee4c2c?style=for-the-badge&logo=pytorch" alt="PyTorch">
-  <img src="https://img.shields.io/badge/Transformers-4.48%2B-ffd21e?style=for-the-badge" alt="Transformers">
+  <img src="https://img.shields.io/badge/PyTorch-2.6%2B-ee4c2c?style=for-the-badge&logo=pytorch" alt="PyTorch">
+  <img src="https://img.shields.io/badge/Transformers-4.56%2B-ffd21e?style=for-the-badge" alt="Transformers">
 </div>
 
 ---
 
 ## Architecture Overview
 
-LLM Fine-Tuner v3.2 is a fully modular Python application structured around a clean unidirectional dependency graph:
+LLM Fine-Tuner is a fully modular Python application structured around a clean unidirectional dependency graph:
 
 ```
 config/ → core/ → data/ → training/ → inference/ → export/ → ui/ / cli/
@@ -648,18 +648,18 @@ echo "All done!"
 ## Testing
 
 ```bash
-pip install pytest
+pip install -e ".[dev]"
 pytest tests/ -v
 
 # Individual suites
-pytest tests/test_training_guards.py -v    # v3.2 Fix #1 split guard
-pytest tests/test_ppo_reward_type.py -v    # v3.2 Fix #2 reward float
-pytest tests/test_cli.py -v                # v3.2 Fix #3 --help + guards
+pytest tests/test_training_guards.py -v    # small-dataset split guard
+pytest tests/test_cli.py -v                # CLI commands and guards
 pytest tests/test_data_loader.py -v        # loader, ZIP security
-pytest tests/test_preprocessing.py -v     # validate, duplicate detection
+pytest tests/test_preprocessing.py -v      # validate, duplicate detection
+pytest tests/test_smoke_training.py -v     # real training on a tiny model
 ```
 
-All 37 tests pass with no GPU required (heavy functions are mocked).
+No GPU is needed: heavy functions are mocked, and the smoke tests train tiny models on CPU.
 
 ---
 

@@ -68,7 +68,7 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
 
     Returns a status string for display in the UI.
     """
-    # Sentinel: strip whitespace and validate against path traversal / malformed input.
+    # Strip whitespace and validate against path traversal / malformed input.
     repo_id = repo_id.strip() if repo_id else ""
     token = token.strip() if token else ""
     model_path = model_path.strip() if model_path else ""

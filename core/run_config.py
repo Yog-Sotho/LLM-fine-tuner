@@ -21,6 +21,7 @@ from importlib import metadata
 import yaml
 
 from config.constants import (
+    APP_VERSION,
     HUB_DATASET_ID_PATTERN,
     RUN_CONFIG_FILENAME,
     RUN_NAME_PATTERN,
@@ -53,7 +54,7 @@ def dataset_fingerprint(dataset) -> dict:
 
 
 def library_versions() -> dict[str, str]:
-    versions = {}
+    versions = {"llm-fine-tuner": APP_VERSION}
     for name in _LIBRARIES:
         try:
             versions[name] = metadata.version(name)

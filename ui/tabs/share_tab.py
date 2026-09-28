@@ -25,7 +25,7 @@ def build_share_tab() -> dict:
             push_status = gr.Markdown(" ")
 
         gr.Markdown("---")
-        gr.Markdown("### 📊 v2.7 Model Registry & Versioning (Base Model Auto-Filled)")
+        gr.Markdown("### 📊 Model Registry & Versioning (Base Model Auto-Filled)")
         gr.Markdown("_Upload versioned model snapshots with metadata to the Hugging Face Hub._")
         with gr.Row():
             with gr.Column():

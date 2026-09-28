@@ -1,6 +1,4 @@
 LLM-fine-tuner/
-├── archive/
-│   └── LLM_fine_tuner_v3.2.py
 ├── cli/
 │   ├── __init__.py
 │   └── commands.py
@@ -11,6 +9,8 @@ LLM-fine-tuner/
 │   ├── __init__.py
 │   ├── callbacks.py
 │   ├── hardware.py
+│   ├── model_card.py
+│   ├── run_config.py
 │   └── state.py
 ├── data/
 │   ├── __init__.py
@@ -18,6 +18,10 @@ LLM-fine-tuner/
 │   ├── loader.py
 │   └── preprocessing.py
 ├── docs/
+│   ├── project/
+│   │   ├── .audit/
+│   │   │   └── results_log.md
+│   │   └── codebase_audit.md
 │   ├── 01_installation.md
 │   ├── 02_quick_start.md
 │   ├── 03_data_preparation.md
@@ -31,55 +35,85 @@ LLM-fine-tuner/
 │   ├── 11_troubleshooting.md
 │   ├── 12_faq.md
 │   ├── 13_docker.md
-│   └── index.md
+│   ├── dirtree.txt
+│   ├── index.md
+│   └── Llama3_guide.md
 ├── export/
 │   ├── __init__.py
 │   ├── gguf.py
 │   ├── hub.py
+│   ├── quantize.py
 │   ├── registry.py
+│   ├── serve.py
 │   └── utils.py
 ├── Images/
 │   ├── heretic.png
 │   ├── heretic_geek.png
 │   ├── LLM1.png
-│   ├── logo.jpg
 │   ├── llm_synapsis.png
 │   ├── llm_terminal.png
+│   ├── logo.jpg
 │   └── unsloth.png
 ├── inference/
 │   ├── __init__.py
+│   ├── benchmarks.py
 │   ├── evaluation.py
 │   ├── generate.py
+│   ├── remote.py
 │   └── vllm_runner.py
 ├── tests/
 │   ├── __init__.py
+│   ├── conftest.py
+│   ├── test_augmentation_batching.py
 │   ├── test_cli.py
+│   ├── test_cli_path_traversal.py
+│   ├── test_data_formats.py
 │   ├── test_data_loader.py
+│   ├── test_deploy.py
+│   ├── test_evaluation_batching.py
+│   ├── test_evaluation_suite.py
+│   ├── test_grpo_rewards.py
+│   ├── test_handler_security.py
+│   ├── test_logging_and_version.py
+│   ├── test_model_card.py
+│   ├── test_model_loading.py
+│   ├── test_path_traversal_hardened.py
 │   ├── test_preprocessing.py
-│   ├── test_ppo_reward_type.py
+│   ├── test_redact_sensitive_info.py
+│   ├── test_run_config.py
+│   ├── test_security_guards_new.py
+│   ├── test_sentinel_fixes.py
+│   ├── test_session_and_security.py
+│   ├── test_smoke_training.py
+│   ├── test_stats_calculation.py
+│   ├── test_token_security.py
+│   ├── test_training_data.py
 │   └── test_training_guards.py
 ├── training/
 │   ├── __init__.py
+│   ├── grpo.py
+│   ├── kto.py
 │   ├── orpo.py
-│   ├── ppo.py
 │   ├── reward.py
-│   └── sft.py
+│   ├── sft.py
+│   └── vision.py
 ├── ui/
+│   ├── tabs/
+│   │   ├── __init__.py
+│   │   ├── data_tab.py
+│   │   ├── evaluation_tab.py
+│   │   ├── gguf_tab.py
+│   │   ├── inference_tab.py
+│   │   ├── rlhf_tab.py
+│   │   ├── share_tab.py
+│   │   └── train_tab.py
 │   ├── __init__.py
 │   ├── app.py
 │   ├── css.py
-│   ├── handlers.py
-│   └── tabs/
-│       ├── __init__.py
-│       ├── data_tab.py
-│       ├── evaluation_tab.py
-│       ├── gguf_tab.py
-│       ├── inference_tab.py
-│       ├── rlhf_tab.py
-│       ├── share_tab.py
-│       └── train_tab.py
+│   └── handlers.py
 ├── .dockerignore
 ├── .gitignore
+├── CLAUDE.md
 ├── docker-compose.yml
 ├── docker-entrypoint.sh
 ├── Dockerfile
@@ -89,4 +123,6 @@ LLM-fine-tuner/
 ├── main.py
 ├── pyproject.toml
 ├── README.md
-└── README_for_geeks.md
+├── README_for_geeks.md
+├── requirements.txt
+└── setup.py

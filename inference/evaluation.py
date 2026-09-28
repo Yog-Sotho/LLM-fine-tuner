@@ -62,7 +62,7 @@ from inference.generate import _load_for_inference
 def _esc(s: str) -> str:
     """Escape HTML special characters in ``s`` for safe inline rendering.
 
-    Sentinel: Enhanced to include single quote escaping (&#x27;) as per
+    Enhanced to include single quote escaping (&#x27;) as per
     OWASP recommendations for robust XSS prevention.
     """
     return (
@@ -281,7 +281,7 @@ def llm_judge_evaluate(
     model, tokenizer = _load_for_inference(judge_model_name, judge_lora_path)
 
     results = []
-    # BOLT OPTIMIZATION: Process judge evaluations in batches (default size 8)
+    # Process judge evaluations in batches (default size 8)
     # to utilize GPU parallelism, significantly speeding up large evaluations.
     batch_size = 8
     for i in range(0, len(prompts), batch_size):
@@ -325,7 +325,7 @@ def llm_judge_evaluate(
 
         # Simplified prompt stripping: left-padding ensures all responses start
         # at the same relative offset (input_ids.shape[1]).
-        # BOLT OPTIMIZATION: Using batch_decode instead of serial decode for faster processing.
+        # Using batch_decode instead of serial decode for faster processing.
         input_len = inputs["input_ids"].shape[1]
         judgments = tokenizer.batch_decode(outputs[:, input_len:], skip_special_tokens=True)
 
@@ -558,7 +558,7 @@ def on_evaluate_click(
 
     Returns (metrics_str, result_dataframe, preview_html).
     """
-    # Sentinel: strip whitespace and validate against path traversal.
+    # Strip whitespace and validate against path traversal.
     eval_custom_model = eval_custom_model.strip() if eval_custom_model else ""
     eval_lora_path = eval_lora_path.strip() if eval_lora_path else ""
     judge_model_name = judge_model_name.strip() if judge_model_name else ""
@@ -593,7 +593,7 @@ def on_evaluate_click(
     try:
         progress(0, desc="Loading evaluation dataset…")
         if eval_file.name.endswith(".csv"):
-            # BOLT OPTIMIZATION: Only read the required 'prompt' and 'reference' columns
+            # Only read the required 'prompt' and 'reference' columns
             # to save memory and parsing overhead, especially with large datasets.
             header_cols = pd.read_csv(eval_file.name, nrows=0).columns.tolist()
             if "prompt" not in header_cols:

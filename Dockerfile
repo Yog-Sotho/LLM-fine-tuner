@@ -1,5 +1,5 @@
 # =============================================================================
-# 🧠 LLM Fine-Tuner v3.2 — GPU Dockerfile (CUDA 12.6 / cuDNN 9)
+# 🧠 LLM Fine-Tuner — GPU Dockerfile (CUDA 12.6 / cuDNN 9)
 # =============================================================================
 #
 # Multi-stage build:
@@ -23,7 +23,7 @@
 FROM nvidia/cuda:12.6.0-cudnn-runtime-ubuntu22.04 AS builder
 
 LABEL maintainer="Yog-Sotho"
-LABEL description="LLM Fine-Tuner v3.2 build stage"
+LABEL description="LLM Fine-Tuner build stage"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -111,8 +111,7 @@ RUN python3 -c "import nltk; nltk.download('punkt', quiet=True); nltk.download('
 FROM nvidia/cuda:12.6.0-cudnn-runtime-ubuntu22.04 AS runtime
 
 LABEL maintainer="Yog-Sotho"
-LABEL description="LLM Fine-Tuner v3.2 — GPU runtime"
-LABEL version="3.2"
+LABEL description="LLM Fine-Tuner — GPU runtime"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \

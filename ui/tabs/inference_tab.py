@@ -62,12 +62,12 @@ def build_inference_tab() -> dict:
             lora_zip_dir_state = gr.State(" ")
 
         gr.Markdown("---")
-        gr.Markdown("### ⚡ v2.7 vLLM Production Inference")
+        gr.Markdown("### ⚡ vLLM Production Inference")
         gr.Markdown(
             f"_vLLM available: {'✅ (cached)' if HAS_VLLM else '❌ (pip install vllm>=0.2.0)'}_"
         )
         gr.Markdown(
-            "⚠️ **v2.9 Note:** vLLM requires a **merged full model**, not a PEFT adapter "
+            "⚠️ **Note:** vLLM requires a **merged full model**, not a PEFT adapter "
             "directory. Use the Merge Adapter tool below before running vLLM inference."
         )
         gr.Markdown("#### 🔗 Step 1 — Merge LoRA Adapter (required before vLLM)")

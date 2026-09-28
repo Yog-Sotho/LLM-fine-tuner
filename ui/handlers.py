@@ -142,7 +142,7 @@ def on_train_click(
     if file is None and augmented_ds is None:
         return "❌ Please upload a data file first.", None, None, []
 
-    # Sentinel: strip whitespace and validate against path traversal.
+    # Strip whitespace and validate against path traversal.
     custom_model = custom_model.strip() if custom_model else ""
     if err := validate_path_traversal(custom_model):
         return err, None, None, []
@@ -274,7 +274,7 @@ def on_stop(request: gr.Request | None = None) -> str:
 
 
 def on_generate(prompt, model_choice, custom_model, lora_path, max_tok, temp, top_p) -> str:
-    # Sentinel: strip whitespace and validate against path traversal.
+    # Strip whitespace and validate against path traversal.
     custom_model = custom_model.strip() if custom_model else ""
     lora_path = lora_path.strip() if lora_path else ""
     if err := (validate_path_traversal(custom_model) or validate_path_traversal(lora_path)):
@@ -287,7 +287,7 @@ def on_generate(prompt, model_choice, custom_model, lora_path, max_tok, temp, to
 def on_batch_test(
     f, model_choice, custom_model, lora_path, request: gr.Request | None = None
 ) -> str:
-    # Sentinel: strip whitespace and validate against path traversal.
+    # Strip whitespace and validate against path traversal.
     custom_model = custom_model.strip() if custom_model else ""
     lora_path = lora_path.strip() if lora_path else ""
     if err := (validate_path_traversal(custom_model) or validate_path_traversal(lora_path)):
@@ -341,7 +341,7 @@ def on_file_upload(file, training_mode="sft"):
             None,
         )
 
-    # Sentinel: validate path traversal on file upload
+    # Validate path traversal on file upload
     if file and hasattr(file, "name") and file.name:
         if err := validate_path_traversal(file.name):
             return (
@@ -369,7 +369,7 @@ def on_file_upload(file, training_mode="sft"):
         )
 
     try:
-        # BOLT OPTIMIZATION: Bypassing duplicate disk read/parsing for CSV and Excel files.
+        # Bypassing duplicate disk read/parsing for CSV and Excel files.
         # We load raw_df from the file exactly once, and use direct in-memory conversion
         # via load_dataset_from_dataframe instead of loading the dataset from the file again.
         raw_df = None
@@ -487,7 +487,7 @@ def on_refresh_preview(
             col_map[col_text] = COL_TEXT
 
     try:
-        # BOLT OPTIMIZATION: Bypassing I/O by loading directly from raw_df_state
+        # Bypassing I/O by loading directly from raw_df_state
         # when available, avoiding redundant temporary file creation.
         if raw_df_state is not None:
             ds = load_dataset_from_dataframe(raw_df_state, col_map, is_dpo=is_dpo)

@@ -13,6 +13,7 @@ safe_extract_zip       — ZIP extraction with path-traversal guard
 """
 
 import json
+import logging
 import os
 import re
 import zipfile
@@ -48,6 +49,8 @@ from config.constants import (
 )
 from core.state import validate_path_traversal
 from data.preprocessing import chat_dataset
+
+logger = logging.getLogger(__name__)
 
 
 def detect_file_type(file) -> str | None:
@@ -97,7 +100,7 @@ def load_dataset_from_dataframe(
 ) -> Dataset:
     """Convert a Pandas DataFrame directly to a HuggingFace Dataset.
 
-    BOLT OPTIMIZATION: This function avoids redundant I/O by bypassing the
+    This function avoids redundant I/O by bypassing the
     need to write the DataFrame to a temporary file and reading it back
     during dataset preview refreshes.
     """
@@ -108,9 +111,8 @@ def load_dataset_from_dataframe(
             valid_mapping = {k: v for k, v in column_mapping.items() if k in df.columns}
             ignored = {k: v for k, v in column_mapping.items() if k not in df.columns}
             if ignored:
-                print(
-                    f"⚠️ Column mapping: the following source columns were not "
-                    f"found and are ignored: {list(ignored.keys())}"
+                logger.warning(
+                    "Column mapping: source columns not found, ignored: %s", list(ignored)
                 )
             df = df.rename(columns=valid_mapping)
 
@@ -236,7 +238,7 @@ def load_dataset_from_file(
         if file_type in ("jsonl", "json"):
             if chat_rows := _read_chat_rows(path, file_type):
                 return chat_dataset(chat_rows)
-            # BOLT OPTIMIZATION: Use Dataset.from_json for faster, Arrow-backed loading.
+            # Use Dataset.from_json for faster, Arrow-backed loading.
             return Dataset.from_json(str(path))
 
         # ── Plain text ────────────────────────────────────────────────────
@@ -266,9 +268,8 @@ def load_dataset_from_file(
             valid_mapping = {k: v for k, v in column_mapping.items() if k in df.columns}
             ignored = {k: v for k, v in column_mapping.items() if k not in df.columns}
             if ignored:
-                print(
-                    f"⚠️ Column mapping: the following source columns were not "
-                    f"found and are ignored: {list(ignored.keys())}"
+                logger.warning(
+                    "Column mapping: source columns not found, ignored: %s", list(ignored)
                 )
             df = df.rename(columns=valid_mapping)
 
@@ -398,7 +399,7 @@ def safe_extract_zip(zip_path: str, extract_dir: str) -> str:
     paths. The fix resolves every target path with os.path.realpath and verifies
     it is inside the extract directory before extracting.
 
-    Sentinel: Enforces decompression limits (max 500 MB total uncompressed size,
+    Enforces decompression limits (max 500 MB total uncompressed size,
     max 500 files, and max 100x decompression ratio on individual files > 10 MB)
     to mitigate Zip Bomb / Decompression Bomb Denial of Service (DoS) risks.
 
@@ -444,7 +445,7 @@ def safe_extract_zip(zip_path: str, extract_dir: str) -> str:
             # The target must be inside the extract directory
             # (os.sep suffix prevents prefix-collision: /tmp/out vs /tmp/outside)
             if not target.startswith(abs_extract_dir + os.sep) and target != abs_extract_dir:
-                # Sentinel: ensure error message contains "Path traversal" for test compatibility
+                # Ensure error message contains "Path traversal" for test compatibility
                 raise ValueError(
                     f"Path traversal attempt: Unsafe path in ZIP: {file_info.filename!r}"
                 )

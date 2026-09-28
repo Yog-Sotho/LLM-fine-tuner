@@ -32,6 +32,7 @@ Patch log
 """
 
 import gc
+import logging
 import subprocess
 import threading
 import time
@@ -101,6 +102,17 @@ from data.preprocessing import (
 )
 from training.vision import train_vision_sft
 
+logger = logging.getLogger(__name__)
+
+
+def _warn(log_callback, message: str) -> None:
+    """Log a warning and add it to the run's records (shown with the training log)."""
+    logger.warning(message)
+    log_callback.records.append(
+        {"step": 0, "train_loss": 0.0, "eval_loss": float("nan"), "elapsed_s": 0.0,
+         "eta_s": 0.0, "note": f"⚠️ {message}"}
+    )  # fmt: skip
+
 
 def train_model(
     model_name,
@@ -145,7 +157,7 @@ def train_model(
     -------
     (summary_str, log_records_list)
     """
-    # Sentinel: strip whitespace and validate against path traversal (blocking '..' and '\').
+    # Strip whitespace and validate against path traversal (blocking '..' and '\').
     model_name = model_name.strip() if model_name else ""
     output_dir = output_dir.strip() if output_dir else ""
 
@@ -251,16 +263,7 @@ def train_model(
 
         # ── Path A: QLoRA Enhanced (CUDA only) ────────────────────────────
         if use_qlora_enhanced and device != "cuda":
-            log_callback.records.append(
-                {
-                    "step": 0,
-                    "train_loss": 0.0,
-                    "eval_loss": float("nan"),
-                    "elapsed_s": 0.0,
-                    "eta_s": 0.0,
-                    "note": "⚠️ QLoRA Enhanced requested but CUDA unavailable — loading float32.",
-                }
-            )
+            _warn(log_callback, "QLoRA Enhanced requested but CUDA unavailable — loading float32.")
             if progress is not None:
                 progress(0.1, desc="⚠️ QLoRA Enhanced: CUDA unavailable, loading float32…")
 
@@ -368,30 +371,20 @@ def train_model(
                 )
 
         if use_unsloth and HAS_UNSLOTH and lora_variant == "DoRA":
-            log_callback.records.append(
-                {
-                    "step": 0,
-                    "train_loss": 0.0,
-                    "eval_loss": float("nan"),
-                    "elapsed_s": 0.0,
-                    "eta_s": 0.0,
-                    "note": "⚠️ Unsloth skipped: it does not support DoRA — using PEFT.",
-                }
-            )
+            _warn(log_callback, "Unsloth skipped: it does not support DoRA — using PEFT.")
 
         # ── Warn if Unsloth + non-LoRA PEFT ───────────────────────────────
         # v2.9 Minor Fix #8
         if use_unsloth and HAS_UNSLOTH and peft_method not in ["LoRA", "Auto"]:
-            print(
-                "⚠️ Warning: Unsloth is optimized for LoRA/Auto. Other PEFT methods may cause issues."
-            )
+            _warn(log_callback, "Unsloth is optimized for LoRA/Auto; other PEFT methods may fail.")
 
         # ── Apply PEFT (if not already applied) ───────────────────────────
         # v3.1 Fix #5: Warn when Auto + use_lora=False → full fine-tune.
         if peft_method == "Auto" and not use_lora and not peft_applied:
-            print(
-                "⚠️ PEFT method is 'Auto' but 'Enable LoRA' is unchecked — "
-                "no adapter will be applied. Training will proceed as full fine-tuning."
+            _warn(
+                log_callback,
+                "PEFT method is 'Auto' but 'Enable LoRA' is unchecked — "
+                "no adapter will be applied. Training will proceed as full fine-tuning.",
             )
 
         if peft_method != "Full Fine-tuning" and not peft_applied:
@@ -469,9 +462,10 @@ def train_model(
                     **variant_kwargs,
                 )
                 model = get_peft_model(model, lora_cfg)
-                print(
-                    f"⚠️ QLoRA Enhanced: CUDA unavailable — NF4 quantization skipped. "
-                    f"Falling back to standard LoRA (rank={lora_rank}, alpha={lora_alpha})."
+                _warn(
+                    log_callback,
+                    "QLoRA Enhanced: CUDA unavailable — NF4 quantization skipped. "
+                    f"Falling back to standard LoRA (rank={lora_rank}, alpha={lora_alpha}).",
                 )
 
         # ── TrainingArguments + Trainer ────────────────────────────────────
@@ -546,16 +540,7 @@ def train_model(
             uses_fa2 = getattr(model.config, "_attn_implementation", None) == "flash_attention_2"
             packing = bool(hyperparams.get("packing")) and uses_fa2 and device == "cuda"
             if hyperparams.get("packing") and not packing:
-                log_callback.records.append(
-                    {
-                        "step": 0,
-                        "train_loss": 0.0,
-                        "eval_loss": float("nan"),
-                        "elapsed_s": 0.0,
-                        "eta_s": 0.0,
-                        "note": "⚠️ Packing skipped: it needs Flash Attention 2 on a CUDA GPU.",
-                    }
-                )
+                _warn(log_callback, "Packing skipped: it needs Flash Attention 2 on a CUDA GPU.")
             sft_config = SFTConfig(
                 **base_training_args,
                 max_length=hyperparams["max_length"],

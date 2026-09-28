@@ -28,7 +28,7 @@ def build_evaluation_tab() -> dict:
         gr.HTML(
             '<div id="eval-banner">'
             '<h3 style="color:#f59e0b;margin:0">'
-            "🧪 v2.7 Advanced Evaluation Suite (Batched)"
+            "🧪 Advanced Evaluation Suite (Batched)"
             "</h3></div>"
         )
         gr.Markdown(

@@ -12,6 +12,7 @@ Commands are argument lists — no shell.
 """
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -19,6 +20,8 @@ import subprocess
 
 from config.constants import HAS_VLLM, HUB_MODEL_ID_PATTERN
 from core.state import validate_adapter_dir, validate_path_traversal
+
+logger = logging.getLogger(__name__)
 
 SERVED_NAME_PATTERN = r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}"
 
@@ -79,5 +82,6 @@ def build_serve_command(
 def serve(model: str, host: str, port: int, api_key: str = "", name: str = "model") -> int:
     """Run the server in the foreground (Ctrl+C stops it). Returns its exit code."""
     cmd, env = build_serve_command(model, host, port, api_key, name)
-    print(f"🚀 {' '.join(cmd)}\n   OpenAI-compatible API: http://{host}:{port}/v1  (model: {name})")
+    logger.info("🚀 %s", " ".join(cmd))
+    logger.info("OpenAI-compatible API: http://%s:%s/v1  (model: %s)", host, port, name)
     return subprocess.run(cmd, env={**os.environ, **env}).returncode
