@@ -82,7 +82,7 @@ def get_hardware_summary() -> str:
     deps.append("trl ✓ (DPO + SFT ready)" if HAS_TRL else "trl ✗ (pip install trl for DPO)")
     lines.append("- 📦 **Optional deps:** " + " &nbsp;|&nbsp; ".join(deps))
 
-    # v2.7 RLHF / eval deps
+    # RLHF / eval deps
     v27 = []
     v27.append("Reward model ✓" if HAS_REWARD_TRAINER else "Reward model ✗")
     v27.append("GRPO ✓" if HAS_GRPO else "GRPO ✗")
@@ -94,7 +94,7 @@ def get_hardware_summary() -> str:
     v27.append("nltk ✓" if HAS_NLTK else "nltk ✗")
     v27.append("nlpaug ✓" if HAS_NLPAUG else "nlpaug ✗")
     v27.append("vLLM ✓ (cached)" if HAS_VLLM else "vLLM ✗")
-    lines.append("- 🆕 **v2.7 deps:** " + " &nbsp;|&nbsp; ".join(v27))
+    lines.append("- 🧩 **Training & eval:** " + " &nbsp;|&nbsp; ".join(v27))
 
     return "\n".join(lines)
 
