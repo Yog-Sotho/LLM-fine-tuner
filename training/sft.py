@@ -63,6 +63,7 @@ from config.constants import (
     ALLOW_REMOTE_CODE,
     COL_MESSAGES,
     DEFAULT_EVAL_SPLIT,
+    DEFAULT_LORA_VARIANT,
     DEFAULT_SEED,
     HAS_ADAPTER_CONFIG,
     HAS_HERETIC,  # N-5 FIX: imported so the Heretic Mode branch can guard the subprocess call
@@ -72,6 +73,7 @@ from config.constants import (
     QLORA_ENHANCED_BNB_KWARGS,
     QLORA_ENHANCED_LORA_CONFIG,
     TOKEN_STATS_SAMPLE,
+    UNSLOTH_LORA_TARGETS,
 )
 from core.callbacks import (
     ETAProgressCallback,
@@ -83,6 +85,7 @@ from core.hardware import (
     full_finetune_dtype,
     get_lora_targets,
     is_unsloth_supported,
+    lora_variant_kwargs,
     select_precision,
 )
 from core.run_config import latest_checkpoint, save_run_config
@@ -126,6 +129,7 @@ def train_model(
     seed: int = DEFAULT_SEED,
     report_to: str = "none",
     run_name: str | None = None,
+    lora_variant: str = DEFAULT_LORA_VARIANT,
 ):
     """Unified SFT / DPO training pipeline.
 
@@ -146,6 +150,7 @@ def train_model(
 
     # v2.9 Major Fix #2: Derive QLoRA Enhanced solely from peft_method.
     use_qlora_enhanced = peft_method == "QLoRA Enhanced"
+    variant_kwargs = lora_variant_kwargs(lora_variant)  # rejects unknown variants early
     # v3.0 Fix #1 (Critical): Define is_dpo here — was previously undefined.
     is_dpo = training_mode == "dpo"
 
@@ -265,18 +270,14 @@ def train_model(
                     torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
                 )
             model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
-            targets = (
-                QLORA_ENHANCED_LORA_CONFIG["target_modules"]
-                if not any(k in model_name.lower() for k in ["gpt2", "pythia", "falcon"])
-                else get_lora_targets(model_name)
-            )
             lora_cfg = LoraConfig(
                 task_type=TaskType.CAUSAL_LM,
                 r=QLORA_ENHANCED_LORA_CONFIG["r"],
                 lora_alpha=QLORA_ENHANCED_LORA_CONFIG["lora_alpha"],
-                target_modules=targets,
+                target_modules=QLORA_ENHANCED_LORA_CONFIG["target_modules"],
                 lora_dropout=QLORA_ENHANCED_LORA_CONFIG["lora_dropout"],
                 bias=QLORA_ENHANCED_LORA_CONFIG["bias"],
+                **variant_kwargs,
             )
             model = get_peft_model(model, lora_cfg)
             peft_applied = True
@@ -287,6 +288,7 @@ def train_model(
             and HAS_UNSLOTH
             and peft_method in ["LoRA", "Auto"]
             and is_unsloth_supported(model_name)
+            and lora_variant != "DoRA"  # Unsloth documents no DoRA support
         ):
             from unsloth import FastLanguageModel, is_bfloat16_supported  # lazy
 
@@ -301,10 +303,11 @@ def train_model(
             model = FastLanguageModel.get_peft_model(
                 model,
                 r=lora_rank,
-                target_modules=get_lora_targets(model_name),
+                target_modules=UNSLOTH_LORA_TARGETS,
                 lora_alpha=lora_alpha,
                 lora_dropout=0.05,
                 bias="none",
+                use_rslora=lora_variant == "rsLoRA",
                 use_gradient_checkpointing=gradient_checkpointing,
                 random_state=3407,
             )
@@ -347,6 +350,18 @@ def train_model(
                     trust_remote_code=ALLOW_REMOTE_CODE,
                 )
 
+        if use_unsloth and HAS_UNSLOTH and lora_variant == "DoRA":
+            log_callback.records.append(
+                {
+                    "step": 0,
+                    "train_loss": 0.0,
+                    "eval_loss": float("nan"),
+                    "elapsed_s": 0.0,
+                    "eta_s": 0.0,
+                    "note": "⚠️ Unsloth skipped: it does not support DoRA — using PEFT.",
+                }
+            )
+
         # ── Warn if Unsloth + non-LoRA PEFT ───────────────────────────────
         # v2.9 Minor Fix #8
         if use_unsloth and HAS_UNSLOTH and peft_method not in ["LoRA", "Auto"]:
@@ -371,9 +386,10 @@ def train_model(
                     task_type=TaskType.CAUSAL_LM,
                     r=lora_rank,
                     lora_alpha=lora_alpha,
-                    target_modules=get_lora_targets(model_name),
+                    target_modules=get_lora_targets(),
                     lora_dropout=0.05,
                     bias="none",
+                    **variant_kwargs,
                 )
                 model = get_peft_model(model, lora_cfg)
 
@@ -426,14 +442,14 @@ def train_model(
 
             elif peft_method == "QLoRA Enhanced":
                 # v3.0 Fix #3 & #4: CUDA unavailable — fall back to standard LoRA.
-                targets = get_lora_targets(model_name)
                 lora_cfg = LoraConfig(
                     task_type=TaskType.CAUSAL_LM,
                     r=lora_rank,
                     lora_alpha=lora_alpha,
-                    target_modules=targets,
+                    target_modules=get_lora_targets(),
                     lora_dropout=0.05,
                     bias="none",
+                    **variant_kwargs,
                 )
                 model = get_peft_model(model, lora_cfg)
                 print(
@@ -573,7 +589,12 @@ def train_model(
             seed=seed,
             report_to=report_to,
             hyperparams=dict(hyperparams),
-            peft={"method": peft_method, "lora_rank": lora_rank, "lora_alpha": lora_alpha},
+            peft={
+                "method": peft_method,
+                "lora_rank": lora_rank,
+                "lora_alpha": lora_alpha,
+                "lora_variant": lora_variant,
+            },
             use_chat_template=bool(use_chat_template),
             system_prompt=system_prompt,
             dpo_beta=dpo_beta if is_dpo else None,

@@ -106,6 +106,12 @@ LoRA (Low-Rank Adaptation) is the most popular PEFT method. It inserts small tra
 **LoRA Settings (in Advanced Hyperparameters):**
 - **LoRA Rank** (default: 8) — Higher = more capacity to learn, more VRAM. Try 16 or 32 for better quality.
 - **LoRA Alpha** (default: 16) — Usually set to 2× the rank. Controls the strength of the adaptation.
+- **LoRA variant** (default: LoRA)
+  - **LoRA** — the standard method.
+  - **rsLoRA** — scales by alpha/√rank instead of alpha/rank, so higher ranks (32–128) train more steadily.
+  - **DoRA** — learns the size and the direction of each weight change separately; often better at low rank, somewhat slower to train. Unsloth doesn't support DoRA, so it is skipped (with a note) when DoRA is chosen. A DoRA adapter can't be compared with its base model in the Evaluation tab (PEFT cannot switch DoRA off per request).
+
+LoRA is applied to **every linear layer** of the transformer blocks — attention and MLP (`q/k/v/o_proj`, `gate/up/down_proj`, or `c_attn/c_fc/c_proj` on GPT-2) — as current practice recommends; the output layer is left alone.
 
 ### QLoRA Enhanced — For Low-VRAM Machines
 

@@ -188,7 +188,7 @@ BitsAndBytesConfig(
 LoraConfig(
     r=64,
     lora_alpha=128,
-    target_modules=["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    target_modules="all-linear",  # every attention + MLP projection, any architecture
     lora_dropout=0.05,
     bias="none",
 )

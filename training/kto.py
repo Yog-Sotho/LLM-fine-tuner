@@ -135,7 +135,7 @@ def train_kto(
                 task_type=TaskType.CAUSAL_LM,
                 r=16,
                 lora_alpha=32,
-                target_modules=get_lora_targets(model_name),
+                target_modules=get_lora_targets(),
                 lora_dropout=0.05,
                 bias="none",
             ),

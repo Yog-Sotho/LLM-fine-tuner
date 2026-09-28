@@ -83,7 +83,7 @@ bnb_4bit_use_double_quant = True
 # LoRA config (applied automatically)
 r = 64  # Higher rank than standard LoRA
 lora_alpha = 128
-target_modules = ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+target_modules = "all-linear"  # every linear layer of the transformer blocks
 lora_dropout = 0.05
 ```
 

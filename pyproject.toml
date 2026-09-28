@@ -61,6 +61,7 @@ eval = [
     "nltk>=3.8.0",
     "nlpaug>=1.1.10",
     "lm-eval>=0.4.13,<0.5",  # standard benchmarks (ARC, HellaSwag, GSM8K, …)
+    "math-verify>=0.5.2",  # GRPO maths-answer reward (TRL's accuracy_reward)
 ]
 quant = [
     "auto-gptq>=0.7.1",

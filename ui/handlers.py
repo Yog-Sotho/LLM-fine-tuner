@@ -43,6 +43,7 @@ from config.constants import (
     COL_REJECTED,
     COL_TEXT,
     DEFAULT_EVAL_SPLIT,
+    DEFAULT_LORA_VARIANT,
     DEFAULT_REPORT_TO,
     DEFAULT_SEED,
     RUNS_DIR,
@@ -100,6 +101,7 @@ def on_train_click(
     seed=DEFAULT_SEED,
     report_to=DEFAULT_REPORT_TO,
     eval_split=DEFAULT_EVAL_SPLIT,
+    lora_variant=DEFAULT_LORA_VARIANT,
     progress=gr.Progress(),
     request: gr.Request | None = None,
 ):
@@ -244,6 +246,7 @@ def on_train_click(
             seed=int(seed),
             report_to=report_to,
             run_name=run_name,
+            lora_variant=lora_variant,
         )
         zip_path = create_zip_from_folder(output_dir)
 

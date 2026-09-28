@@ -78,6 +78,7 @@ python main.py train \
 | `--lr` | `2e-4` | Learning rate |
 | `--peft` | `LoRA` | PEFT method: `LoRA`, `QLoRA Enhanced`, `Full Fine-tuning`, `Auto` |
 | `--lora-rank` | `8` | LoRA rank |
+| `--lora-variant` | `LoRA` | `LoRA`, `rsLoRA` or `DoRA` (LoRA goes on every linear layer) |
 | `--qlora-enhanced` | off | Enable QLoRA Enhanced (overrides `--peft`) |
 | `--flash-attn` | off | Enable Flash Attention 2 |
 | `--packing` | off | Pack short samples into full-length sequences (needs `--flash-attn` on a CUDA GPU; ignored otherwise) |
@@ -179,7 +180,7 @@ python main.py orpo \
 
 ### `grpo` — GRPO Fine-Tuning
 
-Online reinforcement learning: several answers are generated per prompt and the ones that beat their group's average reward are reinforced. At least one reward source is required: `--reward-model` and/or a `reference` column in the data.
+Online reinforcement learning: several answers are generated per prompt and the ones that beat their group's average reward are reinforced. At least one reward source is required: `--reward-model` and/or built-in rewards (`--reward`). Without `--reward`, the reference-answer reward is used when the data has a `reference` column.
 
 ```bash
 python main.py grpo \
@@ -206,6 +207,18 @@ python main.py grpo \
 | `--max-completion-length` | `128` | Tokens generated per completion |
 | `--beta` | `0.0` | KL penalty towards the original model (0 = off) |
 | `--resume` | off | Continue from the newest checkpoint in `--output` (saved every 50 steps) |
+| `--reward` | see above | Built-in reward, repeatable: `reference`, `math`, `think_format`, `json`, `regex` |
+| `--regex` | — | Pattern for `--reward regex` (the whole output must match) |
+| `--loss-type` | `dapo` | `dapo`, `dr_grpo`, `grpo` or `bnpo` |
+| `--lora-rank` / `--lora-alpha` | `16` / `32` | LoRA size |
+| `--lora-variant` | `LoRA` | `LoRA`, `rsLoRA` or `DoRA` |
+| `--use-vllm` | off | Generate with vLLM on the training GPU (CUDA; `pip install "trl[vllm]"`) |
+
+Example — reward JSON output that also matches a pattern:
+```bash
+python main.py grpo --policy-model ./sft_merged --data prompts.csv \
+    --reward json --reward regex --regex '\{"answer": \d+\}' --loss-type dr_grpo
+```
 
 **Data format** (`prompts.csv`):
 ```csv

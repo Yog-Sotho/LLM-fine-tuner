@@ -36,7 +36,8 @@ from config.constants import (
     HAS_TRL,
     HAS_UNSLOTH,
     HAS_VLLM,
-    LORA_TARGET_MAP,
+    LORA_TARGET_MODULES,
+    LORA_VARIANTS,
 )
 
 
@@ -152,13 +153,16 @@ def get_model_info(model_id: str) -> str:
     return " Parameters:  unknown  |   Estimated RAM/VRAM:  unknown "
 
 
-def get_lora_targets(model_name: str) -> list:
-    """Return the correct LoRA target module names for the given model family."""
-    m = model_name.lower()
-    for key, targets in LORA_TARGET_MAP.items():
-        if key in m:
-            return targets
-    return LORA_TARGET_MAP["default"]
+def get_lora_targets() -> str:
+    """LoRA target modules: every linear layer of the transformer blocks ("all-linear")."""
+    return LORA_TARGET_MODULES
+
+
+def lora_variant_kwargs(variant: str) -> dict[str, bool]:
+    """LoraConfig options for a LoRA variant (LoRA, rsLoRA or DoRA)."""
+    if variant not in LORA_VARIANTS:
+        raise ValueError(f"Unknown LoRA variant '{variant}'. Choose from: {list(LORA_VARIANTS)}")
+    return dict(LORA_VARIANTS[variant])
 
 
 def is_unsloth_supported(model_name: str) -> bool:

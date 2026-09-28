@@ -75,10 +75,18 @@ GRPO (Group Relative Policy Optimization) is the reinforcement-learning method b
 
 ### Where the reward comes from
 
-You can use either or both:
+Use a reward model, built-in rewards, or both — all chosen rewards are added together:
 
 1. **A reward model** from Tab A — enter its folder in *Reward Model Path*.
-2. **Reference answers** — add a `reference` column. An answer earns reward 1 when it contains the reference (case-insensitive). Ideal for maths, extraction and other tasks with a checkable answer.
+2. **Built-in rewards** (tick any):
+
+| Reward | Gives 1 when… | Needs |
+|---|---|---|
+| Reference answer | the answer contains the `reference` text (case-insensitive) | `reference` column |
+| Maths answer | the answer equals the reference mathematically — `\boxed{0.5}` matches a reference of `\frac{1}{2}` (TRL + math-verify; the answer must be LaTeX, e.g. `\boxed{…}`) | `reference` column, `pip install math-verify` |
+| Think format | the output is `<think>reasoning</think>` followed by the answer | — |
+| Valid JSON | the whole output is valid JSON (a ```` ```json ```` fence is allowed) | — |
+| Regex | the whole output matches your regular expression | the *Regex* box |
 
 ```csv
 prompt,reference
@@ -102,8 +110,11 @@ A prompts-only file (`prompt` column) works when you give a reward model path.
 | Prompts per Step | 1 | Batch size is prompts × completions |
 | Max Completion Tokens | 128 | Length of each generated answer |
 | Resume from last checkpoint | off | Continue from the newest checkpoint in the output directory |
+| Loss | `dapo` | `dapo` (TRL's default) and `dr_grpo` avoid the original `grpo` loss's bias towards short answers; `bnpo` normalises per local batch |
+| LoRA variant / Rank / Alpha | LoRA / 16 / 32 | Same variants as SFT (LoRA, rsLoRA, DoRA), on every linear layer |
+| Generate with vLLM | off | Much faster generation on a CUDA GPU, sharing it with training (TRL colocate mode). Needs `pip install "trl[vllm]"`, which installs the vLLM version your TRL supports |
 
-GRPO generates text during training, so it is slower per step than SFT.
+GRPO generates text during training, so it is slower per step than SFT — vLLM generation helps most there.
 
 ---
 

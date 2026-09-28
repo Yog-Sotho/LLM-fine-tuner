@@ -124,7 +124,7 @@ def train_reward_model_v27(
             task_type=TaskType.SEQ_CLS,
             r=16,
             lora_alpha=32,
-            target_modules=get_lora_targets(model_name),
+            target_modules=get_lora_targets(),
             lora_dropout=0.05,
             bias="none",
         )

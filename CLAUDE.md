@@ -309,6 +309,10 @@ Trained model → push_to_hub()
 
 **PEFT methods:** LoRA, QLoRA Enhanced (NF4 + double quantization), Prefix Tuning, Prompt Tuning, Adapters, Full fine-tuning
 
+**LoRA targets and variants:** every LoRA config uses `get_lora_targets()` (`"all-linear"`: all attention + MLP projections, never the output head) — don't hard-code module names; Unsloth alone gets `UNSLOTH_LORA_TARGETS`. Variants come from `LORA_VARIANTS` via `lora_variant_kwargs()` (LoRA, rsLoRA, DoRA). DoRA can't be switched off per request (`adapter_names`), so `is_lora_model()` excludes it from base-model comparison. PiSSA isn't offered: PEFT can't initialise it on 4-bit weights, which the GPU LoRA path uses.
+
+**GRPO rewards:** built-ins live in `training/grpo.py` (`build_reward_funcs`). Reuse TRL's reward functions (`trl.rewards`) where they exist — they read `completion[0]["content"]`, so wrap plain-string completions with `_as_messages()`. Always set `vllm_mode` explicitly when `use_vllm` (its default differs between TRL versions).
+
 **QLoRA Enhanced** requires `torch.cuda.is_bf16_supported()` — falls back to float16 if unsupported. Config lives in `QLORA_ENHANCED_BNB_KWARGS` in `config/constants.py`.
 
 ---

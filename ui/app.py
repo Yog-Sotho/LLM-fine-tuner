@@ -216,6 +216,7 @@ def build_demo() -> gr.Blocks:
             seed,
             report_to,
             eval_split,
+            lora_variant,
             progress=gr.Progress(),
             request: gr.Request | None = None,
         ):
@@ -260,6 +261,7 @@ def build_demo() -> gr.Blocks:
                 seed=seed,
                 report_to=report_to,
                 eval_split=eval_split,
+                lora_variant=lora_variant,
                 progress=progress,
                 request=request,
             )
@@ -308,6 +310,7 @@ def build_demo() -> gr.Blocks:
                 tt["seed"],
                 tt["report_to"],
                 tt["eval_split"],
+                tt["lora_variant"],
             ],
             outputs=[
                 tt["log_output"],
@@ -410,6 +413,13 @@ def build_demo() -> gr.Blocks:
                 rlt["grpo_max_completion"],
                 rlt["grpo_beta"],
                 rlt["grpo_resume"],
+                rlt["grpo_loss_type"],
+                rlt["grpo_rewards"],
+                rlt["grpo_regex"],
+                rlt["grpo_lora_rank"],
+                rlt["grpo_lora_alpha"],
+                rlt["grpo_lora_variant"],
+                rlt["grpo_use_vllm"],
             ],
             outputs=[rlt["grpo_status"]],
         )

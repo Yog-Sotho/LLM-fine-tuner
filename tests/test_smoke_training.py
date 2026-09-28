@@ -863,3 +863,102 @@ def test_heretic_result_follows_its_exit_code(tiny_model, tmp_path, monkeypatch,
     )  # fmt: skip
     assert expected in summary
     assert ("model too small" in summary) == (exit_code != 0)
+
+
+# ── LoRA variants (every linear layer) ─────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("variant", "flags"),
+    [("LoRA", (False, False)), ("rsLoRA", (True, False)), ("DoRA", (False, True))],
+)
+def test_lora_variants_train_on_every_linear_layer(tiny_model, tmp_path, variant, flags):
+    import json
+
+    from training.sft import train_model
+
+    ds = Dataset.from_dict({"text": ["alpha beta", "gamma delta", "epsilon zeta", "eta theta"]})
+    summary, _ = train_model(
+        tiny_model, ds, str(tmp_path), _hyperparams(), "cpu", "LoRA", True, 4, 8, 10, 64, 1,
+        10, 16, False, 0, "linear", False, False, False, "", progress=None,
+        lora_variant=variant,
+    )  # fmt: skip
+    assert summary.startswith("✅ Training complete"), summary
+    config = json.loads((tmp_path / "adapter_config.json").read_text())
+    assert (config["use_rslora"], config["use_dora"]) == flags
+    # "all-linear" resolves to every attention and MLP projection, never the output head.
+    assert {name.rsplit(".", 1)[-1] for name in config["target_modules"]} == {
+        "q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"
+    }  # fmt: skip
+    assert _assert_run_config(tmp_path, "sft", tiny_model)["peft"]["lora_variant"] == variant
+
+
+def test_dora_adapters_cannot_be_compared_with_base(tiny_model, tmp_path):
+    """PEFT cannot switch DoRA off per request (adapter_names), so the comparison refuses."""
+    from peft import LoraConfig, get_peft_model
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    from inference.evaluation import generate_predictions, is_lora_model
+
+    base = AutoModelForCausalLM.from_pretrained(tiny_model)
+    dora = get_peft_model(base, LoraConfig(r=4, target_modules="all-linear", use_dora=True))
+    assert not is_lora_model(dora)
+    with pytest.raises(ValueError, match="DoRA"):
+        generate_predictions(dora, AutoTokenizer.from_pretrained(tiny_model), ["hi"], 2,
+                             base_model=True)  # fmt: skip
+
+
+def test_cli_rejects_unknown_lora_variant(tmp_path):
+    from typer.testing import CliRunner
+
+    from cli.commands import app
+
+    result = CliRunner().invoke(
+        app, ["train", "--model", "gpt2", "--data", "x.csv", "--lora-variant", "PiSSA"]
+    )
+    assert result.exit_code == 1 and "--lora-variant must be one of" in result.output
+
+
+def test_grpo_with_builtin_rewards_loss_type_and_lora_options(tiny_model, tmp_path):
+    import json
+
+    from training.grpo import train_grpo
+
+    data = tmp_path / "prompts.csv"
+    pd.DataFrame({"prompt": ["2+2=", "3+3="], "reference": ["4", "6"]}).to_csv(data, index=False)
+    out = tmp_path / "grpo_opts"
+    result = train_grpo(
+        tiny_model, "", _Upload(data), str(out), num_generations=2, max_completion_length=8,
+        loss_type="dr_grpo", rewards=["reference", "math", "think_format", "json", "regex"],
+        regex_pattern=r"\d+", lora_rank=8, lora_alpha=16, lora_variant="rsLoRA",
+        progress=None,
+    )  # fmt: skip
+    assert result.startswith("✅ GRPO training complete"), result
+    assert "reference match + math + think format + json + regex" in result
+    adapter = json.loads((out / "adapter_config.json").read_text())
+    assert (adapter["r"], adapter["lora_alpha"], adapter["use_rslora"]) == (8, 16, True)
+    cfg = _assert_run_config(out, "grpo", tiny_model)
+    assert cfg["loss_type"] == "dr_grpo" and cfg["regex_pattern"] == r"\d+"
+    assert cfg["rewards"] == ["reference", "math", "think_format", "json", "regex"]
+    assert cfg["peft"]["lora_variant"] == "rsLoRA" and cfg["use_vllm"] is False
+
+
+def test_cli_grpo_passes_new_options(tiny_model, tmp_path):
+    from typer.testing import CliRunner
+
+    from cli.commands import app
+
+    data = tmp_path / "prompts.csv"
+    pd.DataFrame({"prompt": ["Say JSON", "Say JSON"]}).to_csv(data, index=False)
+    out = tmp_path / "cli_grpo"
+    result = CliRunner().invoke(
+        app,
+        ["grpo", "--policy-model", tiny_model, "--data", str(data), "--output", str(out),
+         "--num-generations", "2", "--max-completion-length", "8", "--reward", "json",
+         "--loss-type", "bnpo", "--lora-variant", "DoRA", "--lora-rank", "4"],
+    )  # fmt: skip
+    assert result.exit_code == 0, result.output
+    cfg = _assert_run_config(out, "grpo", tiny_model)
+    assert cfg["rewards"] == ["json"] and cfg["loss_type"] == "bnpo"
+    assert cfg["peft"] == {"method": "LoRA", "lora_rank": 4, "lora_alpha": 32,
+                           "lora_variant": "DoRA"}  # fmt: skip
