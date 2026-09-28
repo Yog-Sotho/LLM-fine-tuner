@@ -115,6 +115,33 @@ def build_inference_tab() -> dict:
             with gr.Column():
                 vllm_gen_out = gr.Textbox(label="vLLM Response", lines=10, interactive=False)
 
+        gr.Markdown("---")
+        gr.Markdown(
+            "### 🌐 Remote endpoint (OpenAI-compatible)\n"
+            "Chat with a deployed model — `python main.py serve` (llama.cpp / vLLM), "
+            "or any `/v1/chat/completions` server. The request is sent from this app's machine."
+        )
+        with gr.Row():
+            with gr.Column():
+                remote_url = gr.Textbox(
+                    label="Endpoint URL", value="http://127.0.0.1:8000", max_length=512
+                )
+                with gr.Row():
+                    remote_model = gr.Textbox(
+                        label="Model name", placeholder="blank = server's first model",
+                        max_length=128,
+                    )  # fmt: skip
+                    remote_key = gr.Textbox(label="API key", type="password", max_length=256)
+                remote_system = gr.Textbox(label="System prompt (optional)", max_length=2000)
+                remote_prompt = gr.Textbox(label="Prompt", lines=3, max_length=4000)
+                with gr.Row():
+                    remote_max_tokens = gr.Slider(16, 2048, value=256, step=16,
+                                                  label="Max Tokens")  # fmt: skip
+                    remote_temp = gr.Slider(0.0, 2.0, value=0.7, step=0.1, label="Temperature")
+                remote_btn = gr.Button("🌐 Send", variant="primary")
+            with gr.Column():
+                remote_out = gr.Textbox(label="Response", lines=10, interactive=False)
+
     return dict(
         infer_model=infer_model,
         infer_custom=infer_custom,
@@ -143,4 +170,13 @@ def build_inference_tab() -> dict:
         vllm_top_p_sl=vllm_top_p_sl,
         vllm_gen_btn=vllm_gen_btn,
         vllm_gen_out=vllm_gen_out,
+        remote_url=remote_url,
+        remote_model=remote_model,
+        remote_key=remote_key,
+        remote_system=remote_system,
+        remote_prompt=remote_prompt,
+        remote_max_tokens=remote_max_tokens,
+        remote_temp=remote_temp,
+        remote_btn=remote_btn,
+        remote_out=remote_out,
     )

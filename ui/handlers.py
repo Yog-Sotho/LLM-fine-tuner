@@ -53,8 +53,10 @@ from core.state import app_state, redact_sensitive_info, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file, load_hub_dataset
 from data.preprocessing import preview_dataset, validate_and_clean_dataset
 from export.hub import push_to_hub
+from export.quantize import on_quantize_click
 from export.utils import create_zip_from_folder
 from inference.generate import batch_generate, generate_text
+from inference.remote import remote_chat
 from training.sft import train_model
 
 # ── Training ───────────────────────────────────────────────────────────────
@@ -550,3 +552,27 @@ def build_loss_chart(log_records: list) -> pd.DataFrame:
         data["ETA"] = [_fmt_eta(r.get("eta_s", 0.0)) for r in log_records]
 
     return pd.DataFrame(data)
+
+
+# ── Deployment: quantized export and remote endpoints ──────────────────────
+
+
+def on_quantize_export(model_path, fmt, file, augmented_ds, progress=gr.Progress()):
+    """Export tab: FP8 / W4A16 safetensors for vLLM (W4A16 calibrates on the Data tab's data)."""
+    dataset = augmented_ds
+    if dataset is None and file is not None and fmt == "w4a16":
+        try:
+            ds = load_dataset_from_file(file, detect_file_type(file))
+            dataset, _ = validate_and_clean_dataset(ds)
+        except Exception as e:
+            return f"❌ Cannot read the training data for calibration: {e}"
+    return on_quantize_click(model_path, fmt, dataset, progress)
+
+
+def on_remote_chat(url, model, api_key, system_prompt, prompt, max_tokens, temperature):
+    """Inference tab: one chat turn with an OpenAI-compatible server."""
+    try:
+        return remote_chat(url, prompt, model, api_key, system_prompt,
+                           int(max_tokens), float(temperature))  # fmt: skip
+    except ValueError as e:
+        return f"❌ {e}"

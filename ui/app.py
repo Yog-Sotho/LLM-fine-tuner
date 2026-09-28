@@ -43,7 +43,9 @@ from ui.handlers import (
     on_generate,
     on_hub_load,
     on_push,
+    on_quantize_export,
     on_refresh_preview,
+    on_remote_chat,
     on_stop,
     on_train_click,
 )
@@ -346,6 +348,19 @@ def build_demo() -> gr.Blocks:
         )
 
         # ── Inference Tab ──────────────────────────────────────────────────
+        gt["quant_btn"].click(
+            fn=on_quantize_export,
+            **GPU_JOB,  # one shared GPU queue (see config.constants)
+            inputs=[gt["export_model_path"], gt["quant_format"], dt["file_input"],
+                    dt["augmented_ds_state"]],
+            outputs=[gt["quant_status"]],
+        )  # fmt: skip
+        it["remote_btn"].click(
+            fn=on_remote_chat,
+            inputs=[it["remote_url"], it["remote_model"], it["remote_key"], it["remote_system"],
+                    it["remote_prompt"], it["remote_max_tokens"], it["remote_temp"]],
+            outputs=[it["remote_out"]],
+        )  # fmt: skip
         it["gen_btn"].click(
             fn=on_generate,
             inputs=[

@@ -2,7 +2,7 @@
 
 import gradio as gr
 
-from config.constants import GGUF_QUANT_PRESETS
+from config.constants import GGUF_QUANT_PRESETS, HAS_LLMCOMPRESSOR
 
 
 def build_gguf_tab() -> dict:
@@ -26,10 +26,30 @@ def build_gguf_tab() -> dict:
                 export_status = gr.Textbox(label="Status", lines=6, interactive=False)
                 gguf_file = gr.File(label="Download GGUF")
 
+        gr.Markdown(
+            "### Quantized safetensors for vLLM (llm-compressor)\n"
+            "**FP8** — no calibration needed; runs natively on Hopper/Ada GPUs. "
+            "**W4A16** — 4-bit GPTQ, calibrated on the data loaded in 📂 Data. "
+            "Saved next to the model as `<model>-fp8` / `<model>-w4a16`; serve with "
+            "`python main.py serve --model <folder>`."
+            + ("" if HAS_LLMCOMPRESSOR else
+               '\n\n❌ Not installed: `pip install "llm-fine-tuner[compress]"`')
+        )  # fmt: skip
+        with gr.Row():
+            with gr.Column():
+                quant_format = gr.Radio(["fp8", "w4a16"], value="fp8", label="Format")
+                quant_btn = gr.Button("🗜️ Export quantized", variant="primary",
+                                      interactive=HAS_LLMCOMPRESSOR)  # fmt: skip
+            with gr.Column():
+                quant_status = gr.Textbox(label="Status", lines=5, interactive=False)
+
     return dict(
         export_model_path=export_model_path,
         quantization=quantization,
         export_btn=export_btn,
         export_status=export_status,
         gguf_file=gguf_file,
+        quant_format=quant_format,
+        quant_btn=quant_btn,
+        quant_status=quant_status,
     )
