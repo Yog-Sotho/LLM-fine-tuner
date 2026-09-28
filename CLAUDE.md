@@ -26,7 +26,8 @@ LLM-fine-tuner/
 │
 ├── core/
 │   ├── state.py             # AppState singleton (shared caches) + per-session SessionState
-│   ├── hardware.py          # VRAM/RAM detection, model recommendation
+│   ├── hardware.py          # VRAM/RAM detection, model recommendation, precision helpers
+│   ├── run_config.py        # run_config.yaml, dataset fingerprint, run folders, tracking choice
 │   └── callbacks.py         # Trainer callbacks (Stop, Logging, ETA)
 │
 ├── data/
@@ -140,6 +141,13 @@ Tab files (`ui/tabs/*.py`) define **layout only** — no `.click()`, `.change()`
 - Never hardcode `trust_remote_code=True`; pass `trust_remote_code=ALLOW_REMOTE_CODE` from `config/constants.py`.
 - PEFT adapters must be safetensors: call `validate_adapter_dir()` before `PeftModel.from_pretrained` on a local path. Pickle weights (`.bin`/`.pt`) are rejected because loading them can execute code.
 
+### Reproducibility
+
+- Every trainer calls `save_run_config()` after saving the model, so `run_config.yaml` (mode, model, hyperparameters, seed, dataset SHA-256, library versions) sits next to it. New trainers must do the same.
+- Call `transformers.set_seed(seed)` **before** building the model: LoRA initialises its weights at creation, before the Trainer seeds, so seeding later does not reproduce a run (covered by `test_same_seed_gives_identical_weights…`).
+- UI runs go to `run_dir_for(run_name)` (`<LFT_RUNS_DIR>/<name>/`); never build run paths from raw user input.
+- Tracking backends come from `TRACKING_BACKENDS` (installed only); validate choices with `resolve_report_to()`.
+
 ### Optional dependencies
 
 Before using an optional package, check its `HAS_*` flag from `config/constants.py` and raise a user-friendly error if unavailable. Never let a missing optional package cause an unguarded `ImportError` at call time.
@@ -232,6 +240,8 @@ HF_TOKEN=hf_xxx docker compose up llm-fine-tuner-gpu
 | `GRADIO_SERVER_NAME` | `127.0.0.1` | Bind address (Docker images set `0.0.0.0` inside the container) |
 | `GRADIO_AUTH` | — | Require login: `user:password`, comma-separated pairs |
 | `ALLOW_REMOTE_CODE` | `false` | Enables `trust_remote_code` for Hub models with custom code — off by default |
+| `LFT_RUNS_DIR` | `runs` (Docker: `/app/models`) | Where UI training runs are saved (`<dir>/<run name>/`) |
+| `LFT_REPORT_TO` | `none` | Default experiment tracker (`trackio`, `wandb`, `mlflow`, `tensorboard`) if installed |
 | `HF_TOKEN` | — | HuggingFace Hub auth (gated models, Hub push) |
 | `SHARE` | `false` | Enable public Gradio link |
 | `TOKENIZERS_PARALLELISM` | `false` | Suppress tokenizer parallelism warning (Docker) |

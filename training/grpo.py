@@ -17,7 +17,7 @@ import time
 import gradio as gr
 import torch
 from peft import LoraConfig, TaskType
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
 from config.constants import (
     ALLOW_REMOTE_CODE,
@@ -25,10 +25,13 @@ from config.constants import (
     COL_PROMPT,
     COL_REFERENCE,
     COL_TEXT,
+    DEFAULT_REPORT_TO,
+    DEFAULT_SEED,
     HAS_GRPO,
 )
 from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback
 from core.hardware import compute_dtype, get_lora_targets, select_precision
+from core.run_config import save_run_config
 from core.state import app_state, validate_path_traversal
 from data.loader import load_table_dataset
 
@@ -87,6 +90,7 @@ def train_grpo(
 
     stop_event = app_state.session_for(request).stop_event
     stop_event.clear()
+    set_seed(DEFAULT_SEED)  # before model/LoRA creation, so runs are reproducible
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     try:
@@ -147,7 +151,8 @@ def train_grpo(
             beta=beta,
             logging_steps=1,
             save_strategy="no",
-            report_to="none",
+            report_to=DEFAULT_REPORT_TO,
+            seed=DEFAULT_SEED,
             **select_precision(device),
         )
         peft_config = LoraConfig(
@@ -187,6 +192,25 @@ def train_grpo(
             progress(0.95, desc="Saving policy adapter…")
         trainer.model.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
+        save_run_config(
+            output_dir,
+            mode="grpo",
+            model=policy_model_name,
+            dataset=ds,
+            seed=DEFAULT_SEED,
+            report_to=DEFAULT_REPORT_TO,
+            reward=reward_desc,
+            reward_model=reward_model_path or None,
+            hyperparams={
+                "learning_rate": learning_rate,
+                "epochs": epochs,
+                "num_generations": num_generations,
+                "prompts_per_step": int(prompts_per_step),
+                "max_completion_length": int(max_completion_length),
+                "beta": beta,
+            },
+            peft={"method": "LoRA", "lora_rank": 16, "lora_alpha": 32},
+        )
 
         if progress is not None:
             progress(1.0, desc="✅ Complete!")

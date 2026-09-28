@@ -208,6 +208,8 @@ Set these with `-e` (plain Docker) or in a `.env` file (Compose).
 | `HF_TOKEN` | *(empty)* | HuggingFace API token — needed for Hub push and gated models |
 | `SHARE` | `false` | Set to `true` for a public Gradio URL (useful on remote servers) — always combine with `GRADIO_AUTH` |
 | `GRADIO_AUTH` | *(empty)* | Require a login: `user:password` (comma-separate multiple pairs) |
+| `LFT_RUNS_DIR` | `/app/models` | Where UI training runs are saved (mounted from `./models`) |
+| `LFT_REPORT_TO` | `none` | Default experiment tracker, if installed in the image |
 | `ALLOW_REMOTE_CODE` | `false` | Allow models whose Hub repo ships custom Python code (`trust_remote_code`). Only enable for repos you trust |
 | `HF_HOME` | `/app/cache/huggingface` | HuggingFace cache location inside the container |
 | `HF_HUB_ENABLE_HF_TRANSFER` | `1` | Faster HuggingFace downloads (recommended ON) |

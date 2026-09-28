@@ -18,7 +18,13 @@ Patch log
 
 import gradio as gr
 
-from config.constants import HAS_UNSLOTH
+from config.constants import (
+    DEFAULT_REPORT_TO,
+    DEFAULT_SEED,
+    HAS_UNSLOTH,
+    RUNS_DIR,
+    TRACKING_BACKENDS,
+)
 from core.hardware import auto_recommend_model, get_model_info
 
 
@@ -170,6 +176,23 @@ def build_train_tab() -> dict:
                         label="Gradient Checkpointing (saves VRAM, ~20% slower)", value=False
                     )
                     resume_ckpt = gr.Checkbox(label="Resume from last checkpoint", value=False)
+                with gr.Row():
+                    run_name = gr.Textbox(
+                        label="Run name (optional)",
+                        placeholder="auto: date-time-mode",
+                        max_length=64,
+                        info=f"Saved to {RUNS_DIR}/<run name>/ with run_config.yaml. "
+                        "To resume, enter an existing run name and tick Resume.",
+                    )
+                    seed = gr.Number(
+                        value=DEFAULT_SEED, precision=0, label="Seed", info="Data split + training"
+                    )
+                    report_to = gr.Dropdown(
+                        choices=TRACKING_BACKENDS,
+                        value=DEFAULT_REPORT_TO,
+                        label="Experiment tracking",
+                        info="Only installed trackers are listed.",
+                    )
 
                 with gr.Row():
                     train_btn = gr.Button("▶  Start Training", variant="primary", scale=3)
@@ -235,6 +258,9 @@ def build_train_tab() -> dict:
         lr_sched=lr_sched,
         grad_ckpt=grad_ckpt,
         resume_ckpt=resume_ckpt,
+        run_name=run_name,
+        seed=seed,
+        report_to=report_to,
         train_btn=train_btn,
         stop_btn=stop_btn,
         log_output=log_output,

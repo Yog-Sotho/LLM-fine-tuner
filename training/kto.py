@@ -17,7 +17,7 @@ import gradio as gr
 import torch
 from datasets import Dataset
 from peft import LoraConfig, TaskType, get_peft_model
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
 from config.constants import (
     ALLOW_REMOTE_CODE,
@@ -26,10 +26,13 @@ from config.constants import (
     COL_LABEL,
     COL_PROMPT,
     COL_REJECTED,
+    DEFAULT_REPORT_TO,
+    DEFAULT_SEED,
     HAS_KTO,
 )
 from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback
 from core.hardware import compute_dtype, get_lora_targets, select_precision
+from core.run_config import save_run_config
 from core.state import app_state, validate_path_traversal
 from data.loader import load_table_dataset
 
@@ -99,6 +102,7 @@ def train_kto(
 
     stop_event = app_state.session_for(request).stop_event
     stop_event.clear()
+    set_seed(DEFAULT_SEED)  # before model/LoRA creation, so runs are reproducible
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     try:
@@ -144,7 +148,8 @@ def train_kto(
             logging_steps=1,
             save_strategy="no",
             remove_unused_columns=False,
-            report_to="none",
+            report_to=DEFAULT_REPORT_TO,
+            seed=DEFAULT_SEED,
             **select_precision(device),
         )
 
@@ -174,6 +179,22 @@ def train_kto(
             progress(0.95, desc="Saving adapter…")
         model.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
+        save_run_config(
+            output_dir,
+            mode="kto",
+            model=model_name,
+            dataset=ds,
+            seed=DEFAULT_SEED,
+            report_to=DEFAULT_REPORT_TO,
+            hyperparams={
+                "learning_rate": learning_rate,
+                "beta": beta,
+                "epochs": epochs,
+                "batch_size": int(batch_size),
+                "max_length": int(max_length),
+            },
+            peft={"method": "LoRA", "lora_rank": 16, "lora_alpha": 32},
+        )
 
         final_loss = log_cb.records[-1]["train_loss"] if log_cb.records else "N/A"
         if progress is not None:

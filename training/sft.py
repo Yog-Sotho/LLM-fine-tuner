@@ -58,10 +58,12 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig,
     EarlyStoppingCallback,
+    set_seed,
 )
 
 from config.constants import (
     ALLOW_REMOTE_CODE,
+    DEFAULT_SEED,
     HAS_ADAPTER_CONFIG,
     HAS_HERETIC,  # N-5 FIX: imported so the Heretic Mode branch can guard the subprocess call
     HAS_LIGER,
@@ -76,6 +78,7 @@ from core.callbacks import (
     StopCallback,
 )  # F-2: ETAProgressCallback added
 from core.hardware import compute_dtype, get_lora_targets, is_unsloth_supported, select_precision
+from core.run_config import save_run_config
 from core.state import app_state, validate_path_traversal
 from data.preprocessing import to_sft_dataset
 
@@ -108,6 +111,9 @@ def train_model(
     progress=gr.Progress(),
     use_flash_attn=False,
     stop_event: threading.Event | None = None,
+    seed: int = DEFAULT_SEED,
+    report_to: str = "none",
+    run_name: str | None = None,
 ):
     """Unified SFT / DPO training pipeline.
 
@@ -133,6 +139,9 @@ def train_model(
 
     stop_event = stop_event or app_state.session().stop_event
     stop_event.clear()
+    # Seed before any model/adapter is built: LoRA initialises its weights at creation,
+    # before the Trainer would seed, so the seed must be set here to reproduce a run.
+    set_seed(int(seed))
     log_callback = LoggingCallback()
 
     try:
@@ -171,7 +180,7 @@ def train_model(
             train_ds = tokenized
             eval_ds = None
         else:
-            split = tokenized.train_test_split(test_size=0.1, seed=42)
+            split = tokenized.train_test_split(test_size=0.1, seed=seed)
             train_ds, eval_ds = split["train"], split["test"]
             # Edge case: exactly 2 examples → 10% rounds to 0; force 1 eval row.
             if len(eval_ds) == 0:
@@ -407,7 +416,9 @@ def train_model(
             # bf16 on GPUs that support it, else fp16; full precision on CPU. Always
             # explicit: TRL configs default to bf16=True, which fails on CPU.
             **select_precision(device),
-            report_to="none",
+            report_to=report_to,
+            run_name=run_name,
+            seed=seed,
             disable_tqdm=False,
             lr_scheduler_type=lr_scheduler_type,
             gradient_checkpointing=gradient_checkpointing,
@@ -508,6 +519,23 @@ def train_model(
             progress(0.9, desc="Saving model… ")
         model.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
+        save_run_config(
+            output_dir,
+            mode=training_mode,
+            model=model_name,
+            dataset=dataset,
+            seed=seed,
+            report_to=report_to,
+            hyperparams=dict(hyperparams),
+            peft={"method": peft_method, "lora_rank": lora_rank, "lora_alpha": lora_alpha},
+            use_chat_template=bool(use_chat_template),
+            system_prompt=system_prompt,
+            dpo_beta=dpo_beta if is_dpo else None,
+            use_flash_attn=bool(use_flash_attn),
+            gradient_checkpointing=bool(gradient_checkpointing),
+            lr_scheduler_type=lr_scheduler_type,
+            early_stop=int(early_stop),
+        )
         del model
         if device == "cuda":
             torch.cuda.empty_cache()

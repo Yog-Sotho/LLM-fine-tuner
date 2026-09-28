@@ -16,17 +16,20 @@ import time
 import gradio as gr
 import torch
 from peft import LoraConfig, TaskType
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, set_seed
 
 from config.constants import (
     ALLOW_REMOTE_CODE,
     COL_CHOSEN,
     COL_PROMPT,
     COL_REJECTED,
+    DEFAULT_REPORT_TO,
+    DEFAULT_SEED,
     HAS_REWARD_TRAINER,
 )
 from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback
 from core.hardware import compute_dtype, get_lora_targets, select_precision
+from core.run_config import save_run_config
 from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
 from data.preprocessing import validate_and_clean_dataset
@@ -60,6 +63,7 @@ def train_reward_model_v27(
 
     stop_event = app_state.session_for(request).stop_event
     stop_event.clear()
+    set_seed(DEFAULT_SEED)  # before model/LoRA creation, so runs are reproducible
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     try:
@@ -93,7 +97,7 @@ def train_reward_model_v27(
         if len(ds) < 2:
             train_ds, eval_ds = ds, None
         else:
-            split = ds.train_test_split(test_size=0.1, seed=42)
+            split = ds.train_test_split(test_size=0.1, seed=DEFAULT_SEED)
             train_ds, eval_ds = split["train"], split["test"]
             if len(eval_ds) == 0:
                 train_ds = ds.select(range(len(ds) - 1))
@@ -111,7 +115,8 @@ def train_reward_model_v27(
             save_steps=rm_eval_steps * 2,
             save_total_limit=2,
             load_best_model_at_end=eval_ds is not None,
-            report_to="none",
+            report_to=DEFAULT_REPORT_TO,
+            seed=DEFAULT_SEED,
             **select_precision(device),
         )
         # LoRA on the backbone; PEFT keeps the new score head trainable for SEQ_CLS.
@@ -154,6 +159,22 @@ def train_reward_model_v27(
         merged = trainer.model.merge_and_unload()
         merged.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
+        save_run_config(
+            output_dir,
+            mode="reward",
+            model=model_name,
+            dataset=ds,
+            seed=DEFAULT_SEED,
+            report_to=DEFAULT_REPORT_TO,
+            hyperparams={
+                "epochs": rm_epochs,
+                "learning_rate": rm_lr,
+                "batch_size": rm_batch_size,
+                "eval_steps": rm_eval_steps,
+                "max_length": rm_max_length,
+            },
+            peft={"method": "LoRA (merged)", "lora_rank": 16, "lora_alpha": 32},
+        )
 
         final_loss = log_cb.records[-1]["train_loss"] if log_cb.records else "N/A"
         if progress is not None:

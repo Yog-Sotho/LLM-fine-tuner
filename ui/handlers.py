@@ -27,9 +27,9 @@ Patch log
          directly in the Loss Curve table without conversion.
 """
 
+import glob
 import os
 import shutil
-import tempfile
 
 import gradio as gr
 import pandas as pd
@@ -42,7 +42,11 @@ from config.constants import (
     COL_PROMPT,
     COL_REJECTED,
     COL_TEXT,
+    DEFAULT_REPORT_TO,
+    DEFAULT_SEED,
+    RUNS_DIR,
 )
+from core.run_config import new_run_name, resolve_report_to, run_dir_for
 from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
 from data.preprocessing import get_dataset_stats, preview_dataset, validate_and_clean_dataset
@@ -91,6 +95,9 @@ def on_train_click(
     use_qlora_enhanced=False,  # kept for UI arity — ignored; peft_method drives QLoRA
     augmented_ds=None,  # C-5 FIX: augmented/filtered dataset from gr.State
     packing=False,
+    run_name="",
+    seed=DEFAULT_SEED,
+    report_to=DEFAULT_REPORT_TO,
     progress=gr.Progress(),
     request: gr.Request | None = None,
 ):
@@ -102,11 +109,29 @@ def on_train_click(
     session = app_state.session_for(request)
     session.stop_event.clear()
 
-    # Free this session's previous run (other sessions' results are untouched).
+    # Free this session's previous ZIP. Run folders persist under RUNS_DIR.
     session.release("zip")
-    session.release("model_dir")
 
     training_mode = "dpo" if "dpo" in training_mode.lower() else "sft"
+
+    # Runs live in <RUNS_DIR>/<run name>/ so they survive restarts and can be resumed.
+    try:
+        report_to = resolve_report_to(report_to)
+        run_name = (run_name or "").strip() or new_run_name(training_mode)
+        output_dir = run_dir_for(run_name)
+    except ValueError as e:
+        return f"❌ {e}", None, None, []
+    run_exists = os.path.isdir(output_dir)
+    if run_exists and not resume:
+        return (
+            f"❌ Run '{run_name}' already exists. Tick 'Resume from last checkpoint' to "
+            "continue it, or choose another run name.",
+            None,
+            None,
+            [],
+        )
+    if resume and not run_exists:
+        return f"❌ Nothing to resume: run '{run_name}' not found in {RUNS_DIR}.", None, None, []
 
     if file is None and augmented_ds is None:
         return "❌ Please upload a data file first.", None, None, []
@@ -180,7 +205,7 @@ def on_train_click(
         dpo_beta=float(dpo_beta),
         packing=bool(packing),
     )
-    output_dir = tempfile.mkdtemp()
+    os.makedirs(output_dir, exist_ok=True)
 
     # BOLT OPTIMIZATION: Use centralized vectorized stats function for ~450x speedup.
     try:
@@ -218,6 +243,9 @@ def on_train_click(
             progress=progress,
             use_flash_attn=use_flash_attn,
             stop_event=session.stop_event,
+            seed=int(seed),
+            report_to=report_to,
+            run_name=run_name,
         )
         create_model_card(
             model_name,
@@ -231,13 +259,14 @@ def on_train_click(
         zip_path = create_zip_from_folder(output_dir)
 
         session.track("zip", zip_path)
-        session.track("model_dir", output_dir)
 
         full_msg = msg + "\n" + issues_str
         return full_msg, zip_path, output_dir, log_records
 
     except Exception as e:
-        shutil.rmtree(output_dir, ignore_errors=True)
+        # Remove a run folder this attempt created, unless it saved checkpoints to resume from.
+        if not run_exists and not glob.glob(os.path.join(output_dir, "checkpoint-*")):
+            shutil.rmtree(output_dir, ignore_errors=True)
         return f"❌ Training failed: {e}\n{issues_str}", None, None, []
 
 
