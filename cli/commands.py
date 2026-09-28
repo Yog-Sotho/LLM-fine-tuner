@@ -42,13 +42,20 @@ from config.constants import (
     COL_PROMPT,
     COL_REJECTED,
     DEFAULT_EVAL_SPLIT,
+    DEFAULT_GRPO_LOSS_TYPE,
+    DEFAULT_LORA_VARIANT,
     DEFAULT_REPORT_TO,
     DEFAULT_SEED,
+    GRPO_LORA_ALPHA,
+    GRPO_LORA_RANK,
+    GRPO_LOSS_TYPES,
+    GRPO_REWARDS,
     HAS_GRPO,
     HAS_KTO,
     HAS_ORPO,
     HAS_REWARD_TRAINER,
     HUB_DEFAULT_MAX_ROWS,
+    LORA_VARIANTS,
     TRACKING_BACKENDS,
 )
 from core.run_config import dataset_fingerprint, load_run_config, resolve_report_to
@@ -110,6 +117,9 @@ def train(
         "LoRA", "--peft", help="PEFT method: LoRA | QLoRA Enhanced | Full Fine-tuning | Auto"
     ),
     lora_rank: int = typer.Option(8, "--lora-rank", help="LoRA rank"),
+    lora_variant: str = typer.Option(
+        DEFAULT_LORA_VARIANT, "--lora-variant", help=f"LoRA variant: {' | '.join(LORA_VARIANTS)}"
+    ),
     use_qlora_enhanced: bool = typer.Option(
         False,
         "--qlora-enhanced",
@@ -161,6 +171,9 @@ def train(
     except ValueError as e:
         typer.echo(f"❌ {e}", err=True)
         raise typer.Exit(code=1) from e
+    if lora_variant not in LORA_VARIANTS:
+        typer.echo(f"❌ --lora-variant must be one of: {', '.join(LORA_VARIANTS)}", err=True)
+        raise typer.Exit(code=1)
     # Minor Fix 1: --qlora-enhanced actually overrides --peft instead of being ignored.
     if use_qlora_enhanced:
         if peft_method != "QLoRA Enhanced":
@@ -241,6 +254,7 @@ def train(
                 use_flash_attn=replay.get("use_flash_attn", False),
                 seed=replay.get("seed", DEFAULT_SEED),
                 report_to=report_to,
+                lora_variant=peft.get("lora_variant", DEFAULT_LORA_VARIANT),
             )
             typer.echo(f"\n✅ {msg}")
             typer.echo(f"📁 Model saved to: {os.path.abspath(output)}")
@@ -288,6 +302,7 @@ def train(
             use_flash_attn=use_flash_attn,
             seed=seed,
             report_to=report_to,
+            lora_variant=lora_variant,
         )
         typer.echo(f"\n✅ {msg}")
         typer.echo(f"📁 Model saved to: {os.path.abspath(output)}")
@@ -460,6 +475,24 @@ def grpo(
     prompts_per_step: int = typer.Option(1, "--prompts-per-step"),
     max_completion_length: int = typer.Option(128, "--max-completion-length"),
     beta: float = typer.Option(0.0, "--beta", help="KL penalty (0 = no reference model)"),
+    loss_type: str = typer.Option(
+        DEFAULT_GRPO_LOSS_TYPE, "--loss-type", help=f"Loss: {' | '.join(GRPO_LOSS_TYPES)}"
+    ),
+    reward: list[str] | None = typer.Option(
+        None,
+        "--reward",
+        help=f"Built-in reward, repeatable: {' | '.join(GRPO_REWARDS)} "
+        "(default: reference when the data has a 'reference' column)",
+    ),
+    regex: str = typer.Option("", "--regex", help="Pattern for --reward regex"),
+    lora_rank: int = typer.Option(GRPO_LORA_RANK, "--lora-rank"),
+    lora_alpha: int = typer.Option(GRPO_LORA_ALPHA, "--lora-alpha"),
+    lora_variant: str = typer.Option(
+        DEFAULT_LORA_VARIANT, "--lora-variant", help=f"{' | '.join(LORA_VARIANTS)}"
+    ),
+    use_vllm: bool = typer.Option(
+        False, "--use-vllm", help='Generate with vLLM on the training GPU (pip install "trl[vllm]")'
+    ),
     resume: bool = typer.Option(
         False, "--resume", help="Continue from the newest checkpoint in --output"
     ),
@@ -493,6 +526,13 @@ def grpo(
         max_completion_length=max_completion_length,
         beta=beta,
         resume=resume,
+        loss_type=loss_type,
+        rewards=reward or None,
+        regex_pattern=regex,
+        lora_rank=lora_rank,
+        lora_alpha=lora_alpha,
+        lora_variant=lora_variant,
+        use_vllm=use_vllm,
         progress=None,
     )
     if "✅" not in result:

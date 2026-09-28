@@ -60,3 +60,23 @@ def test_lora_still_loads_in_4bit(cuda_load, monkeypatch):
     _load("LoRA")
     (kwargs,) = cuda_load
     assert kwargs["quantization_config"].load_in_4bit
+
+
+# ── LoRA targets and variants ──────────────────────────────────────────────
+
+
+def test_lora_targets_every_linear_layer():
+    assert hardware.get_lora_targets() == "all-linear"
+
+
+@pytest.mark.parametrize(
+    ("variant", "kwargs"),
+    [("LoRA", {}), ("rsLoRA", {"use_rslora": True}), ("DoRA", {"use_dora": True})],
+)
+def test_lora_variant_kwargs(variant, kwargs):
+    assert hardware.lora_variant_kwargs(variant) == kwargs
+
+
+def test_unknown_lora_variant_is_rejected():
+    with pytest.raises(ValueError, match="Unknown LoRA variant"):
+        hardware.lora_variant_kwargs("PiSSA")

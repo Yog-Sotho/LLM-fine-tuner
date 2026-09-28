@@ -2,7 +2,22 @@
 
 import gradio as gr
 
-from config.constants import HAS_GRPO, HAS_KTO, HAS_ORPO, HAS_REWARD_TRAINER
+from config.constants import (
+    DEFAULT_GRPO_LOSS_TYPE,
+    DEFAULT_GRPO_REWARDS,
+    DEFAULT_LORA_VARIANT,
+    GRPO_LORA_ALPHA,
+    GRPO_LORA_RANK,
+    GRPO_LOSS_TYPES,
+    GRPO_REWARDS,
+    HAS_GRPO,
+    HAS_KTO,
+    HAS_MATH_VERIFY,
+    HAS_ORPO,
+    HAS_REWARD_TRAINER,
+    HAS_VLLM,
+    LORA_VARIANTS,
+)
 from core.hardware import auto_recommend_model
 
 
@@ -72,8 +87,8 @@ def build_rlhf_tab() -> dict:
                     "**GRPO** samples several answers per prompt and reinforces the ones that "
                     "score above their group's average — no value model needed.\n"
                     "Dataset needs a `prompt` column. Rewards come from the reward model in "
-                    "step A and/or a `reference` column (expected answer found in the "
-                    "response = reward 1)."
+                    "step A and/or the built-in rewards below; *reference answer* and *maths* "
+                    "need a `reference` column with the expected answer."
                 )
                 with gr.Row():
                     with gr.Column():
@@ -108,6 +123,46 @@ def build_rlhf_tab() -> dict:
                             grpo_max_completion = gr.Slider(
                                 16, 1024, value=128, step=16, label="Max Completion Tokens"
                             )
+                        grpo_rewards = gr.CheckboxGroup(
+                            choices=[(label, key) for key, label in GRPO_REWARDS.items()],
+                            value=DEFAULT_GRPO_REWARDS,
+                            label="Built-in rewards (added together)",
+                            info=None
+                            if HAS_MATH_VERIFY
+                            else "Maths needs: pip install math-verify",
+                        )
+                        grpo_regex = gr.Textbox(
+                            label="Regex (for the regex reward)",
+                            placeholder=r"e.g. Answer: \d+",
+                            max_length=512,
+                        )
+                        with gr.Row():
+                            grpo_loss_type = gr.Dropdown(
+                                GRPO_LOSS_TYPES,
+                                value=DEFAULT_GRPO_LOSS_TYPE,
+                                label="Loss",
+                                info="dapo / dr_grpo avoid favouring short answers.",
+                            )
+                            grpo_lora_variant = gr.Radio(
+                                list(LORA_VARIANTS),
+                                value=DEFAULT_LORA_VARIANT,
+                                label="LoRA variant",
+                            )
+                        with gr.Row():
+                            grpo_lora_rank = gr.Slider(
+                                4, 128, value=GRPO_LORA_RANK, step=4, label="LoRA Rank"
+                            )
+                            grpo_lora_alpha = gr.Slider(
+                                4, 256, value=GRPO_LORA_ALPHA, step=4, label="LoRA Alpha"
+                            )
+                        grpo_use_vllm = gr.Checkbox(
+                            label="Generate with vLLM (CUDA, faster)",
+                            value=False,
+                            interactive=HAS_VLLM,
+                            info="Shares the training GPU."
+                            if HAS_VLLM
+                            else 'Not installed: pip install "trl[vllm]" (CUDA GPU needed).',
+                        )
                         grpo_resume = gr.Checkbox(
                             label="Resume from last checkpoint",
                             value=False,
@@ -213,6 +268,13 @@ def build_rlhf_tab() -> dict:
         grpo_prompts_per_step=grpo_prompts_per_step,
         grpo_max_completion=grpo_max_completion,
         grpo_resume=grpo_resume,
+        grpo_loss_type=grpo_loss_type,
+        grpo_rewards=grpo_rewards,
+        grpo_regex=grpo_regex,
+        grpo_lora_rank=grpo_lora_rank,
+        grpo_lora_alpha=grpo_lora_alpha,
+        grpo_lora_variant=grpo_lora_variant,
+        grpo_use_vllm=grpo_use_vllm,
         grpo_train_btn=grpo_train_btn,
         grpo_status=grpo_status,
         orpo_model_choice=orpo_model_choice,

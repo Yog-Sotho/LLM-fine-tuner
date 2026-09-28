@@ -119,15 +119,7 @@ GGUF_QUANT_PRESETS: dict[str, dict[str, str]] = {
 QLORA_ENHANCED_LORA_CONFIG: dict = {
     "r": 64,
     "lora_alpha": 128,
-    "target_modules": [
-        "q_proj",
-        "v_proj",
-        "k_proj",
-        "o_proj",
-        "gate_proj",
-        "up_proj",
-        "down_proj",
-    ],
+    "target_modules": "all-linear",
     "lora_dropout": 0.05,
     "bias": "none",
 }
@@ -156,19 +148,22 @@ LLM_JUDGE_CRITERIA: list[str] = [
 HF_TOKEN_PREFIX: str = "hf_"
 HF_TOKEN_MIN_LEN: int = 36
 
-# ── LoRA target module map ─────────────────────────────────────────────────
-# Used by get_lora_targets() in core/hardware.py
-LORA_TARGET_MAP: dict[str, list[str]] = {
-    "gpt2": ["c_attn"],
-    "gpt_neo": ["q_proj", "v_proj"],
-    "opt": ["q_proj", "v_proj"],
-    "llama": ["q_proj", "v_proj"],
-    "mistral": ["q_proj", "v_proj"],
-    "pythia": ["query_key_value"],
-    "falcon": ["query_key_value"],
-    "tinyllama": ["q_proj", "v_proj"],
-    "default": ["q_proj", "v_proj"],
+# ── LoRA targets and variants ──────────────────────────────────────────────
+# LoRA on every linear layer of the transformer blocks (attention + MLP; never the
+# output head) — current practice, and PEFT resolves it for any architecture.
+LORA_TARGET_MODULES = "all-linear"
+# Unsloth takes explicit names (its documented recommendation).
+UNSLOTH_LORA_TARGETS: list[str] = [
+    "q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj",
+]  # fmt: skip
+# LoraConfig options per variant. rsLoRA scales by alpha/sqrt(r) (stable at high
+# rank); DoRA learns magnitude and direction separately (better at low rank, slower).
+LORA_VARIANTS: dict[str, dict[str, bool]] = {
+    "LoRA": {},
+    "rsLoRA": {"use_rslora": True},
+    "DoRA": {"use_dora": True},
 }
+DEFAULT_LORA_VARIANT = "LoRA"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Optional dependency guards — ALL HAS_* flags defined here.
@@ -365,6 +360,27 @@ BENCHMARK_TASKS: dict[str, str] = {
 }
 BENCHMARK_DEFAULT_LIMIT = 100  # examples per task; full sets take hours on CPU
 BENCHMARK_MAX_LIMIT = 10_000
+
+# ── GRPO ──────────────────────────────────────────────────────────────────
+# Loss formulations supported by every TRL version in range (0.29.1 – 1.x).
+# dapo (TRL's default) and dr_grpo remove the length bias of the original grpo loss.
+GRPO_LOSS_TYPES: list[str] = ["dapo", "dr_grpo", "grpo", "bnpo"]
+DEFAULT_GRPO_LOSS_TYPE = "dapo"
+# Built-in rewards (key → UI label). "reference" and "math" need a `reference` column.
+GRPO_REWARDS: dict[str, str] = {
+    "reference": "Reference answer appears in the output",
+    "math": "Maths answer equals the reference (math-verify)",
+    "think_format": "<think>…</think> reasoning, then the answer",
+    "json": "Output is valid JSON",
+    "regex": "Output matches a regular expression",
+}
+GRPO_REWARDS_NEEDING_REFERENCE = ("reference", "math")
+DEFAULT_GRPO_REWARDS: list[str] = ["reference"]
+GRPO_LORA_RANK = 16
+GRPO_LORA_ALPHA = 32
+# vLLM generation during GRPO (colocate: shares the training GPU).
+GRPO_VLLM_GPU_MEMORY = 0.3  # TRL's default share of GPU memory for vLLM
+HAS_MATH_VERIFY: bool = importlib.util.find_spec("math_verify") is not None
 
 # ── vLLM (high-throughput inference) ──────────────────────────────────────
 try:

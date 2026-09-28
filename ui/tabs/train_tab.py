@@ -20,9 +20,11 @@ import gradio as gr
 
 from config.constants import (
     DEFAULT_EVAL_SPLIT,
+    DEFAULT_LORA_VARIANT,
     DEFAULT_REPORT_TO,
     DEFAULT_SEED,
     HAS_UNSLOTH,
+    LORA_VARIANTS,
     RUNS_DIR,
     TRACKING_BACKENDS,
 )
@@ -137,6 +139,13 @@ def build_train_tab() -> dict:
                             use_lora = gr.Checkbox(label="Enable LoRA", value=True)
                             lora_rank = gr.Slider(1, 64, value=8, step=1, label="LoRA Rank")
                             lora_alpha = gr.Slider(1, 128, value=16, step=1, label="LoRA Alpha")
+                            lora_variant = gr.Radio(
+                                list(LORA_VARIANTS),
+                                value=DEFAULT_LORA_VARIANT,
+                                label="LoRA variant",
+                                info="rsLoRA: steadier at high rank. DoRA: often better at "
+                                "low rank, slower. LoRA is applied to every linear layer.",
+                            )
                         with gr.Tab("Prefix Tuning"):
                             prefix_tuning_num_virtual_tokens = gr.Slider(
                                 10, 100, value=30, step=5, label="Virtual Tokens"
@@ -251,6 +260,7 @@ def build_train_tab() -> dict:
         use_lora=use_lora,
         lora_rank=lora_rank,
         lora_alpha=lora_alpha,
+        lora_variant=lora_variant,
         prefix_tuning_num_virtual_tokens=prefix_tuning_num_virtual_tokens,
         prefix_tuning_token_dim=prefix_tuning_token_dim,
         prefix_tuning_num_layers=prefix_tuning_num_layers,

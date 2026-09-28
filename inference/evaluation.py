@@ -178,8 +178,13 @@ def compute_bertscore_metric(
 
 
 def is_lora_model(model) -> bool:
+    """True for a plain LoRA/rsLoRA adapter — the kind that can be switched off per call.
+
+    DoRA is excluded: PEFT does not support ``adapter_names`` with DoRA.
+    """
     config = getattr(model, "peft_config", {}).get("default")
-    return config is not None and str(getattr(config, "peft_type", "")).upper().endswith("LORA")
+    is_lora = config is not None and str(getattr(config, "peft_type", "")).upper().endswith("LORA")
+    return is_lora and not getattr(config, "use_dora", False)
 
 
 def generate_predictions(
@@ -198,7 +203,10 @@ def generate_predictions(
     sessions, so its global adapter state must not be toggled.
     """
     if base_model and not is_lora_model(model):
-        raise ValueError("Comparing with the base model needs a LoRA adapter.")
+        raise ValueError(
+            "Comparing with the base model needs a LoRA adapter "
+            "(DoRA adapters cannot be switched off per request)."
+        )
     predictions: list[str] = []
     for i in range(0, len(prompts), batch_size):
         if stop_event is not None and stop_event.is_set():
