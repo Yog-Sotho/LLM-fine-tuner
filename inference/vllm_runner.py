@@ -64,7 +64,12 @@ def merge_adapter_for_inference(
 
     try:
         os.makedirs(merged_output_dir, exist_ok=True)
-        tokenizer = AutoTokenizer.from_pretrained(base_model_name, use_fast=True)
+        # The training output holds the tokenizer the model was trained with (chat
+        # template, pad token); fall back to the base model's for bare adapters.
+        has_tokenizer = os.path.isfile(os.path.join(adapter_path, "tokenizer_config.json"))
+        tokenizer = AutoTokenizer.from_pretrained(
+            adapter_path if has_tokenizer else base_model_name, use_fast=True
+        )
         base = AutoModelForCausalLM.from_pretrained(
             base_model_name,
             torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,

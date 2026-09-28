@@ -57,21 +57,29 @@ You need a free HuggingFace account and an API token:
 2. Fill in:
    - **HF API Token** — paste your `hf_...` token
    - **Repository Name** — e.g. `my-username/my-cool-model`
-   - **Model Path** — your trained model folder
-   - **Private repository** — tick this if you don't want the model to be public
-3. Click **🚀 Push to Hub**
+3. Click **🚀 Push to Hub** — it uploads the model you trained in this session
 
+The repository is created if it doesn't exist yet, with your account's default visibility
+(public unless you changed that default — you can make it private in the repo settings).
 Your model will appear at `https://huggingface.co/my-username/my-cool-model`.
 
 ### Auto-generated Model Card
 
-The tool automatically creates a `README.md` (called a model card on HuggingFace) that describes:
-- Base model used
-- Training method and parameters
-- Dataset information
-- Usage instructions
+Every training run (UI or CLI, any method) writes a `README.md` next to the model — called a
+model card on Hugging Face — built from the run's `run_config.yaml`:
+- **Metadata the Hub reads:** `base_model` (so the Hub links your model to its base),
+  `library_name` (`peft` for LoRA adapters), `pipeline_tag`, tags, and `datasets` when you
+  trained on a Hub dataset
+- Training method, all settings and the seed
+- Dataset size and SHA-256 fingerprint, library versions
+- How to load the model
 
-You can edit this before uploading.
+When you push, the base model is checked on the Hub: its canonical name is used (e.g.
+`gpt2` → `openai-community/gpt2`) and its license is copied into the card. A base model
+that is a local folder or isn't on the Hub is left out, because the Hub rejects cards with
+an invalid `base_model`.
+
+You can edit the card before uploading.
 
 ---
 
@@ -81,7 +89,7 @@ GGUF is a file format designed for running AI models efficiently on consumer har
 
 - **[Ollama](https://ollama.ai)** — run models with a single terminal command
 - **[LM Studio](https://lmstudio.ai)** — a user-friendly desktop app for running models
-- **[llama.cpp](https://github.com/ggerganov/llama.cpp)** — the underlying engine
+- **[llama.cpp](https://github.com/ggml-org/llama.cpp)** — the underlying engine
 
 ### Quantisation Levels
 
@@ -109,7 +117,17 @@ The tool will:
 1. First try Unsloth (fastest, if available)
 2. Fall back to llama.cpp (if Unsloth fails or isn't installed)
 
-> **Prerequisite:** llama.cpp must be installed for the fallback to work. The installer sets this up automatically. If you installed manually, run `git clone https://github.com/ggerganov/llama.cpp && cd llama.cpp && make`.
+If the path is a LoRA adapter (the usual training output), it is first merged into its base model — named in `adapter_config.json` — in a temporary folder, because llama.cpp converts full models only. Prefix/Prompt-tuning adapters cannot be merged and are rejected.
+
+> **Prerequisite:** llama.cpp must be installed for the fallback to work. The installer can set it up. If you installed manually:
+> ```bash
+> git clone --depth 1 https://github.com/ggml-org/llama.cpp
+> cmake -S llama.cpp -B llama.cpp/build
+> cmake --build llama.cpp/build --target llama-quantize
+> pip install "sentencepiece>=0.1.98,<0.3.0"   # used by the converter for some tokenizers
+> export PATH="$PATH:$PWD/llama.cpp:$PWD/llama.cpp/build/bin"
+> ```
+> Without `llama-quantize` the export stops at an FP16 GGUF.
 
 ### Using the GGUF with Ollama
 

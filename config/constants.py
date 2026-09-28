@@ -84,6 +84,11 @@ CHAT_ROLES = ("system", "user", "assistant")
 # IDs are owner/name only: load_dataset() would also read a *local* directory.
 HUB_DATASET_ID_PATTERN = r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*"
 HUB_NAME_PATTERN = r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}"  # config and split names
+# Model ids may be bare legacy names ("gpt2") as well as owner/name.
+HUB_MODEL_ID_PATTERN = r"[A-Za-z0-9][A-Za-z0-9_.-]*(?:/[A-Za-z0-9][A-Za-z0-9_.-]*)?"
+# GRPO/KTO checkpoints (resume after a stop or crash); older ones are deleted.
+CHECKPOINT_SAVE_STEPS = 50
+CHECKPOINT_TOTAL_LIMIT = 2
 HUB_DEFAULT_MAX_ROWS = 20_000  # rows are streamed, so only what is used is downloaded
 HUB_MAX_ROWS_LIMIT = 1_000_000
 

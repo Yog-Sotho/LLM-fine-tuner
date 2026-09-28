@@ -138,28 +138,18 @@ When it's disabled, your data is used as-is.
 
 ---
 
-## Multi-GPU Training (Accelerate)
+## Multi-GPU Training
 
-For users with multiple GPUs, you can distribute training across all of them using HuggingFace Accelerate.
+**Not supported yet.** Training runs as a single process. There is no data-parallel
+training (DDP), FSDP or DeepSpeed support, and launching the app with `accelerate launch`
+does not split training across GPUs — without arguments it would start one copy of the
+web UI per GPU.
 
-### Setup
-
-```bash
-# Configure Accelerate (one-time)
-accelerate config
-# Choose: multi-GPU, number of GPUs, mixed precision (bf16 recommended)
-```
-
-### Launch
-
-```bash
-# Instead of python main.py, use:
-accelerate launch main.py
-```
-
-The training automatically splits across your GPUs with minimal setup.
-
-> **Note:** The Gradio UI launches on the main process only. For multi-GPU, use the CLI.
+What does happen on a machine with several GPUs: 4-bit (QLoRA) and GPU inference loads use
+`device_map="auto"`, so Transformers may place a model's layers on more than one GPU when
+it does not fit on one. The GPUs then work one after another — it lets a bigger model
+load, it does not make training faster. To keep a run on a single GPU, choose it with
+`CUDA_VISIBLE_DEVICES=0 python main.py`.
 
 ---
 

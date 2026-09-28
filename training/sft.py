@@ -32,8 +32,6 @@ Patch log
 """
 
 import gc
-import glob
-import os
 import subprocess
 import threading
 import time
@@ -80,8 +78,14 @@ from core.callbacks import (
     LoggingCallback,
     StopCallback,
 )  # F-2: ETAProgressCallback added
-from core.hardware import compute_dtype, get_lora_targets, is_unsloth_supported, select_precision
-from core.run_config import save_run_config
+from core.hardware import (
+    compute_dtype,
+    full_finetune_dtype,
+    get_lora_targets,
+    is_unsloth_supported,
+    select_precision,
+)
+from core.run_config import latest_checkpoint, save_run_config
 from core.state import app_state, validate_path_traversal
 from data.preprocessing import (
     drop_prompts_over_limit,
@@ -308,7 +312,18 @@ def train_model(
 
         # ── Path C: Standard HuggingFace load ─────────────────────────────
         else:
-            if device == "cuda":
+            # Full fine-tuning trains every weight, so the model must not be quantised:
+            # Transformers refuses to train a quantised model without adapters.
+            full_finetune = peft_method == "Full Fine-tuning" or (
+                peft_method == "Auto" and not use_lora
+            )
+            if device == "cuda" and full_finetune:
+                weights_dtype = full_finetune_dtype(device)
+                model_kwargs = dict(torch_dtype=weights_dtype, trust_remote_code=ALLOW_REMOTE_CODE)
+                if use_flash_attn and weights_dtype == torch.bfloat16:  # FA2 needs fp16/bf16
+                    model_kwargs["attn_implementation"] = "flash_attention_2"
+                model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
+            elif device == "cuda":
                 bnb = BitsAndBytesConfig(
                     load_in_4bit=True,
                     bnb_4bit_quant_type="nf4",
@@ -493,7 +508,10 @@ def train_model(
 
             # Packing concatenates short samples; without Flash Attention the packed
             # samples attend to each other (TRL warns about cross-contamination).
-            packing = bool(hyperparams.get("packing")) and use_flash_attn and device == "cuda"
+            # Decided by how the model was actually loaded: some paths (e.g. fp32 full
+            # fine-tuning) skip Flash Attention even when it was requested.
+            uses_fa2 = getattr(model.config, "_attn_implementation", None) == "flash_attention_2"
+            packing = bool(hyperparams.get("packing")) and uses_fa2 and device == "cuda"
             if hyperparams.get("packing") and not packing:
                 log_callback.records.append(
                     {
@@ -532,14 +550,7 @@ def train_model(
             )
 
         # ── Resume from checkpoint ─────────────────────────────────────────
-        resume_path = None
-        if resume_from_checkpoint:
-            ckpts = sorted(
-                glob.glob(os.path.join(output_dir, "checkpoint-*")),
-                key=lambda p: int(p.rsplit("-", 1)[-1]),
-            )
-            if ckpts:
-                resume_path = ckpts[-1]
+        resume_path = latest_checkpoint(output_dir) if resume_from_checkpoint else None
 
         # ── Train ──────────────────────────────────────────────────────────
         if progress is not None:
@@ -596,15 +607,26 @@ def train_model(
                 )
             else:
                 try:
-                    subprocess.run(
+                    # heretic is interactive: no stdin, so a prompt ends it instead of
+                    # blocking on the server's stdin until the timeout.
+                    heretic = subprocess.run(
                         ["heretic", output_dir],
                         capture_output=True,
                         text=True,
                         timeout=600,
+                        stdin=subprocess.DEVNULL,
                     )
+                    if heretic.returncode == 0:
+                        heretic_note = "🔓 Heretic Mode applied!"
+                    else:
+                        tail = (heretic.stderr or heretic.stdout or "").strip().splitlines()[-3:]
+                        heretic_note = (
+                            f"⚠️ Heretic failed (exit code {heretic.returncode}):\n"
+                            + "\n".join(tail)
+                        )
                     summary = (
                         f"✅ Training {status}!\n"
-                        f"🔓 Heretic Mode applied!\n"
+                        f"{heretic_note}\n"
                         f"⏱ Elapsed: {elapsed / 60:.1f} min\n"
                         f"📁 Model saved to: {output_dir}\n"
                     )

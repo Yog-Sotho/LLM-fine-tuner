@@ -460,6 +460,9 @@ def grpo(
     prompts_per_step: int = typer.Option(1, "--prompts-per-step"),
     max_completion_length: int = typer.Option(128, "--max-completion-length"),
     beta: float = typer.Option(0.0, "--beta", help="KL penalty (0 = no reference model)"),
+    resume: bool = typer.Option(
+        False, "--resume", help="Continue from the newest checkpoint in --output"
+    ),
 ):
     """GRPO fine-tuning with a reward model and/or reference answers (replaces PPO)."""
     if err := (
@@ -489,6 +492,7 @@ def grpo(
         prompts_per_step=prompts_per_step,
         max_completion_length=max_completion_length,
         beta=beta,
+        resume=resume,
         progress=None,
     )
     if "✅" not in result:
@@ -514,6 +518,9 @@ def kto(
     beta: float = typer.Option(0.1, "--beta"),
     batch_size: int = typer.Option(4, "--batch-size", help="At least 2"),
     max_length: int = typer.Option(512, "--max-length"),
+    resume: bool = typer.Option(
+        False, "--resume", help="Continue from the newest checkpoint in --output"
+    ),
 ):
     """KTO alignment from thumbs-up / thumbs-down feedback."""
     if err := (
@@ -540,6 +547,7 @@ def kto(
         epochs=epochs,
         batch_size=batch_size,
         max_length=max_length,
+        resume=resume,
         progress=None,
     )
     if "✅" not in result:

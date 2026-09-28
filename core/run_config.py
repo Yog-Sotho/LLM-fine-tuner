@@ -6,9 +6,11 @@ Layer 1 — reproducibility records for training runs.
 Every trainer writes ``run_config.yaml`` next to the model it saves: what was
 trained (mode, base model, hyperparameters, seed), on which data (row count +
 SHA-256 of the rows actually used) and with which library versions. The CLI can
-replay an SFT/DPO run from it (``train --config``).
+replay an SFT/DPO run from it (``train --config``). The README.md model card is
+generated from the same record.
 """
 
+import glob
 import hashlib
 import json
 import os
@@ -19,11 +21,13 @@ from importlib import metadata
 import yaml
 
 from config.constants import (
+    HUB_DATASET_ID_PATTERN,
     RUN_CONFIG_FILENAME,
     RUN_NAME_PATTERN,
     RUNS_DIR,
     TRACKING_BACKENDS,
 )
+from core.model_card import write_model_card
 
 _LIBRARIES = ("torch", "transformers", "trl", "peft", "datasets", "accelerate")
 
@@ -36,11 +40,16 @@ def dataset_fingerprint(dataset) -> dict:
         for row in zip(*(batch[c] for c in columns), strict=True):
             digest.update(json.dumps(dict(zip(columns, row, strict=True)), default=str).encode())
             digest.update(b"\n")
-    return {
+    fingerprint = {
         "rows": len(dataset),
         "columns": sorted(dataset.column_names),
         "sha256": digest.hexdigest(),
     }
+    # load_hub_dataset() records the Hub id; it links the model card to the dataset.
+    name = getattr(getattr(dataset, "info", None), "dataset_name", None)
+    if isinstance(name, str) and re.fullmatch(HUB_DATASET_ID_PATTERN, name):
+        fingerprint["hub_id"] = name
+    return fingerprint
 
 
 def library_versions() -> dict[str, str]:
@@ -54,7 +63,9 @@ def library_versions() -> dict[str, str]:
 
 
 def save_run_config(output_dir: str, *, mode: str, model: str, dataset, **settings) -> str:
-    """Write run_config.yaml into ``output_dir`` and return its path.
+    """Write run_config.yaml and the README.md model card into ``output_dir``.
+
+    Returns the path of run_config.yaml.
 
     ``settings`` holds everything needed to repeat the run (hyperparameters,
     PEFT options, seed, tracking backend, ...).
@@ -70,6 +81,9 @@ def save_run_config(output_dir: str, *, mode: str, model: str, dataset, **settin
     path = os.path.join(output_dir, RUN_CONFIG_FILENAME)
     with open(path, "w", encoding="utf-8") as f:
         yaml.safe_dump(record, f, sort_keys=False, allow_unicode=True)
+    # Replaces the card TRL writes on save: ours has the dataset, settings and seed,
+    # and never puts a local path in base_model (the Hub rejects such cards).
+    write_model_card(output_dir, record)
     return path
 
 
@@ -80,6 +94,16 @@ def load_run_config(path: str) -> dict:
     if not isinstance(record, dict) or "mode" not in record or "model" not in record:
         raise ValueError(f"{path} is not a run config (missing 'mode'/'model').")
     return record
+
+
+def latest_checkpoint(output_dir: str) -> str | None:
+    """Newest ``checkpoint-<step>`` folder in ``output_dir`` (to resume from), or None."""
+    ckpts = [
+        path
+        for path in glob.glob(os.path.join(output_dir, "checkpoint-*"))
+        if path.rsplit("-", 1)[-1].isdigit()
+    ]
+    return max(ckpts, key=lambda p: int(p.rsplit("-", 1)[-1]), default=None)
 
 
 def resolve_report_to(value: str | None) -> str:

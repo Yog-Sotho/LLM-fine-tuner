@@ -2,7 +2,7 @@
 export/hub.py
 ==============
 Layer 5 — one-shot model push to HuggingFace Hub.
-Imports: config.constants, stdlib.
+Imports: config.constants, core.state, stdlib, huggingface_hub (lazy).
 
 Functions
 ---------
@@ -23,6 +23,38 @@ import re
 
 from config.constants import HAS_HUB, HF_TOKEN_MIN_LEN, HF_TOKEN_PREFIX
 from core.state import redact_sensitive_info
+
+
+def _complete_card_metadata(api, model_path: str) -> None:
+    """Check the model card's ``base_model`` against the Hub before uploading.
+
+    Uses the canonical id (e.g. ``gpt2`` → ``openai-community/gpt2``) and copies the
+    base model's license. A base_model that is not on the Hub (private, deleted,
+    typo) is dropped: the Hub rejects cards with an invalid base_model.
+    """
+    from huggingface_hub import ModelCard  # lazy
+    from huggingface_hub.errors import HfHubHTTPError
+
+    path = os.path.join(model_path, "README.md")
+    if not os.path.isfile(path):
+        return
+    card = ModelCard.load(path)
+    base = card.data.base_model
+    if not isinstance(base, str) or not base:
+        return
+    try:
+        info = api.model_info(base)
+    except HfHubHTTPError:
+        card.data.base_model = None
+    else:
+        card.data.base_model = info.id
+        base_card = info.card_data
+        if base_card is not None and base_card.license and not card.data.license:
+            card.data.license = base_card.license
+            for key in ("license_name", "license_link"):  # set when license is "other"
+                if base_card.get(key):
+                    card.data[key] = base_card.get(key)
+    card.save(path)
 
 
 def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
@@ -74,13 +106,12 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
     try:
         from huggingface_hub import HfApi  # lazy
 
-        api = HfApi()
-        api.upload_folder(
-            folder_path=model_path,
-            repo_id=repo_id,
-            repo_type="model",
-            token=token,
-        )
+        api = HfApi(token=token)
+        _complete_card_metadata(api, model_path)
+        # upload_folder needs an existing repo (404 otherwise); visibility follows
+        # the account's default for new repos.
+        api.create_repo(repo_id=repo_id, repo_type="model", exist_ok=True)
+        api.upload_folder(folder_path=model_path, repo_id=repo_id, repo_type="model")
         return f"✅ Pushed to https://huggingface.co/{repo_id}"
     except Exception as e:
         err_msg = redact_sensitive_info(str(e))

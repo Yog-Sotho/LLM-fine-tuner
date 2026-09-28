@@ -50,9 +50,9 @@ from config.constants import (
 from core.run_config import new_run_name, resolve_report_to, run_dir_for
 from core.state import app_state, redact_sensitive_info, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file, load_hub_dataset
-from data.preprocessing import get_dataset_stats, preview_dataset, validate_and_clean_dataset
+from data.preprocessing import preview_dataset, validate_and_clean_dataset
 from export.hub import push_to_hub
-from export.utils import create_model_card, create_zip_from_folder
+from export.utils import create_zip_from_folder
 from inference.generate import batch_generate, generate_text
 from training.sft import train_model
 
@@ -212,13 +212,6 @@ def on_train_click(
     )
     os.makedirs(output_dir, exist_ok=True)
 
-    # BOLT OPTIMIZATION: Use centralized vectorized stats function for ~450x speedup.
-    try:
-        dataset_info = get_dataset_stats(ds, is_dpo=is_dpo)
-    except Exception:
-        # Safety fallback: if vectorization fails, use minimal metadata
-        dataset_info = {"num_examples": len(ds), "avg_length": 100.0}
-
     try:
         msg, log_records = train_model(
             model_name,
@@ -251,15 +244,6 @@ def on_train_click(
             seed=int(seed),
             report_to=report_to,
             run_name=run_name,
-        )
-        create_model_card(
-            model_name,
-            dataset_info,
-            hyperparams,
-            output_dir,
-            peft_method,
-            training_mode=training_mode,
-            heretic_mode=heretic_mode,
         )
         zip_path = create_zip_from_folder(output_dir)
 

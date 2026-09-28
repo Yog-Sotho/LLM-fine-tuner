@@ -2,7 +2,7 @@
 export/gguf.py
 ===============
 Layer 5 — GGUF export via Unsloth (preferred) or llama.cpp fallback.
-Imports: config.constants, stdlib, subprocess, shutil, glob.
+Imports: config.constants, core.state, inference.vllm_runner, stdlib, subprocess.
 
 Functions
 ---------
@@ -11,15 +11,42 @@ on_export_gguf   — Gradio UI handler for the GGUF Export button
 """
 
 import glob
+import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 
 import gradio as gr
 
 from config.constants import HAS_UNSLOTH
 from core.state import app_state, validate_path_traversal
+from inference.vllm_runner import merge_adapter_for_inference
+
+
+def _merge_adapter_for_conversion(adapter_dir: str) -> tuple[str | None, str]:
+    """Merge a LoRA adapter into its base model in a temporary folder.
+
+    llama.cpp converts full models only; an adapter folder has no config.json or
+    base weights. Returns (merged_dir, "") or (None, error message).
+    """
+    with open(os.path.join(adapter_dir, "adapter_config.json"), encoding="utf-8") as f:
+        adapter_config = json.load(f)
+    if str(adapter_config.get("peft_type", "")).upper() != "LORA":
+        return None, (
+            f"❌ GGUF export needs a LoRA adapter or a full model; "
+            f"{adapter_config.get('peft_type')} adapters cannot be merged into the weights."
+        )
+    base_model = str(adapter_config.get("base_model_name_or_path") or "").strip()
+    if not base_model:
+        return None, "❌ adapter_config.json does not name the base model to merge into."
+    merged_dir = tempfile.mkdtemp(prefix="gguf_merge_")
+    status = merge_adapter_for_inference(base_model, adapter_dir, merged_dir)
+    if not status.startswith("✅"):
+        shutil.rmtree(merged_dir, ignore_errors=True)
+        return None, status
+    return merged_dir, ""
 
 
 def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k") -> str:
@@ -28,7 +55,8 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
     Strategy:
     1. Unsloth (preferred) — fastest, no external tools required.
     2. llama.cpp fallback  — uses convert_hf_to_gguf.py + llama-quantize.
-       Both tools must be in PATH or ~/llama.cpp/.
+       Both tools must be in PATH or ~/llama.cpp/. llama.cpp converts full models
+       only, so a LoRA adapter folder is first merged into its base model.
 
     Parameters
     ----------
@@ -93,18 +121,32 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
             return (
                 "❌ GGUF export requires either:\n"
                 "1. Unsloth library (pip install unsloth)\n"
-                "2. llama.cpp tools: git clone https://github.com/ggerganov/llama.cpp "
-                "&& cd llama.cpp && make\n"
-                "   Then ensure convert_hf_to_gguf.py and llama-quantize are in PATH"
+                "2. llama.cpp: git clone https://github.com/ggml-org/llama.cpp && "
+                "cmake -S llama.cpp -B llama.cpp/build && "
+                "cmake --build llama.cpp/build --target llama-quantize\n"
+                "   Then put llama.cpp/ (convert_hf_to_gguf.py) and llama.cpp/build/bin "
+                "(llama-quantize) on PATH, or re-run install.sh"
             )
 
+        merged_dir = None
+        if os.path.isfile(os.path.join(model_path, "adapter_config.json")):
+            merged_dir, error = _merge_adapter_for_conversion(model_path)
+            if merged_dir is None:
+                return error
         fp16_path = os.path.join(output_dir, "model_fp16.gguf")
-        result = subprocess.run(
-            ["python", convert_script, model_path, "--outtype", "f16", "--outfile", fp16_path],
-            capture_output=True,
-            text=True,
-            timeout=900,
-        )
+        try:
+            # sys.executable: the converter needs this environment's torch/transformers,
+            # not whatever "python" happens to be first on PATH.
+            result = subprocess.run(
+                [sys.executable, convert_script, merged_dir or model_path,
+                 "--outtype", "f16", "--outfile", fp16_path],
+                capture_output=True,
+                text=True,
+                timeout=900,
+            )  # fmt: skip
+        finally:
+            if merged_dir:
+                shutil.rmtree(merged_dir, ignore_errors=True)
         if result.returncode != 0:
             return (
                 f"❌ llama.cpp conversion failed:\n{result.stderr}\n"

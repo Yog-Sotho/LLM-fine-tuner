@@ -28,6 +28,7 @@ LLM-fine-tuner/
 │   ├── state.py             # AppState singleton (shared caches) + per-session SessionState
 │   ├── hardware.py          # VRAM/RAM detection, model recommendation, precision helpers
 │   ├── run_config.py        # run_config.yaml, dataset fingerprint, run folders, tracking choice
+│   ├── model_card.py        # README.md model card built from the run record
 │   └── callbacks.py         # Trainer callbacks (Stop, Logging, ETA)
 │
 ├── data/
@@ -144,7 +145,8 @@ Tab files (`ui/tabs/*.py`) define **layout only** — no `.click()`, `.change()`
 
 ### Reproducibility
 
-- Every trainer calls `save_run_config()` after saving the model, so `run_config.yaml` (mode, model, hyperparameters, seed, dataset SHA-256, library versions) sits next to it. New trainers must do the same.
+- Every trainer calls `save_run_config()` after saving the model, so `run_config.yaml` (mode, model, hyperparameters, seed, dataset SHA-256, library versions) sits next to it. New trainers must do the same. It also writes the `README.md` model card (`core/model_card.py`), replacing the one TRL/PEFT wrote — call it last. `base_model` is only set for Hub ids, never local paths (the Hub rejects those).
+- Resume: `latest_checkpoint(output_dir)` from `core/run_config.py`; GRPO/KTO save every `CHECKPOINT_SAVE_STEPS`.
 - Call `transformers.set_seed(seed)` **before** building the model: LoRA initialises its weights at creation, before the Trainer seeds, so seeding later does not reproduce a run (covered by `test_same_seed_gives_identical_weights…`).
 - UI runs go to `run_dir_for(run_name)` (`<LFT_RUNS_DIR>/<name>/`); never build run paths from raw user input.
 - Tracking backends come from `TRACKING_BACKENDS` (installed only); validate choices with `resolve_report_to()`.
@@ -280,13 +282,15 @@ it is shared between sessions; pass `adapter_names` per `generate()` call instea
 ```
 Trained model → on_export_gguf()
     → [Unsloth available] FastLanguageModel GGUF export
-    → [Fallback] llama.cpp conversion
+    → [Fallback] LoRA adapter merged into its base (temp dir) → convert_hf_to_gguf.py
+      (run with sys.executable) → llama-quantize
 ```
 
 ### Hub push
 ```
 Trained model → push_to_hub()
-    → create_repo() [if needed] → upload files + model card
+    → card: base_model checked on the Hub (canonical id, license copied; dropped if unknown)
+    → create_repo(exist_ok=True) → upload_folder()
 ```
 
 ---
@@ -299,7 +303,7 @@ Trained model → push_to_hub()
 
 **SFT data** goes through `to_sft_dataset()` into TRL's prompt-completion format (chat data: all turns before the last assistant reply → prompt, that reply → completion), so `SFTTrainer` trains on the response only and appends EOS. Don't pre-tokenise or build `labels` yourself.
 
-**Precision:** use `select_precision(device)` / `compute_dtype(device)` from `core/hardware.py` (bf16 where supported, else fp16; fp32 on CPU). Always pass them explicitly — TRL configs default to bf16, which fails on CPU.
+**Precision:** use `select_precision(device)` / `compute_dtype(device)` from `core/hardware.py` (bf16 where supported, else fp16; fp32 on CPU). Always pass them explicitly — TRL configs default to bf16, which fails on CPU. Full fine-tuning is never loaded quantised (Transformers refuses to train a purely quantised model): weights use `full_finetune_dtype(device)` — bf16, else fp32, never fp16.
 
 **Reward models** are saved merged (full sequence classifier) because `GRPOTrainer` loads a reward-model path as `AutoModelForSequenceClassification(num_labels=1)`.
 
@@ -346,3 +350,4 @@ Example: `# C-1: Removed broken llm_fine_tuner.* package imports`
 - **Unsloth:** installed separately — not in `requirements.txt`. Provides 2–5× training speedup and native GGUF export.
 - **heretic-llm:** optional dep (moved out of required in v3.2 to avoid PyPI install failures).
 - **Python:** 3.10, 3.11, 3.12 supported.
+- **Packaging:** `pyproject.toml` is the only source of metadata (`setup.py` is an empty shim). Packages are listed in `[tool.setuptools.packages.find] include` — add any new top-level package there; `main.py` ships via `py-modules`. CI installs the built wheel and checks it.

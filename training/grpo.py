@@ -21,6 +21,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
 from config.constants import (
     ALLOW_REMOTE_CODE,
+    CHECKPOINT_SAVE_STEPS,
+    CHECKPOINT_TOTAL_LIMIT,
     COL_INSTRUCTION,
     COL_PROMPT,
     COL_REFERENCE,
@@ -31,7 +33,7 @@ from config.constants import (
 )
 from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback
 from core.hardware import compute_dtype, get_lora_targets, select_precision
-from core.run_config import save_run_config
+from core.run_config import latest_checkpoint, save_run_config
 from core.state import app_state, validate_path_traversal
 from data.loader import load_table_dataset
 
@@ -64,6 +66,7 @@ def train_grpo(
     prompts_per_step: int = 1,
     max_completion_length: int = 128,
     beta: float = 0.0,
+    resume: bool = False,
     progress=gr.Progress(),
     request: gr.Request | None = None,
 ) -> str:
@@ -150,7 +153,9 @@ def train_grpo(
             max_completion_length=int(max_completion_length),
             beta=beta,
             logging_steps=1,
-            save_strategy="no",
+            save_strategy="steps",
+            save_steps=CHECKPOINT_SAVE_STEPS,
+            save_total_limit=CHECKPOINT_TOTAL_LIMIT,
             report_to=DEFAULT_REPORT_TO,
             seed=DEFAULT_SEED,
             **select_precision(device),
@@ -184,7 +189,7 @@ def train_grpo(
         if progress is not None:
             progress(0.2, desc="GRPO training started… calculating ETA…")
         t0 = time.time()
-        trainer.train()
+        trainer.train(resume_from_checkpoint=latest_checkpoint(output_dir) if resume else None)
         elapsed = time.time() - t0
         status = "stopped by user" if stop_event.is_set() else "complete"
 

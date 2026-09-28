@@ -16,8 +16,8 @@ set -euo pipefail
 #   [FIX-3 🟠] Version label "v5.0" corrected to "v3.2".
 #   [FIX-4 🟠] heretic-llm added to CORE_DEPS (script calls `heretic` binary).
 #   [FIX-5 🟠] psutil + wandb wrapped in ask() — consistent with other optionals.
-#   [FIX-6 🟠] llama.cpp CUDA build flag: detects GGML_CUDA vs LLAMA_CUDA
-#              to support both older and newer llama.cpp releases.
+#   [FIX-6 🟠] llama.cpp built with CMake (its Makefile build was removed);
+#              -DGGML_CUDA=ON on CUDA machines, llama-quantize on the launcher PATH.
 #   [FIX-7 🟡] CUDA version fallback guard: warn when nvidia-smi can't be parsed.
 #   [FIX-8 🟡] Unsloth install uses the same git+no-deps form as requirements.txt.
 # =============================================================================
@@ -237,22 +237,20 @@ ask "Install psutil (RAM monitoring) and wandb (experiment tracking)?" && {
 # llama.cpp (GGUF export)
 # ----------------------------------------------------------------------------
 print_step "llama.cpp (GGUF export)"
-if ask "Clone & build llama.cpp with CUDA support?"; then
+if ask "Clone & build llama.cpp (GGUF export without Unsloth)?"; then
     if [ ! -d "llama.cpp" ]; then
-        git clone https://github.com/ggerganov/llama.cpp.git
-        cd llama.cpp
-        if [ "$CUDA_AVAILABLE" -eq 1 ]; then
-            # [FIX-6]: llama.cpp renamed LLAMA_CUDA → GGML_CUDA after build b3000.
-            # Detect which flag the checked-out version actually uses.
-            if grep -q "GGML_CUDA" Makefile 2>/dev/null; then
-                make GGML_CUDA=1 -j"$(nproc || echo 4)"
-            else
-                make LLAMA_CUDA=1 -j"$(nproc || echo 4)"
-            fi
-        else
-            make -j"$(nproc || echo 4)"
-        fi
-        cd ..
+        git clone --depth 1 https://github.com/ggml-org/llama.cpp.git
+        # llama.cpp builds with CMake only (its Makefile now just errors out).
+        # convert_hf_to_gguf.py is Python; llama-quantize is the only binary needed.
+        CUDA_FLAG=""
+        [ "$CUDA_AVAILABLE" -eq 1 ] && CUDA_FLAG="-DGGML_CUDA=ON"
+        cmake -S llama.cpp -B llama.cpp/build $CUDA_FLAG -DCMAKE_BUILD_TYPE=Release \
+            -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF
+        cmake --build llama.cpp/build --config Release --target llama-quantize \
+            -j"$(nproc || echo 4)"
+        # The converter needs sentencepiece for SentencePiece tokenizers. Not its full
+        # requirements file: that pins torch/transformers versions and would replace ours.
+        pip install "sentencepiece>=0.1.98,<0.3.0"
         print_success "llama.cpp built"
     else
         print_warning "llama.cpp already exists – skipping"
@@ -277,7 +275,7 @@ if [ -f "$SCRIPT_PATH" ]; then
 #!/bin/bash
 source "$VENV_DIR/bin/activate"
 export HF_HUB_ENABLE_HF_TRANSFER=1
-export PATH="\$PATH:$PROJECT_ROOT/llama.cpp"
+export PATH="\$PATH:$PROJECT_ROOT/llama.cpp:$PROJECT_ROOT/llama.cpp/build/bin"
 python "$SCRIPT_PATH" "\$@"
 EOF
     chmod +x "$LAUNCHER"

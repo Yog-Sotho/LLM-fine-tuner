@@ -243,7 +243,9 @@ def validate_and_clean_dataset(
             )
 
     # Convert back to HuggingFace Dataset
-    return Dataset.from_pandas(df, preserve_index=False), issues
+    cleaned = Dataset.from_pandas(df, preserve_index=False)
+    cleaned.info.dataset_name = dataset.info.dataset_name  # keeps the Hub id (model card)
+    return cleaned, issues
 
 
 def preview_dataset(dataset: Dataset, is_dpo: bool = False) -> pd.DataFrame:

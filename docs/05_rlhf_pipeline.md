@@ -101,6 +101,7 @@ A prompts-only file (`prompt` column) works when you give a reward model path.
 | Completions per Prompt | 4 | More = better baseline, slower |
 | Prompts per Step | 1 | Batch size is prompts × completions |
 | Max Completion Tokens | 128 | Length of each generated answer |
+| Resume from last checkpoint | off | Continue from the newest checkpoint in the output directory |
 
 GRPO generates text during training, so it is slower per step than SFT.
 
@@ -167,6 +168,10 @@ Or ranked pairs (`prompt`, `chosen`, `rejected`) — each pair becomes one good 
 | Epochs | 1 | |
 | Batch Size | 4 | At least 2 (KTO estimates a baseline per batch) |
 | Max Length | 512 | Maximum tokens for prompt + response |
+| Resume from last checkpoint | off | Continue from the newest checkpoint in the output directory |
+
+GRPO and KTO save a checkpoint every 50 steps (the last two are kept), so a stopped or
+crashed run can be resumed with the same output directory.
 
 ---
 
