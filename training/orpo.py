@@ -11,7 +11,6 @@ Patch log
 """
 
 import gc
-import os
 import time
 
 import gradio as gr
@@ -184,8 +183,6 @@ def train_orpo_v27(
                 ETAProgressCallback(gradio_progress=progress, progress_start=0.3, progress_end=0.9)
             )
 
-        # BOLT OPTIMIZATION: Parallelize internal trainer tokenization.
-        # Use inspect to ensure compatibility with older TRL versions.
         orpo_trainer_kwargs = {
             "model": model,
             "args": orpo_config,
@@ -194,8 +191,6 @@ def train_orpo_v27(
             "processing_class": tokenizer,
             "callbacks": orpo_callbacks,
         }
-        if "dataset_num_proc" in _inspect.signature(ORPOTrainer.__init__).parameters:
-            orpo_trainer_kwargs["dataset_num_proc"] = os.cpu_count()
 
         orpo_trainer = ORPOTrainer(**orpo_trainer_kwargs)
 

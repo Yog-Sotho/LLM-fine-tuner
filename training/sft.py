@@ -442,20 +442,14 @@ def train_model(
                 dpo_callbacks.append(ETAProgressCallback(gradio_progress=progress))
 
             dpo_config = DPOConfig(**base_training_args, remove_unused_columns=False, beta=dpo_beta)
-            import inspect as _inspect
-
-            dpo_trainer_kwargs = {
-                "model": model,
-                "args": dpo_config,
-                "train_dataset": train_ds,
-                "eval_dataset": eval_ds,
-                "processing_class": tokenizer,
-                "callbacks": dpo_callbacks,
-            }
-            # BOLT OPTIMIZATION: Parallelize internal trainer tokenization.
-            if "dataset_num_proc" in _inspect.signature(DPOTrainer.__init__).parameters:
-                dpo_trainer_kwargs["dataset_num_proc"] = os.cpu_count()
-            trainer = DPOTrainer(**dpo_trainer_kwargs)
+            trainer = DPOTrainer(
+                model=model,
+                args=dpo_config,
+                train_dataset=train_ds,
+                eval_dataset=eval_ds,
+                processing_class=tokenizer,
+                callbacks=dpo_callbacks,
+            )
         else:
             from trl import SFTConfig, SFTTrainer  # lazy
 
@@ -477,7 +471,10 @@ def train_model(
                 **base_training_args,
                 max_length=hyperparams["max_length"],
                 packing=packing,
-                dataset_num_proc=os.cpu_count(),
+                # Dataset prep stays in-process: forking worker processes from a process
+                # that already runs threads (torch, the Gradio server) can deadlock, and
+                # fast tokenizers already tokenise batches in parallel internally.
+                dataset_num_proc=None,
                 # Fused Triton kernels (lower memory, faster) when installed on CUDA.
                 use_liger_kernel=HAS_LIGER and device == "cuda",
             )
