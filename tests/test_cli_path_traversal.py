@@ -67,3 +67,9 @@ def test_cli_kto_path_traversal():
     )
     assert result.exit_code == 1
     assert "❌ Path traversal attempt detected." in result.stderr
+
+
+def test_cli_benchmark_path_traversal():
+    result = runner.invoke(app, ["benchmark", "--model", "gpt2", "--output", "../scores.csv"])
+    assert result.exit_code == 1
+    assert "❌ Path traversal attempt detected." in result.stderr

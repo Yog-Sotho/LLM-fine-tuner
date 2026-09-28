@@ -221,3 +221,43 @@ def test_evaluate_exits_on_missing_data():
         ],
     )
     assert result.exit_code != 0
+
+
+def test_evaluate_compare_base_needs_lora():
+    result = runner.invoke(
+        app, ["evaluate", "--model", "gpt2", "--data", "x.csv", "--compare-base"]
+    )
+    assert result.exit_code == 1
+    assert "--compare-base needs a LoRA adapter" in _plain(result.output)
+
+
+# ── benchmark ─────────────────────────────────────────────────────────────
+
+
+def test_benchmark_passes_options_and_saves_csv(monkeypatch, tmp_path):
+    import pandas as pd
+
+    import cli.commands as cmd_mod
+
+    calls = []
+
+    def fake_run(*args):
+        calls.append(args)
+        return pd.DataFrame([{"task": "piqa", "metric": "acc", "score": 0.5}])
+
+    monkeypatch.setattr(cmd_mod, "run_benchmarks", fake_run)
+    out = tmp_path / "scores.csv"
+    result = runner.invoke(
+        app,
+        ["benchmark", "--model", "gpt2", "--tasks", "piqa, boolq", "--limit", "7",
+         "--output", str(out)],
+    )  # fmt: skip
+    assert result.exit_code == 0, result.output
+    assert calls == [("gpt2", None, ["piqa", "boolq"], 7, False, 8)]
+    assert pd.read_csv(out)["score"].tolist() == [0.5]
+
+
+def test_benchmark_reports_invalid_tasks():
+    result = runner.invoke(app, ["benchmark", "--model", "gpt2", "--tasks", "nope"])
+    assert result.exit_code == 1
+    assert "Choose benchmarks from" in _plain(result.output)

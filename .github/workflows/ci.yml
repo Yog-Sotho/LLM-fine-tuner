@@ -291,12 +291,18 @@ jobs:
           # NLTK's model-artifact save/load APIs with caller-controlled paths.
           # This project only uses sentence_bleu and nlpaug's wordnet lookups, so
           # it is not reachable. Remove the waiver once nltk publishes a fix.
+          # PYSEC-2026-1939 / GHSA-g4r7-86gm-pgqc (CVE-2024-35515, sqlitedict
+          # <= 2.1.0, no fixed release): unpickling an untrusted cache file.
+          # lm-eval only opens sqlitedict for simple_evaluate(use_cache=...),
+          # which inference/benchmarks.py never passes (guarded by a test).
           pip-audit \
             --requirement requirements.txt \
             --skip-editable \
             --format columns \
             --progress-spinner off \
-            --ignore-vuln GHSA-8mgp-746c-j5xp
+            --ignore-vuln GHSA-8mgp-746c-j5xp \
+            --ignore-vuln PYSEC-2026-1939 \
+            --ignore-vuln GHSA-g4r7-86gm-pgqc
 
   # =========================================================================
   # JOB 5 — DOCKER LINT

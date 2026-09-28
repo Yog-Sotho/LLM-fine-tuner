@@ -342,6 +342,25 @@ try:
 except ImportError:
     HAS_NLPAUG = False
 
+# ── lm-evaluation-harness (standard benchmarks) ───────────────────────────
+# find_spec, not import: lm_eval imports its whole task registry on import.
+HAS_LM_EVAL: bool = importlib.util.find_spec("lm_eval") is not None
+
+# Benchmarks offered in the UI/CLI — each verified to load with datasets>=4
+# (no dataset loading scripts). Name → short description.
+BENCHMARK_TASKS: dict[str, str] = {
+    "arc_easy": "ARC-Easy — grade-school science questions",
+    "arc_challenge": "ARC-Challenge — harder science questions",
+    "hellaswag": "HellaSwag — commonsense sentence completion",
+    "piqa": "PIQA — physical commonsense",
+    "winogrande": "WinoGrande — pronoun resolution",
+    "boolq": "BoolQ — yes/no reading comprehension",
+    "truthfulqa_mc2": "TruthfulQA (MC2) — avoiding common falsehoods",
+    "gsm8k": "GSM8K — grade-school maths (generation; slow)",
+}
+BENCHMARK_DEFAULT_LIMIT = 100  # examples per task; full sets take hours on CPU
+BENCHMARK_MAX_LIMIT = 10_000
+
 # ── vLLM (high-throughput inference) ──────────────────────────────────────
 try:
     from vllm import LLM, SamplingParams  # noqa: F401

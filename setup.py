@@ -111,13 +111,14 @@ INSTALL_REQUIRES: list[str] = [
 # ── Optional dependency groups ─────────────────────────────────────────────────
 # Mirrors [project.optional-dependencies] in pyproject.toml exactly.
 EXTRAS_REQUIRE: dict[str, list[str]] = {
-    # Evaluation metrics (BLEU, ROUGE, BERTScore, HF evaluate hub)
+    # Evaluation metrics (BLEU, ROUGE, BERTScore, HF evaluate hub) and benchmarks
     "eval": [
         "evaluate>=0.4.0",
         "rouge-score>=0.1.2",
         "bert-score>=0.3.13",
         "nltk>=3.8.0",
         "nlpaug>=1.1.10",
+        "lm-eval>=0.4.13,<0.5",
     ],
     # Quantised inference backends
     "quant": [

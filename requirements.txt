@@ -64,6 +64,7 @@ evaluate>=0.4.0             # HuggingFace evaluate hub (BLEU, perplexity, etc.) 
 rouge-score>=0.1.2          # ROUGE-1/2/L metrics — optional
 bert-score>=0.3.13          # BERTScore semantic similarity — optional
 nltk>=3.8.0                 # BLEU scoring + punkt tokeniser (downloads punkt on first run)
+lm-eval>=0.4.13,<0.5        # Standard benchmarks via lm-evaluation-harness — optional
 
 # Data augmentation
 nlpaug>=1.1.10              # Synonym / random-word / spelling augmentation — optional

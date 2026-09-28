@@ -28,6 +28,7 @@ from data.augmentation import on_augment_click, on_quality_filter_click
 from export.gguf import on_export_gguf
 from export.registry import on_registry_list, on_registry_upload
 from export.utils import clear_gpu_cache, on_peft_zip_upload
+from inference.benchmarks import on_benchmark_click
 from inference.evaluation import on_evaluate_click
 from inference.vllm_runner import on_merge_adapter_click, on_vllm_generate
 from training.grpo import train_grpo
@@ -456,12 +457,25 @@ def build_demo() -> gr.Blocks:
                 et["judge_model_name"],
                 et["judge_criteria"],
                 et["eval_max_new_tokens_slider"],
+                et["eval_compare_base"],
             ],
             outputs=[
                 et["eval_metrics_out"],
                 et["eval_results_df"],
                 et["eval_preview_html"],  # F-6: new third output
             ],
+        )
+        et["bench_btn"].click(
+            fn=on_benchmark_click,
+            inputs=[
+                et["eval_model_choice"],
+                et["eval_custom_model"],
+                et["eval_lora_path_in"],
+                et["bench_tasks"],
+                et["bench_limit"],
+                et["bench_compare_base"],
+            ],
+            outputs=[et["bench_status"], et["bench_results_df"]],
         )
 
         # ── Share Tab ──────────────────────────────────────────────────────
