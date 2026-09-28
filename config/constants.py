@@ -77,6 +77,18 @@ COL_REJECTED = "rejected"
 COL_COMPLETION = "completion"  # TRL prompt-completion / KTO format
 COL_LABEL = "label"  # KTO: True = desirable completion, False = undesirable
 COL_REFERENCE = "reference"  # GRPO: expected answer used by the reference-match reward
+COL_MESSAGES = "messages"  # chat format: [{"role": ..., "content": ...}, ...]
+CHAT_ROLES = ("system", "user", "assistant")
+
+# ── Hugging Face Hub datasets ─────────────────────────────────────────────
+# IDs are owner/name only: load_dataset() would also read a *local* directory.
+HUB_DATASET_ID_PATTERN = r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*"
+HUB_NAME_PATTERN = r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}"  # config and split names
+HUB_DEFAULT_MAX_ROWS = 20_000  # rows are streamed, so only what is used is downloaded
+HUB_MAX_ROWS_LIMIT = 1_000_000
+
+DEFAULT_EVAL_SPLIT = 0.1  # fraction of rows held out for evaluation (0 = no eval)
+TOKEN_STATS_SAMPLE = 2_000  # rows tokenised to estimate token lengths
 
 # Prompt layout for instruction data when no chat template is used.
 SFT_PROMPT_TEMPLATE = "### Instruction:\n{instruction}\n\n### Response:\n"

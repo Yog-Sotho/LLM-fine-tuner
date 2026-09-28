@@ -198,6 +198,9 @@ The **📉 Loss Curve** below the log plots these values visually.
 
 - **Instruction data** (`instruction` / `output`): the loss is computed on the **response only** — the model is not trained to reproduce your prompts — and an end-of-sequence token is added, so the fine-tuned model learns when to stop.
 - **Plain text** (`text`): the model is trained on the whole text.
+- **Chat data** (`messages`): the model is trained on the last assistant reply, using the model's chat template.
+- **Eval split** (default 0.1) holds that share of rows out to measure eval loss; set it to 0 to train on everything.
+- **Tokens per example** are reported at the start of training, with a warning if examples are longer than **Max Sequence Length** (they get truncated). Max Sequence Length applies to DPO too.
 - **Mixed precision** is chosen automatically: bfloat16 on GPUs that support it, float16 on older GPUs, full precision on CPU.
 - **📦 Sequence packing** (optional): packs short examples into full-length sequences, which is much faster on short data. It needs **⚡ Flash Attention 2** on a CUDA GPU; without it the setting is skipped, because packed examples would leak into each other.
 

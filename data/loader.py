@@ -13,6 +13,7 @@ safe_extract_zip       — ZIP extraction with path-traversal guard
 """
 
 import os
+import re
 import zipfile
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from datasets import Dataset
 from config.constants import (
     COL_CHOSEN,
     COL_INSTRUCTION,
+    COL_MESSAGES,
     COL_OUTPUT,
     COL_PROMPT,
     COL_REJECTED,
@@ -34,6 +36,10 @@ from config.constants import (
     FILE_EXT_XLSX,
     HAS_OPENPYXL,
     HAS_PDF,
+    HUB_DATASET_ID_PATTERN,
+    HUB_DEFAULT_MAX_ROWS,
+    HUB_MAX_ROWS_LIMIT,
+    HUB_NAME_PATTERN,
 )
 from core.state import validate_path_traversal
 
@@ -244,6 +250,63 @@ def load_table_dataset(file) -> Dataset:
     text_cols = [c for c in df.columns if df[c].dtype == object]
     df[text_cols] = df[text_cols].fillna("")
     return Dataset.from_pandas(df, preserve_index=False)
+
+
+def load_hub_dataset(
+    repo_id: str,
+    split: str = "train",
+    config: str = "",
+    max_rows: int = HUB_DEFAULT_MAX_ROWS,
+    is_dpo: bool = False,
+) -> Dataset:
+    """Stream up to ``max_rows`` rows of a Hugging Face Hub dataset into memory.
+
+    Accepted layouts: ``messages`` (chat), ``text``, ``instruction``+``output``, or
+    ``prompt``+``chosen``+``rejected`` (DPO). Only those columns are kept. Streaming
+    means only the rows used are downloaded. Private/gated datasets use HF_TOKEN.
+    """
+    repo_id, split, config = (repo_id or "").strip(), (split or "").strip(), (config or "").strip()
+    if not re.fullmatch(HUB_DATASET_ID_PATTERN, repo_id) or validate_path_traversal(repo_id):
+        raise ValueError("Enter a Hub dataset ID like 'owner/name'.")
+    if os.path.exists(repo_id):  # load_dataset would read this local directory instead
+        raise ValueError(f"'{repo_id}' is a local path; enter a Hugging Face Hub dataset ID.")
+    if not re.fullmatch(HUB_NAME_PATTERN, split) or (
+        config and not re.fullmatch(HUB_NAME_PATTERN, config)
+    ):
+        raise ValueError("Split and config names may only use letters, digits, '.', '_', '-'.")
+    max_rows = int(max_rows)
+    if not 1 <= max_rows <= HUB_MAX_ROWS_LIMIT:
+        raise ValueError(f"Max rows must be between 1 and {HUB_MAX_ROWS_LIMIT:,}.")
+
+    from datasets import load_dataset  # lazy: heavy import
+
+    stream = load_dataset(repo_id, config or None, split=split, streaming=True)
+    rows = list(stream.take(max_rows))
+    if not rows:
+        raise ValueError(f"'{repo_id}' split '{split}' has no rows.")
+    columns = set(rows[0])
+
+    if is_dpo:
+        keep = [COL_PROMPT, COL_CHOSEN, COL_REJECTED]
+        if not set(keep) <= columns:
+            raise ValueError(f"DPO needs prompt, chosen, rejected columns; found {sorted(columns)}")
+        if not all(isinstance(rows[0][c], str) for c in keep):
+            raise ValueError(
+                "This preference dataset stores chats instead of plain text; "
+                "only plain-text prompt/chosen/rejected columns are supported."
+            )
+    elif COL_MESSAGES in columns:
+        keep = [COL_MESSAGES]
+    elif COL_TEXT in columns:
+        keep = [COL_TEXT]
+    elif {COL_INSTRUCTION, COL_OUTPUT} <= columns:
+        keep = [COL_INSTRUCTION, COL_OUTPUT]
+    else:
+        raise ValueError(
+            "Unsupported dataset layout. Needs 'messages', 'text' or 'instruction'+'output' "
+            f"columns (DPO: prompt/chosen/rejected); found {sorted(columns)}"
+        )
+    return Dataset.from_list([{c: row[c] for c in keep} for row in rows])
 
 
 def safe_extract_zip(zip_path: str, extract_dir: str) -> str:

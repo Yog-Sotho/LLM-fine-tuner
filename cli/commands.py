@@ -38,17 +38,19 @@ from config.constants import (
     COL_CHOSEN,
     COL_PROMPT,
     COL_REJECTED,
+    DEFAULT_EVAL_SPLIT,
     DEFAULT_REPORT_TO,
     DEFAULT_SEED,
     HAS_GRPO,
     HAS_KTO,
     HAS_ORPO,
     HAS_REWARD_TRAINER,
+    HUB_DEFAULT_MAX_ROWS,
     TRACKING_BACKENDS,
 )
 from core.run_config import dataset_fingerprint, load_run_config, resolve_report_to
 from core.state import validate_path_traversal
-from data.loader import load_dataset_from_file
+from data.loader import load_dataset_from_file, load_hub_dataset
 from data.preprocessing import validate_and_clean_dataset
 from inference.evaluation import compute_bertscore_metric, compute_bleu_rouge
 from inference.generate import _load_for_inference
@@ -80,7 +82,17 @@ def train(
     model: str = typer.Option(
         "", "--model", help="Base model ID or local path (required unless --config)"
     ),
-    data: str = typer.Option(..., "--data", help="Dataset file (.csv or .jsonl)"),
+    data: str = typer.Option(
+        "", "--data", help="Dataset file (.csv, .json or .jsonl) — or use --hf-dataset"
+    ),
+    hf_dataset: str = typer.Option(
+        "", "--hf-dataset", help="Hugging Face Hub dataset ID (owner/name) instead of --data"
+    ),
+    hf_config: str = typer.Option("", "--hf-config", help="Hub dataset config name"),
+    hf_split: str = typer.Option("train", "--hf-split", help="Hub dataset split"),
+    hf_max_rows: int = typer.Option(
+        HUB_DEFAULT_MAX_ROWS, "--hf-max-rows", help="Rows to stream from the Hub dataset"
+    ),
     output: str = typer.Option("./output", "--output", help="Output directory"),
     epochs: int = typer.Option(3, "--epochs", help="Number of training epochs"),
     batch_size: int = typer.Option(2, "--batch-size", help="Per-device batch size"),
@@ -100,6 +112,9 @@ def train(
         False, "--packing", help="Pack short samples together (needs --flash-attn on CUDA)"
     ),
     seed: int = typer.Option(DEFAULT_SEED, "--seed", help="Random seed (data split + training)"),
+    eval_split: float = typer.Option(
+        DEFAULT_EVAL_SPLIT, "--eval-split", help="Share of rows held out for eval (0 = none)"
+    ),
     report_to: str = typer.Option(
         DEFAULT_REPORT_TO,
         "--report-to",
@@ -152,22 +167,32 @@ def train(
         typer.echo(err, err=True)
         raise typer.Exit(code=1)
 
+    if bool(data) == bool(hf_dataset):
+        typer.echo("❌ Give exactly one of --data or --hf-dataset.", err=True)
+        raise typer.Exit(code=1)
+    source = data or f"hf:{hf_dataset}"
     typer.echo(
-        f"🚀 Starting training: {model} | PEFT: {peft_method} | Data: {data} | Output: {output}"
+        f"🚀 Starting training: {model} | PEFT: {peft_method} | Data: {source} | Output: {output}"
     )
 
-    if not os.path.exists(data):
-        typer.echo(f"❌ Dataset not found: {data}", err=True)
-        raise typer.Exit(code=1)
-
-    ftype = _infer_ftype(data)
-    if ftype is None:
-        typer.echo("❌ Unsupported format. Use .csv or .jsonl", err=True)
-        raise typer.Exit(code=1)
+    ftype = None
+    if data:
+        if not os.path.exists(data):
+            typer.echo(f"❌ Dataset not found: {data}", err=True)
+            raise typer.Exit(code=1)
+        ftype = _infer_ftype(data)
+        if ftype is None:
+            typer.echo("❌ Unsupported format. Use .csv, .json or .jsonl", err=True)
+            raise typer.Exit(code=1)
 
     is_dpo = bool(replay and replay["mode"] == "dpo")
     try:
-        ds = load_dataset_from_file(DummyFile(data), ftype, is_dpo=is_dpo)
+        if hf_dataset:
+            ds = load_hub_dataset(
+                hf_dataset, split=hf_split, config=hf_config, max_rows=hf_max_rows, is_dpo=is_dpo
+            )
+        else:
+            ds = load_dataset_from_file(DummyFile(data), ftype, is_dpo=is_dpo)
         ds, issues = validate_and_clean_dataset(ds, is_dpo=is_dpo)
         if len(ds) == 0:
             typer.echo("❌ Dataset empty after validation", err=True)
@@ -224,6 +249,7 @@ def train(
             "lora_alpha": lora_rank * 2,
             "lr_scheduler": "cosine",
             "packing": packing,
+            "eval_split": eval_split,
         }
         msg, _ = train_model(
             model_name=model,

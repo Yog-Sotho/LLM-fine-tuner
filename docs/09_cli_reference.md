@@ -80,6 +80,10 @@ python main.py train \
 | `--qlora-enhanced` | off | Enable QLoRA Enhanced (overrides `--peft`) |
 | `--flash-attn` | off | Enable Flash Attention 2 |
 | `--packing` | off | Pack short samples into full-length sequences (needs `--flash-attn` on a CUDA GPU; ignored otherwise) |
+| `--hf-dataset` | — | Hugging Face Hub dataset (`owner/name`) instead of `--data`; streamed |
+| `--hf-config` / `--hf-split` | — / `train` | Hub dataset config and split |
+| `--hf-max-rows` | `20000` | Rows to stream from the Hub dataset |
+| `--eval-split` | `0.1` | Share of rows held out for evaluation (`0` = none) |
 | `--seed` | `42` | Random seed for the data split and training (same seed + data + settings = same weights) |
 | `--report-to` | `none` | Experiment tracker: `trackio`, `wandb`, `mlflow` or `tensorboard` (must be installed) |
 | `--config` | — | Replay a saved `run_config.yaml`: model, mode (SFT/DPO) and all settings come from the file; only `--data`/`--output` are used. Warns if the data differs from the recorded fingerprint |

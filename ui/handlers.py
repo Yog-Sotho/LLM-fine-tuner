@@ -42,13 +42,14 @@ from config.constants import (
     COL_PROMPT,
     COL_REJECTED,
     COL_TEXT,
+    DEFAULT_EVAL_SPLIT,
     DEFAULT_REPORT_TO,
     DEFAULT_SEED,
     RUNS_DIR,
 )
 from core.run_config import new_run_name, resolve_report_to, run_dir_for
-from core.state import app_state, validate_path_traversal
-from data.loader import detect_file_type, load_dataset_from_file
+from core.state import app_state, redact_sensitive_info, validate_path_traversal
+from data.loader import detect_file_type, load_dataset_from_file, load_hub_dataset
 from data.preprocessing import get_dataset_stats, preview_dataset, validate_and_clean_dataset
 from export.hub import push_to_hub
 from export.utils import create_model_card, create_zip_from_folder
@@ -98,6 +99,7 @@ def on_train_click(
     run_name="",
     seed=DEFAULT_SEED,
     report_to=DEFAULT_REPORT_TO,
+    eval_split=DEFAULT_EVAL_SPLIT,
     progress=gr.Progress(),
     request: gr.Request | None = None,
 ):
@@ -148,7 +150,9 @@ def on_train_click(
     # C-5 FIX: Use the augmented/filtered dataset from state when available.
     if augmented_ds is not None:
         ds = augmented_ds
-        issues_str = "✅ Using augmented/filtered dataset from Data Enhancement step."
+        issues_str = (
+            "✅ Using the dataset prepared in the Data tab (Hub load, augmentation or filter)."
+        )
     else:
         if file is None:
             return "❌ Please upload a data file first.", None, None, []
@@ -204,6 +208,7 @@ def on_train_click(
         adapter_reduction_factor=int(adapter_reduction_factor),
         dpo_beta=float(dpo_beta),
         packing=bool(packing),
+        eval_split=float(eval_split),
     )
     os.makedirs(output_dir, exist_ok=True)
 
@@ -443,6 +448,28 @@ def on_file_upload(file, training_mode="sft"):
             None,
             None,
         )
+
+
+def on_hub_load(repo_id, config, split, max_rows, training_mode="sft"):
+    """Load, clean and preview a Hub dataset; the result is used by Start Training.
+
+    Returns (status_md, preview_df, stats_md, dataset_or_None).
+    """
+    is_dpo = "dpo" in str(training_mode).lower()
+    try:
+        ds = load_hub_dataset(repo_id, split=split, config=config, max_rows=max_rows, is_dpo=is_dpo)
+        ds, issues = validate_and_clean_dataset(ds, is_dpo=is_dpo)
+    except Exception as e:  # network, missing dataset, bad layout — shown to the user
+        return f"❌ {redact_sensitive_info(str(e))}", pd.DataFrame(), " ", None
+    if len(ds) == 0:
+        return "❌ No usable rows after cleaning.", pd.DataFrame(), "\n".join(issues), None
+    issues_txt = "\n".join(issues) if issues else "✅ No issues."
+    return (
+        f"✅ Loaded {len(ds)} rows from `{repo_id.strip()}` — used by **▶ Start Training**.",
+        preview_dataset(ds, is_dpo=is_dpo),
+        f"**Total examples:** {len(ds)}\n{issues_txt}",
+        ds,
+    )
 
 
 def on_refresh_preview(

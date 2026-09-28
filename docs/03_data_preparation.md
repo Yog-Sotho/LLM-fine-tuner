@@ -40,6 +40,16 @@ text
 "In a galaxy far far away, there lived a young hero who dreamed of adventure."
 ```
 
+**Option 3 — Chat conversations (`messages`, JSON/JSONL or Hub)**
+
+The standard chat format used by OpenAI/ShareGPT-style datasets. The model is trained on the **last assistant reply**; earlier turns (system, user, previous assistant replies) are context. The model's own chat template is applied, so use an instruct/chat model.
+
+```jsonl
+{"messages": [{"role": "system", "content": "You are concise."}, {"role": "user", "content": "What is DNA?"}, {"role": "assistant", "content": "The molecule that carries genetic instructions."}]}
+```
+
+Roles must be `system`, `user` or `assistant`. Conversations without an answered user turn are dropped.
+
 **JSONL equivalent of Option 1:**
 ```jsonl
 {"instruction": "What is the speed of light?", "output": "The speed of light is approximately 299,792 kilometres per second."}
@@ -137,14 +147,28 @@ A good workflow: filter first, then augment.
 
 ---
 
+## Loading from the Hugging Face Hub
+
+Instead of uploading a file, open **…or load from the Hugging Face Hub** in the Data tab:
+
+1. Enter the dataset ID (`owner/name`, e.g. `trl-lib/Capybara`), and a config if the dataset has several.
+2. Pick the split (`train` by default) and **Max rows** (default 20,000).
+3. Click **⬇️ Load from Hub**, check the preview, then click **▶ Start Training**.
+
+Rows are streamed, so only the rows you load are downloaded. Supported layouts: `messages`, `text`, `instruction`+`output`, and (in DPO mode) plain-text `prompt`+`chosen`+`rejected`. Other columns are ignored. Private or gated datasets need `HF_TOKEN`. From the CLI: `python main.py train --model <id> --hf-dataset owner/name --hf-max-rows 5000`.
+
+---
+
 ## Cleaning Your Data
 
 The tool automatically checks for and warns you about:
 
 - **Empty rows** — rows where a required column is blank (removed automatically)
 - **Whitespace-only rows** — rows that look empty but contain spaces (removed automatically)
-- **Duplicate examples** — identical rows (flagged with a warning; kept)
-- **Very long examples** — examples over 2048 characters (flagged; they'll be truncated)
+- **Duplicate examples** — identical rows, including ones that differ only in upper/lower case or spacing (removed automatically; the first is kept)
+- **Very long examples** — over 2048 characters (flagged)
+
+When training starts, the log also reports **tokens per example** as the model sees them (mean, 95th percentile, max) and how many examples exceed **Max Sequence Length** and are truncated. That's the number that matters — the character counts above are only a rough guide.
 
 All warnings appear in the **Statistics** box after uploading.
 
