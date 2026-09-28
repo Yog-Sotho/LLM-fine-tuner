@@ -100,6 +100,8 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 pip install torch torchvision torchaudio
 ```
 
+> `torchvision` is needed for vision-language (image + text) fine-tuning. It must be the build that matches your `torch`, so install both in one command as above. Adding it later: `pip install "llm-fine-tuner[vision]"` works for CPU installs; with CUDA wheels, install it from the same PyTorch index as `torch`.
+
 ### Step 5 — Install all other dependencies
 
 ```bash

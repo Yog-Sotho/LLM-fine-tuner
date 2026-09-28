@@ -30,7 +30,7 @@ classifiers = [
 dependencies = [
     "gradio>=6.0.0,<7",
     "transformers>=4.56.2,<6",
-    "datasets>=4.0.0,<6",
+    "datasets>=4.7.0,<6",  # 4.7: Json feature (tool-calling chats keep exact arguments)
     "peft>=0.17.0,<1",
     "accelerate>=1.4.0,<2",
     "bitsandbytes>=0.45.0",
@@ -80,8 +80,13 @@ dev = [
     "pytest>=8.0.0",
     "ruff>=0.4.0",
 ]
+# Vision-language fine-tuning. torchvision must match your torch build; with CUDA
+# wheels install it from the same PyTorch index as torch (see docs/01_installation.md).
+vision = [
+    "torchvision",
+]
 all = [
-    "llm-fine-tuner[eval,quant,vllm,heretic,dev]",
+    "llm-fine-tuner[eval,quant,vllm,heretic,vision,dev]",
 ]
 
 

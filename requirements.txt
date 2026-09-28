@@ -22,7 +22,7 @@
 # ── Core dependencies ─────────────────────────────────────────────────
 gradio>=6.0.0,<7
 transformers>=4.56.2,<6
-datasets>=4.0.0,<6
+datasets>=4.7.0,<6           # 4.7: Json feature (tool-calling chats keep exact arguments)
 peft>=0.17.0,<1
 accelerate>=1.4.0,<2
 bitsandbytes>=0.45.0

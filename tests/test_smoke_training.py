@@ -16,18 +16,46 @@ from datasets import Dataset
 TINY_MODEL = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 
 
-@pytest.fixture(scope="module")
-def tiny_model() -> str:
+# Real tokenizer and chat template with tool calling and <think> reasoning.
+TINY_CHAT_MODEL = "trl-internal-testing/tiny-Qwen3ForCausalLM"
+TINY_VLM = "trl-internal-testing/tiny-Qwen2_5_VLForConditionalGeneration"
+
+
+def _cached_model(name: str) -> str:
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     try:
-        AutoTokenizer.from_pretrained(TINY_MODEL)
-        AutoModelForCausalLM.from_pretrained(TINY_MODEL)
+        AutoTokenizer.from_pretrained(name)
+        AutoModelForCausalLM.from_pretrained(name)
     except OSError as exc:
         if os.environ.get("REQUIRE_SMOKE_MODELS") == "1":
             pytest.fail(f"Smoke-test model unavailable: {exc}")
         pytest.skip(f"Smoke-test model unavailable (offline?): {exc}")
-    return TINY_MODEL
+    return name
+
+
+@pytest.fixture(scope="module")
+def tiny_model() -> str:
+    return _cached_model(TINY_MODEL)
+
+
+@pytest.fixture(scope="module")
+def tiny_chat_model() -> str:
+    return _cached_model(TINY_CHAT_MODEL)
+
+
+@pytest.fixture(scope="module")
+def tiny_vlm() -> str:
+    from transformers import AutoModelForImageTextToText, AutoProcessor
+
+    try:
+        AutoProcessor.from_pretrained(TINY_VLM)
+        AutoModelForImageTextToText.from_pretrained(TINY_VLM)
+    except (OSError, ImportError) as exc:  # ImportError: torchvision missing
+        if os.environ.get("REQUIRE_SMOKE_MODELS") == "1":
+            pytest.fail(f"Vision smoke-test model unavailable: {exc}")
+        pytest.skip(f"Vision smoke-test model unavailable: {exc}")
+    return TINY_VLM
 
 
 def _hyperparams() -> dict:
@@ -962,3 +990,183 @@ def test_cli_grpo_passes_new_options(tiny_model, tmp_path):
     assert cfg["rewards"] == ["json"] and cfg["loss_type"] == "bnpo"
     assert cfg["peft"] == {"method": "LoRA", "lora_rank": 4, "lora_alpha": 32,
                            "lora_variant": "DoRA"}  # fmt: skip
+
+
+# ── Tool calling and reasoning data ────────────────────────────────────────
+
+TOOL_ROWS = [
+    {
+        "messages": [
+            {"role": "user", "content": "Lights on in the kitchen"},
+            {"role": "assistant", "tool_calls": [{"type": "function", "function": {
+                "name": "control_light", "arguments": {"room": "kitchen", "state": "on"}}}]},
+            {"role": "tool", "name": "control_light", "content": "ok"},
+            {"role": "assistant", "content": "Done!"},
+        ],
+        "tools": [{"type": "function", "function": {"name": "control_light",
+                   "parameters": {"type": "object", "properties": {"room": {"type": "string"},
+                                  "state": {"type": "string"}}}}}],
+    },
+    {
+        "messages": [
+            {"role": "user", "content": "Weather in Rome?"},
+            {"role": "assistant", "reasoning_content": "Need the weather tool.",
+             "tool_calls": [{"type": "function", "function": {
+                 "name": "get_weather", "arguments": '{"city": "Rome"}'}}]},
+        ],
+        "tools": [{"type": "function", "function": {"name": "get_weather",
+                   "parameters": {"type": "object", "properties": {"city": {"type": "string"}}}}}],
+    },
+]  # fmt: skip
+
+
+def _tool_sft_dataset(tmp_path):
+    import json
+
+    from data.loader import load_dataset_from_file
+    from data.preprocessing import to_sft_dataset, validate_and_clean_dataset
+
+    data = tmp_path / "tools.jsonl"
+    data.write_text("\n".join(json.dumps(r) for r in TOOL_ROWS))
+    cleaned, _ = validate_and_clean_dataset(load_dataset_from_file(_Upload(data), "jsonl"))
+    return to_sft_dataset(cleaned, True, "")
+
+
+def test_tool_calls_and_reasoning_are_what_the_model_learns(tiny_chat_model, tmp_path):
+    """Every assistant turn is a target: the calls (exact arguments) and the answer."""
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from trl import SFTConfig, SFTTrainer
+
+    tokenizer = AutoTokenizer.from_pretrained(tiny_chat_model)
+    trainer = SFTTrainer(
+        model=AutoModelForCausalLM.from_pretrained(tiny_chat_model),
+        args=SFTConfig(output_dir=str(tmp_path / "t"), max_length=512, report_to="none",
+                       bf16=False, fp16=False),
+        train_dataset=_tool_sft_dataset(tmp_path),
+        processing_class=tokenizer,
+    )  # fmt: skip
+
+    def trained_text(i: int) -> str:
+        row = trainer.train_dataset[i]
+        mask = row.get("completion_mask") or [label != -100 for label in row["labels"]]
+        return tokenizer.decode([t for t, m in zip(row["input_ids"], mask, strict=True) if m])
+
+    call = trained_text(0)
+    assert '{"name": "control_light", "arguments": {"room": "kitchen", "state": "on"}}' in call
+    assert "Done!" in trained_text(1) and "tool_call" not in trained_text(1)
+    weather = trained_text(2)  # JSON-string arguments became an object; reasoning kept
+    assert "Need the weather tool." in weather
+    assert '"arguments": {"city": "Rome"}' in weather and "room" not in weather
+    prompt = tokenizer.decode(trainer.train_dataset[0]["input_ids"])
+    assert "control_light" in prompt.split("Lights on")[0]  # tool schemas in the system prompt
+
+
+def test_tool_calling_sft_trains_end_to_end(tiny_chat_model, tmp_path):
+    import json
+
+    from data.loader import load_dataset_from_file
+    from data.preprocessing import validate_and_clean_dataset
+    from training.sft import train_model
+
+    data = tmp_path / "tools.jsonl"
+    data.write_text("\n".join(json.dumps(r) for r in TOOL_ROWS))
+    ds, _ = validate_and_clean_dataset(load_dataset_from_file(_Upload(data), "jsonl"))
+    summary, _ = train_model(
+        tiny_chat_model, ds, str(tmp_path / "out"), {**_hyperparams(), "max_length": 512},
+        "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False, False,
+        True, "", progress=None,
+    )  # fmt: skip
+    assert summary.startswith("✅ Training complete"), summary
+    _assert_safetensors_adapter(tmp_path / "out")
+
+
+# ── Vision-language fine-tuning ────────────────────────────────────────────
+
+COLOURS = ["red", "blue", "green", "yellow"]
+
+
+def _vision_file(tmp_path, with_parts: bool = True):
+    """A local chat file whose images are PNGs next to it (relative paths)."""
+    import json
+
+    from PIL import Image
+
+    (tmp_path / "img").mkdir()
+    rows = []
+    for i, colour in enumerate(COLOURS):
+        Image.new("RGB", (32, 32), colour).save(tmp_path / "img" / f"{i}.png")
+        question = "What colour is this?"
+        user = [{"type": "image"}, {"type": "text", "text": question}] if with_parts else question
+        rows.append({"messages": [{"role": "user", "content": user},
+                                  {"role": "assistant", "content": f"It is {colour}."}],
+                     "images": [f"img/{i}.png"]})  # fmt: skip
+    data = tmp_path / "vision.jsonl"
+    data.write_text("\n".join(json.dumps(r) for r in rows))
+    return data
+
+
+@pytest.mark.parametrize("with_parts", [True, False], ids=["image-parts", "text-only-content"])
+def test_vision_sft_learns_only_the_answer(tiny_vlm, tmp_path, with_parts):
+    """Image parts, or plain text where TRL places the image — loss on the answer only."""
+    from transformers import AutoModelForImageTextToText, AutoProcessor
+    from trl import SFTConfig, SFTTrainer
+
+    from data.loader import load_dataset_from_file
+    from data.preprocessing import to_sft_dataset, validate_and_clean_dataset
+
+    ds = load_dataset_from_file(_Upload(_vision_file(tmp_path, with_parts)), "jsonl")
+    cleaned, issues = validate_and_clean_dataset(ds)
+    assert len(cleaned) == 4 and not issues
+    processor = AutoProcessor.from_pretrained(tiny_vlm)
+    trainer = SFTTrainer(
+        model=AutoModelForImageTextToText.from_pretrained(tiny_vlm),
+        args=SFTConfig(output_dir=str(tmp_path / "t"), max_length=None, report_to="none",
+                       bf16=False, fp16=False, per_device_train_batch_size=1),
+        train_dataset=to_sft_dataset(cleaned, True, ""),
+        processing_class=processor,
+    )  # fmt: skip
+    batch = next(iter(trainer.get_train_dataloader()))
+    labels, ids = batch["labels"][0], batch["input_ids"][0]
+    trained = processor.tokenizer.decode(ids[labels != -100])
+    assert trained.startswith("It is ") and "colour" not in trained
+    assert batch["pixel_values"].numel() > 0  # the image reached the model
+
+
+def test_vision_sft_trains_end_to_end_with_card(tiny_vlm, tmp_path):
+    from huggingface_hub import ModelCard
+
+    from data.loader import load_dataset_from_file
+    from data.preprocessing import validate_and_clean_dataset
+    from training.sft import train_model
+
+    ds, _ = validate_and_clean_dataset(
+        load_dataset_from_file(_Upload(_vision_file(tmp_path)), "jsonl")
+    )
+    out = tmp_path / "vlm"
+    summary, _ = train_model(
+        tiny_vlm, ds, str(out), _hyperparams(), "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16,
+        False, 0, "linear", False, False, True, "", progress=None, lora_variant="rsLoRA",
+    )  # fmt: skip
+    assert summary.startswith("✅ Training complete") and "Vision-language" in summary, summary
+    _assert_safetensors_adapter(out)
+    assert (out / "preprocessor_config.json").is_file() or (out / "processor_config.json").is_file()
+    card = ModelCard.load(str(out / "README.md")).data
+    assert card.pipeline_tag == "image-text-to-text" and "vision" in card.tags
+    cfg = _assert_run_config(out, "sft", tiny_vlm)
+    assert cfg["vision"] is True and cfg["peft"]["lora_variant"] == "rsLoRA"
+
+
+def test_vision_rejects_dpo_and_prompt_tuning(tiny_vlm, tmp_path):
+    from data.loader import load_dataset_from_file
+    from data.preprocessing import validate_and_clean_dataset
+    from training.sft import train_model
+
+    ds, _ = validate_and_clean_dataset(
+        load_dataset_from_file(_Upload(_vision_file(tmp_path)), "jsonl")
+    )
+    args = (tiny_vlm, ds, str(tmp_path / "x"), _hyperparams(), "cpu")
+    rest = (True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False, False, True, "")
+    with pytest.raises(RuntimeError, match="DPO on image"):
+        train_model(*args, "LoRA", *rest, training_mode="dpo", progress=None)
+    with pytest.raises(RuntimeError, match="not supported for vision"):
+        train_model(*args, "Prompt Tuning", *rest, progress=None)

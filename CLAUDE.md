@@ -38,6 +38,7 @@ LLM-fine-tuner/
 │
 ├── training/
 │   ├── sft.py               # train_model() — SFT/DPO unified pipeline
+│   ├── vision.py            # train_vision_sft() — image + text chats (VLMs)
 │   ├── reward.py            # train_reward_model_v27() — sequence-classifier reward model
 │   ├── grpo.py              # train_grpo() — GRPO (reward model and/or reference answers)
 │   ├── kto.py               # train_kto() — KTO from desirable/undesirable examples
@@ -310,6 +311,8 @@ Trained model → push_to_hub()
 **PEFT methods:** LoRA, QLoRA Enhanced (NF4 + double quantization), Prefix Tuning, Prompt Tuning, Adapters, Full fine-tuning
 
 **LoRA targets and variants:** every LoRA config uses `get_lora_targets()` (`"all-linear"`: all attention + MLP projections, never the output head) — don't hard-code module names; Unsloth alone gets `UNSLOTH_LORA_TARGETS`. Variants come from `LORA_VARIANTS` via `lora_variant_kwargs()` (LoRA, rsLoRA, DoRA). DoRA can't be switched off per request (`adapter_names`), so `is_lora_model()` excludes it from base-model comparison. PiSSA isn't offered: PEFT can't initialise it on 4-bit weights, which the GPU LoRA path uses.
+
+**Chat data (tools, reasoning, images):** build chat datasets with `chat_dataset()` (`data/preprocessing.py`) — never `Dataset.from_list`/`from_pandas` on messages. Each conversation is one `Json` value (Arrow would merge differently shaped messages/tool-call arguments and fill nulls; a list of `Json` would also break older TRL's pyarrow truncation), `tools` is a JSON string (TRL decodes it), `images` is `List(Image())` carried undecoded (`Image(decode=False)`) so bytes are never re-encoded. Read chat columns by column access, not `to_pandas()` (it returns JSON strings on datasets 4.7). Chats with tool calls expand to one example per assistant turn. Image data routes `train_model()` to `training/vision.py` (`AutoModelForImageTextToText` + `AutoProcessor`, `max_length=None`).
 
 **GRPO rewards:** built-ins live in `training/grpo.py` (`build_reward_funcs`). Reuse TRL's reward functions (`trl.rewards`) where they exist — they read `completion[0]["content"]`, so wrap plain-string completions with `_as_messages()`. Always set `vllm_mode` explicitly when `use_vllm` (its default differs between TRL versions).
 

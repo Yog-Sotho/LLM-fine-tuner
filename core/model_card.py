@@ -55,12 +55,34 @@ def build_model_card(record: dict, is_adapter: bool) -> ModelCard:
     data = ModelCardData(
         base_model=base_model,
         library_name="peft" if is_adapter else "transformers",
-        pipeline_tag="text-classification" if mode == "reward" else "text-generation",
+        pipeline_tag="text-classification"
+        if mode == "reward"
+        else "image-text-to-text"
+        if record.get("vision")
+        else "text-generation",
         datasets=[hub_dataset] if hub_dataset else None,
-        tags=["llm-fine-tuner", "trl", mode, *([_method_tag(method)] if method else [])],
+        tags=[
+            "llm-fine-tuner",
+            "trl",
+            mode,
+            *([_method_tag(method)] if method else []),
+            *(["vision"] if record.get("vision") else []),
+        ],
     )
 
-    if mode == "reward":
+    if record.get("vision"):
+        usage = (
+            "from transformers import AutoModelForImageTextToText, AutoProcessor\n\n"
+            'processor = AutoProcessor.from_pretrained("<this repo>")\n'
+            + (
+                "from peft import PeftModel\n\n"
+                f'base = AutoModelForImageTextToText.from_pretrained("{model}")\n'
+                'model = PeftModel.from_pretrained(base, "<this repo>")'
+                if is_adapter
+                else 'model = AutoModelForImageTextToText.from_pretrained("<this repo>")'
+            )
+        )
+    elif mode == "reward":
         usage = (
             "from transformers import AutoModelForSequenceClassification\n\n"
             'model = AutoModelForSequenceClassification.from_pretrained("<this repo>")'

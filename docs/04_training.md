@@ -67,6 +67,17 @@ Use this when:
 
 ---
 
+### Vision-language models
+
+When the chat data has images (see [03 — Data Preparation](03_data_preparation.md)), SFT switches to vision-language fine-tuning automatically — no extra setting. Use a vision-language model such as `Qwen/Qwen2.5-VL-3B-Instruct` (Custom model field / `--model`).
+
+- The model's processor turns images into image tokens; the loss covers the assistant's answer only.
+- LoRA (any variant), QLoRA on a GPU and Full fine-tuning are supported; Prefix/Prompt Tuning, Adapters, Unsloth, packing and DPO are not.
+- Sequences are not truncated (cutting image tokens would break the batch), so Max Sequence Length doesn't apply — keep conversations reasonably short.
+- The processor is saved next to the adapter and the model card is tagged `image-text-to-text`.
+- Needs `torchvision` matching your `torch` (see [01 — Installation](01_installation.md)).
+- The Inference and Evaluation tabs are text-only for now; load a vision adapter in Python as the model card shows.
+
 ## Training Presets
 
 Presets are shortcuts that set the number of epochs and learning rate for you.

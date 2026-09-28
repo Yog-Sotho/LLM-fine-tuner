@@ -46,8 +46,10 @@ RUN pip install --upgrade pip setuptools wheel
 
 # ── PyTorch CPU ───────────────────────────────────────────────────────────────
 # torch >= 2.6 is required: <= 2.5.1 is affected by CVE-2025-32434 (torch.load RCE).
+# torchvision (vision-language fine-tuning) must be the build that matches torch.
 RUN pip install \
         torch==2.14.0 \
+        torchvision==0.29.0 \
         --index-url https://download.pytorch.org/whl/cpu
 
 # Fail the build if any command in a pipe fails (not just the last one).

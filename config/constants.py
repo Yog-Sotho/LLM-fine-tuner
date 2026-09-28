@@ -78,7 +78,15 @@ COL_COMPLETION = "completion"  # TRL prompt-completion / KTO format
 COL_LABEL = "label"  # KTO: True = desirable completion, False = undesirable
 COL_REFERENCE = "reference"  # GRPO: expected answer used by the reference-match reward
 COL_MESSAGES = "messages"  # chat format: [{"role": ..., "content": ...}, ...]
-CHAT_ROLES = ("system", "user", "assistant")
+COL_TOOLS = "tools"  # tool-calling chats: JSON schemas of the available functions
+COL_IMAGES = "images"  # vision chats: images for the {"type": "image"} parts, in order
+COL_IMAGE = "image"  # single-image variant, normalised to COL_IMAGES
+CHAT_COLUMNS = (COL_MESSAGES, COL_TOOLS, COL_IMAGES)  # columns kept for chat data
+CHAT_ROLES = ("system", "user", "assistant", "tool")
+# Extra message fields kept for training (rendered by the model's chat template):
+# assistant reasoning (plus ``tool_calls``), and the tool name / call id of tool results.
+CHAT_REASONING_KEYS = ("reasoning_content", "thinking")
+CHAT_TOOL_KEYS = ("name", "tool_call_id")
 
 # ── Hugging Face Hub datasets ─────────────────────────────────────────────
 # IDs are owner/name only: load_dataset() would also read a *local* directory.
@@ -381,6 +389,8 @@ GRPO_LORA_ALPHA = 32
 # vLLM generation during GRPO (colocate: shares the training GPU).
 GRPO_VLLM_GPU_MEMORY = 0.3  # TRL's default share of GPU memory for vLLM
 HAS_MATH_VERIFY: bool = importlib.util.find_spec("math_verify") is not None
+# Vision-language fine-tuning: VLM processors need torchvision (must match torch).
+HAS_TORCHVISION: bool = importlib.util.find_spec("torchvision") is not None
 
 # ── vLLM (high-throughput inference) ──────────────────────────────────────
 try:

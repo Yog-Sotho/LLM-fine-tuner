@@ -61,6 +61,7 @@ from transformers import (
 
 from config.constants import (
     ALLOW_REMOTE_CODE,
+    COL_IMAGES,
     COL_MESSAGES,
     DEFAULT_EVAL_SPLIT,
     DEFAULT_LORA_VARIANT,
@@ -96,6 +97,7 @@ from data.preprocessing import (
     to_sft_dataset,
     token_length_report,
 )
+from training.vision import train_vision_sft
 
 
 def train_model(
@@ -162,6 +164,17 @@ def train_model(
     log_callback = LoggingCallback()
 
     try:
+        # ── Vision-language data: image + text chats ──────────────────────
+        if COL_IMAGES in dataset.column_names:
+            if is_dpo:
+                raise ValueError("DPO on image + text data isn't supported; use SFT.")
+            return train_vision_sft(
+                model_name, dataset, output_dir, hyperparams, device, peft_method, use_lora,
+                lora_rank, lora_alpha, lora_variant, gradient_checkpointing, lr_scheduler_type,
+                int(early_stop), resume_from_checkpoint, int(seed), report_to, run_name,
+                stop_event, progress,
+            )  # fmt: skip
+
         # ── Tokenizer ─────────────────────────────────────────────────────
         if progress is not None:
             progress(0, desc="Loading tokenizer… ")
