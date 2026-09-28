@@ -2,6 +2,8 @@
 
 import gradio as gr
 
+from config.constants import HUB_DEFAULT_MAX_ROWS, HUB_MAX_ROWS_LIMIT
+
 
 def build_data_tab() -> dict:
     with gr.Tab("📂 Data"):
@@ -13,6 +15,28 @@ def build_data_tab() -> dict:
                     file_types=[".csv", ".jsonl", ".json", ".txt", ".xlsx", ".pdf"],
                 )
                 file_status = gr.Markdown("_No file loaded yet._")
+                with gr.Accordion("…or load from the Hugging Face Hub", open=False):
+                    hub_dataset_id = gr.Textbox(
+                        label="Dataset ID",
+                        placeholder="owner/name, e.g. trl-lib/Capybara",
+                        max_length=200,
+                    )
+                    with gr.Row():
+                        hub_config = gr.Textbox(label="Config (optional)", max_length=64)
+                        hub_split = gr.Textbox(label="Split", value="train", max_length=64)
+                        hub_max_rows = gr.Number(
+                            label="Max rows",
+                            value=HUB_DEFAULT_MAX_ROWS,
+                            precision=0,
+                            minimum=1,
+                            maximum=HUB_MAX_ROWS_LIMIT,
+                        )
+                    hub_load_btn = gr.Button("⬇️ Load from Hub", variant="secondary")
+                    gr.Markdown(
+                        "_Layouts: `messages` (chat), `text`, `instruction`+`output`, or "
+                        "`prompt`+`chosen`+`rejected` for DPO. Rows are streamed, so only "
+                        "what you load is downloaded. Private datasets need `HF_TOKEN`._"
+                    )
             with gr.Column(scale=3):
                 with gr.Row():
                     col_inst = gr.Dropdown(
@@ -76,6 +100,11 @@ def build_data_tab() -> dict:
     return dict(
         file_input=file_input,
         file_status=file_status,
+        hub_dataset_id=hub_dataset_id,
+        hub_config=hub_config,
+        hub_split=hub_split,
+        hub_max_rows=hub_max_rows,
+        hub_load_btn=hub_load_btn,
         col_inst=col_inst,
         col_out=col_out,
         col_text=col_text,

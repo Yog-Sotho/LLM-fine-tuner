@@ -39,6 +39,7 @@ from ui.handlers import (
     on_batch_test,
     on_file_upload,
     on_generate,
+    on_hub_load,
     on_push,
     on_refresh_preview,
     on_stop,
@@ -110,6 +111,23 @@ def build_demo() -> gr.Blocks:
             fn=lambda _: None,
             inputs=[dt["file_input"]],
             outputs=[dt["augmented_ds_state"]],
+        )
+
+        dt["hub_load_btn"].click(
+            fn=on_hub_load,
+            inputs=[
+                dt["hub_dataset_id"],
+                dt["hub_config"],
+                dt["hub_split"],
+                dt["hub_max_rows"],
+                tt["training_mode"],
+            ],
+            outputs=[
+                dt["file_status"],
+                dt["preview_box"],
+                dt["stats_box"],
+                dt["augmented_ds_state"],
+            ],
         )
 
         dt["refresh_preview_btn"].click(
@@ -196,6 +214,7 @@ def build_demo() -> gr.Blocks:
             run_name,
             seed,
             report_to,
+            eval_split,
             progress=gr.Progress(),
             request: gr.Request | None = None,
         ):
@@ -239,6 +258,7 @@ def build_demo() -> gr.Blocks:
                 run_name=run_name,
                 seed=seed,
                 report_to=report_to,
+                eval_split=eval_split,
                 progress=progress,
                 request=request,
             )
@@ -286,6 +306,7 @@ def build_demo() -> gr.Blocks:
                 tt["run_name"],
                 tt["seed"],
                 tt["report_to"],
+                tt["eval_split"],
             ],
             outputs=[
                 tt["log_output"],

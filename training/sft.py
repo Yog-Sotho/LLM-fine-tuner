@@ -63,6 +63,8 @@ from transformers import (
 
 from config.constants import (
     ALLOW_REMOTE_CODE,
+    COL_MESSAGES,
+    DEFAULT_EVAL_SPLIT,
     DEFAULT_SEED,
     HAS_ADAPTER_CONFIG,
     HAS_HERETIC,  # N-5 FIX: imported so the Heretic Mode branch can guard the subprocess call
@@ -71,6 +73,7 @@ from config.constants import (
     HAS_UNSLOTH,
     QLORA_ENHANCED_BNB_KWARGS,
     QLORA_ENHANCED_LORA_CONFIG,
+    TOKEN_STATS_SAMPLE,
 )
 from core.callbacks import (
     ETAProgressCallback,
@@ -80,7 +83,12 @@ from core.callbacks import (
 from core.hardware import compute_dtype, get_lora_targets, is_unsloth_supported, select_precision
 from core.run_config import save_run_config
 from core.state import app_state, validate_path_traversal
-from data.preprocessing import to_sft_dataset
+from data.preprocessing import (
+    drop_prompts_over_limit,
+    format_token_report,
+    to_sft_dataset,
+    token_length_report,
+)
 
 
 def train_model(
@@ -164,6 +172,12 @@ def train_model(
         # prompt out of the loss and appends EOS. DPO data is already prompt/chosen/rejected.
         if progress is not None:
             progress(0.05, desc="Preparing dataset… ")
+        if COL_MESSAGES in dataset.column_names and not tokenizer.chat_template:
+            raise ValueError(
+                f"'{model_name}' has no chat template, so chat-format ('messages') data "
+                "can't be rendered. Use an instruct/chat model or instruction/output data."
+            )
+        dropped_long_prompts = 0
         if is_dpo:
             tokenized = dataset
         else:
@@ -172,20 +186,39 @@ def train_model(
                 use_chat_template=bool(use_chat_template and tokenizer.chat_template),
                 system_prompt=system_prompt,
             )
+            tokenized, dropped_long_prompts = drop_prompts_over_limit(
+                tokenized, tokenizer, int(hyperparams["max_length"])
+            )
+            if len(tokenized) == 0:
+                raise ValueError(
+                    f"Every prompt is at least Max Sequence Length ({hyperparams['max_length']}) "
+                    "tokens, so no answer would be trained. Raise Max Sequence Length."
+                )
 
         # ── Train / eval split ─────────────────────────────────────────────
         # v3.2 Fix #1 (High): Guard against datasets too small to split.
         # A single example produces an empty test set, crashing the Trainer.
-        if len(tokenized) < 2:
+        eval_split = float(hyperparams.get("eval_split", DEFAULT_EVAL_SPLIT))
+        if not 0.0 <= eval_split < 1.0:
+            raise ValueError("Eval split must be between 0 and 1 (0 = no evaluation).")
+        if len(tokenized) < 2 or eval_split == 0.0:
             train_ds = tokenized
             eval_ds = None
         else:
-            split = tokenized.train_test_split(test_size=0.1, seed=seed)
+            split = tokenized.train_test_split(test_size=eval_split, seed=seed)
             train_ds, eval_ds = split["train"], split["test"]
             # Edge case: exactly 2 examples → 10% rounds to 0; force 1 eval row.
             if len(eval_ds) == 0:
                 train_ds = tokenized.select(range(len(tokenized) - 1))
                 eval_ds = tokenized.select([len(tokenized) - 1])
+
+        # Token lengths as the trainer will see them (chat template applied) — the
+        # character counts shown at upload time can't tell what gets truncated.
+        token_report = token_length_report(
+            tokenized, tokenizer, int(hyperparams["max_length"]), TOKEN_STATS_SAMPLE
+        )
+        if progress is not None:
+            progress(0.08, desc=format_token_report(token_report).splitlines()[0])
 
         # ── Model loading ──────────────────────────────────────────────────
         if progress is not None:
@@ -441,7 +474,12 @@ def train_model(
             if progress is not None:
                 dpo_callbacks.append(ETAProgressCallback(gradio_progress=progress))
 
-            dpo_config = DPOConfig(**base_training_args, remove_unused_columns=False, beta=dpo_beta)
+            dpo_config = DPOConfig(
+                **base_training_args,
+                remove_unused_columns=False,
+                beta=dpo_beta,
+                max_length=int(hyperparams["max_length"]),  # TRL otherwise uses 1024
+            )
             trainer = DPOTrainer(
                 model=model,
                 args=dpo_config,
@@ -532,6 +570,8 @@ def train_model(
             gradient_checkpointing=bool(gradient_checkpointing),
             lr_scheduler_type=lr_scheduler_type,
             early_stop=int(early_stop),
+            token_stats=token_report,
+            dropped_long_prompts=dropped_long_prompts,
         )
         del model
         if device == "cuda":
@@ -584,6 +624,12 @@ def train_model(
 
         if log_callback.records:
             summary += f"📉 Final train loss: {log_callback.records[-1]['train_loss']}"
+        summary += "\n" + format_token_report(token_report)
+        if dropped_long_prompts:
+            summary += (
+                f"\n⚠️ {dropped_long_prompts} examples skipped: their prompt alone fills Max "
+                "Sequence Length, so the answer would be cut off. Raise it to keep them."
+            )
 
         if progress is not None:
             progress(1.0, desc="✅ Complete!")

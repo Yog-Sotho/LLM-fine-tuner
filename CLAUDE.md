@@ -284,7 +284,9 @@ Trained model → push_to_hub()
 
 **Training modes:** SFT, DPO (via `training/sft.py`), ORPO (`training/orpo.py`), KTO (`training/kto.py`), GRPO (`training/grpo.py`), Reward modeling (`training/reward.py`)
 
-**SFT data** goes through `to_sft_dataset()` into TRL's prompt-completion format, so `SFTTrainer` trains on the response only and appends EOS. Don't pre-tokenise or build `labels` yourself.
+**Data formats:** `messages` (chat), `text`, `instruction`/`output`, and `prompt`/`chosen`/`rejected` (DPO). `load_hub_dataset()` streams Hub datasets (IDs must be `owner/name` and must not exist locally — `load_dataset` would read a local directory). Duplicates are detected ignoring case/whitespace.
+
+**SFT data** goes through `to_sft_dataset()` into TRL's prompt-completion format (chat data: all turns before the last assistant reply → prompt, that reply → completion), so `SFTTrainer` trains on the response only and appends EOS. Don't pre-tokenise or build `labels` yourself.
 
 **Precision:** use `select_precision(device)` / `compute_dtype(device)` from `core/hardware.py` (bf16 where supported, else fp16; fp32 on CPU). Always pass them explicitly — TRL configs default to bf16, which fails on CPU.
 

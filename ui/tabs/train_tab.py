@@ -19,6 +19,7 @@ Patch log
 import gradio as gr
 
 from config.constants import (
+    DEFAULT_EVAL_SPLIT,
     DEFAULT_REPORT_TO,
     DEFAULT_SEED,
     HAS_UNSLOTH,
@@ -187,6 +188,14 @@ def build_train_tab() -> dict:
                     seed = gr.Number(
                         value=DEFAULT_SEED, precision=0, label="Seed", info="Data split + training"
                     )
+                    eval_split = gr.Slider(
+                        0.0,
+                        0.5,
+                        value=DEFAULT_EVAL_SPLIT,
+                        step=0.05,
+                        label="Eval split",
+                        info="Share of rows held out to measure eval loss (0 = none)",
+                    )
                     report_to = gr.Dropdown(
                         choices=TRACKING_BACKENDS,
                         value=DEFAULT_REPORT_TO,
@@ -261,6 +270,7 @@ def build_train_tab() -> dict:
         run_name=run_name,
         seed=seed,
         report_to=report_to,
+        eval_split=eval_split,
         train_btn=train_btn,
         stop_btn=stop_btn,
         log_output=log_output,

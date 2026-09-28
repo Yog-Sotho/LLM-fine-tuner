@@ -495,3 +495,188 @@ def test_ui_runs_persist_and_resume(tiny_model, tmp_path, monkeypatch):
     assert "Nothing to resume" in _ui_train(tiny_model, data, "missing", resume=True)
     assert "Run name" in _ui_train(tiny_model, data, "../escape", resume=False)
     assert not (tmp_path / "escape").exists()
+
+
+# ── Data formats ───────────────────────────────────────────────────────────
+
+CHAT = [
+    [
+        {"role": "user", "content": "Say hi"},
+        {"role": "assistant", "content": "Hi"},
+        {"role": "user", "content": "Again"},
+        {"role": "assistant", "content": "Hi again"},
+    ],
+    [{"role": "user", "content": "Say bye"}, {"role": "assistant", "content": "Bye"}],
+    [{"role": "user", "content": "Count"}, {"role": "assistant", "content": "1 2"}],
+]
+
+
+def test_chat_sft_trains_only_the_final_answer(tiny_model):
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from trl import SFTConfig, SFTTrainer
+
+    from data.preprocessing import to_sft_dataset
+
+    tokenizer = AutoTokenizer.from_pretrained(tiny_model)
+    tokenizer.pad_token = tokenizer.eos_token
+    ds = to_sft_dataset(Dataset.from_dict({"messages": CHAT[:1]}), False, "")
+    trainer = SFTTrainer(
+        model=AutoModelForCausalLM.from_pretrained(tiny_model),
+        args=SFTConfig(output_dir="/tmp/chat_label_check", report_to="none", bf16=False),
+        train_dataset=ds,
+        processing_class=tokenizer,
+    )
+    batch = next(iter(trainer.get_train_dataloader()))
+    trained_ids = [t for t in batch["labels"][0].tolist() if t != -100]
+    trained_text = tokenizer.decode(trained_ids)
+    assert "Hi again" in trained_text
+    assert "Say hi" not in trained_text and "Again" not in trained_text
+
+
+def test_chat_sft_trains_end_to_end_with_token_report(tiny_model, tmp_path):
+    from core.run_config import load_run_config
+    from training.sft import train_model
+
+    summary, _ = train_model(
+        tiny_model, Dataset.from_dict({"messages": CHAT}), str(tmp_path), _hyperparams(),
+        "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+        False, True, "", training_mode="sft", progress=None,
+    )  # fmt: skip
+    assert summary.startswith("✅ Training complete") and "📏 Tokens per example" in summary
+    stats = load_run_config(str(tmp_path / "run_config.yaml"))["token_stats"]
+    assert stats["sampled"] == 3 and stats["max_length"] == 64
+
+
+def test_truncation_is_reported(tiny_model, tmp_path):
+    from training.sft import train_model
+
+    ds = Dataset.from_dict({"text": ["word " * 60, "short text", "another short"]})
+    summary, _ = train_model(
+        tiny_model, ds, str(tmp_path), {**_hyperparams(), "max_length": 16}, "cpu", "LoRA",
+        True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+        False, False, "", training_mode="sft", progress=None,
+    )  # fmt: skip
+    assert "⚠️ 1 (33.3%) exceed Max Sequence Length 16" in summary
+
+
+def test_eval_split_zero_disables_evaluation(tiny_model, tmp_path, monkeypatch):
+    import trl
+
+    from training.sft import train_model
+
+    seen = {}
+    original = trl.SFTTrainer
+
+    class Spy(original):
+        def __init__(self, *args, **kwargs):
+            seen["eval"] = kwargs.get("eval_dataset")
+            seen["train_rows"] = len(kwargs["train_dataset"])
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(trl, "SFTTrainer", Spy)
+    ds = Dataset.from_dict({"text": [f"row {i}" for i in range(10)]})
+    train_model(
+        tiny_model, ds, str(tmp_path), {**_hyperparams(), "eval_split": 0.0}, "cpu", "LoRA",
+        True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+        False, False, "", training_mode="sft", progress=None,
+    )  # fmt: skip
+    assert seen == {"eval": None, "train_rows": 10}
+
+
+def test_dpo_uses_the_max_sequence_length(tiny_model, tmp_path, monkeypatch):
+    import trl
+
+    from training.sft import train_model
+
+    seen = {}
+    original = trl.DPOTrainer
+
+    class Spy(original):
+        def __init__(self, *args, **kwargs):
+            seen["max_length"] = kwargs["args"].max_length
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(trl, "DPOTrainer", Spy)
+    train_model(
+        tiny_model, Dataset.from_dict(PREFS), str(tmp_path), {**_hyperparams(), "max_length": 48},
+        "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+        False, False, "", training_mode="dpo", progress=None,
+    )  # fmt: skip
+    assert seen["max_length"] == 48
+
+
+def test_chat_data_without_chat_template_is_a_clear_error(tiny_model, tmp_path, monkeypatch):
+    from transformers import AutoTokenizer
+
+    from training.sft import train_model
+
+    original = AutoTokenizer.from_pretrained
+
+    def no_template(*args, **kwargs):
+        tok = original(*args, **kwargs)
+        tok.chat_template = None
+        return tok
+
+    monkeypatch.setattr(AutoTokenizer, "from_pretrained", no_template)
+    with pytest.raises(RuntimeError, match="no chat template"):
+        train_model(
+            tiny_model, Dataset.from_dict({"messages": CHAT}), str(tmp_path), _hyperparams(),
+            "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+            False, True, "", training_mode="sft", progress=None,
+        )  # fmt: skip
+
+
+def test_cli_trains_from_hub_dataset(tiny_model, tmp_path, monkeypatch):
+    import datasets
+    from typer.testing import CliRunner
+
+    from cli.commands import app
+
+    monkeypatch.setattr(
+        datasets,
+        "load_dataset",
+        lambda repo, config, split, streaming: Dataset.from_dict(
+            {"messages": CHAT, "extra": [1, 2, 3]}
+        ).to_iterable_dataset(),
+    )
+    out = tmp_path / "hub_run"
+    result = CliRunner().invoke(app, [
+        "train", "--model", tiny_model, "--hf-dataset", "owner/chat", "--output", str(out),
+        "--epochs", "1", "--batch-size", "2", "--max-length", "64", "--lora-rank", "4",
+        "--eval-split", "0",
+    ])  # fmt: skip
+    assert result.exit_code == 0, result.output
+    assert "hf:owner/chat" in result.output
+    _assert_safetensors_adapter(out)
+
+    both = CliRunner().invoke(
+        app, ["train", "--model", tiny_model, "--data", "x.csv", "--hf-dataset", "o/n"]
+    )
+    assert both.exit_code == 1 and "exactly one" in both.output
+
+
+def test_long_prompts_are_skipped_and_reported(tiny_model, tmp_path):
+    from core.run_config import load_run_config
+    from training.sft import train_model
+
+    long_chat = [{"role": "user", "content": "word " * 200}, {"role": "assistant", "content": "ok"}]
+    ds = Dataset.from_dict({"messages": [long_chat, *CHAT]})
+    summary, _ = train_model(
+        tiny_model, ds, str(tmp_path), {**_hyperparams(), "max_length": 64}, "cpu", "LoRA",
+        True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+        False, True, "", training_mode="sft", progress=None,
+    )  # fmt: skip
+    assert "⚠️ 1 examples skipped" in summary
+    assert load_run_config(str(tmp_path / "run_config.yaml"))["dropped_long_prompts"] == 1
+
+
+def test_all_prompts_too_long_is_a_clear_error(tiny_model, tmp_path):
+    from training.sft import train_model
+
+    long_chat = [{"role": "user", "content": "word " * 200}, {"role": "assistant", "content": "ok"}]
+    with pytest.raises(RuntimeError, match="Raise Max Sequence Length"):
+        train_model(
+            tiny_model, Dataset.from_dict({"messages": [long_chat] * 3}), str(tmp_path),
+            {**_hyperparams(), "max_length": 64}, "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16,
+            False, 0, "linear", False, False, True, "", training_mode="sft", progress=None,
+        )  # fmt: skip
