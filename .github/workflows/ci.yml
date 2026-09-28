@@ -192,10 +192,11 @@ jobs:
 
       # Install CPU PyTorch before any other dep to avoid pip resolving the
       # CUDA build (~2 GB) from the default PyPI index. torch >= 2.6 is required
-      # (CVE-2025-32434).
+      # (CVE-2025-32434). torchvision (VLM tests) comes from the same index so the
+      # two builds match.
       - name: "Install CPU-only PyTorch"
         run: |
-          pip install --quiet "torch>=2.6.0,<3" \
+          pip install --quiet "torch>=2.6.0,<3" torchvision \
             --index-url https://download.pytorch.org/whl/cpu
 
       # Install the package itself so CI tests exactly the declared dependency ranges.
@@ -231,7 +232,9 @@ jobs:
           python -c "
           from huggingface_hub import snapshot_download
           snapshot_download('hf-internal-testing/tiny-random-LlamaForCausalLM')
-          print('Smoke-test model cached')
+          snapshot_download('trl-internal-testing/tiny-Qwen3ForCausalLM')
+          snapshot_download('trl-internal-testing/tiny-Qwen2_5_VLForConditionalGeneration')
+          print('Smoke-test models cached')
           "
 
       - name: "Run pytest with coverage"

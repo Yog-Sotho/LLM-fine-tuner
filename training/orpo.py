@@ -32,7 +32,13 @@ from core.callbacks import (
     LoggingCallback,
     StopCallback,
 )  # F-2: ETAProgressCallback added
-from core.hardware import get_lora_targets
+from core.hardware import (
+    compute_dtype,
+    get_lora_targets,
+    is_main_process,
+    quantized_device_map,
+    training_device_args,
+)
 from core.run_config import save_run_config
 from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
@@ -74,6 +80,7 @@ def train_orpo_v27(
     stop_event = app_state.session_for(request).stop_event
     stop_event.clear()
     set_seed(DEFAULT_SEED)  # before model/LoRA creation, so runs are reproducible
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
     try:
         try:  # lazy; TRL 1.x moved ORPO to trl.experimental
@@ -100,17 +107,18 @@ def train_orpo_v27(
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
 
-        if torch.cuda.is_available():
+        if device == "cuda":
             bnb = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.bfloat16,
+                # Same dtype as the mixed-precision mode (bf16 where supported, else fp16).
+                bnb_4bit_compute_dtype=compute_dtype(device),
                 bnb_4bit_use_double_quant=True,
             )
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 quantization_config=bnb,
-                device_map="auto",
+                device_map=quantized_device_map(),
                 trust_remote_code=ALLOW_REMOTE_CODE,
             )
         else:
@@ -157,8 +165,8 @@ def train_orpo_v27(
             save_steps=100,
             save_total_limit=2,
             load_best_model_at_end=_orpo_load_best,
-            fp16=torch.cuda.is_available(),
-            bf16=False,  # explicit: TRL 1.x configs default to bf16=True, which fails on CPU
+            # Explicit precision (TRL 1.x configs default to bf16=True, which fails on CPU).
+            **training_device_args(device),
             report_to=DEFAULT_REPORT_TO,
             seed=DEFAULT_SEED,
         )
@@ -204,24 +212,26 @@ def train_orpo_v27(
 
         if progress is not None:
             progress(0.9, desc="Saving ORPO model…")
-        model.save_pretrained(output_dir)
-        tokenizer.save_pretrained(output_dir)
-        save_run_config(
-            output_dir,
-            mode="orpo",
-            model=model_name,
-            dataset=ds,
-            seed=DEFAULT_SEED,
-            report_to=DEFAULT_REPORT_TO,
-            hyperparams={
-                "learning_rate": orpo_lr,
-                "beta": orpo_beta,
-                "alpha": orpo_alpha,
-                "epochs": orpo_epochs,
-                "batch_size": orpo_batch_size,
-            },
-            peft={"method": "LoRA", "lora_rank": 16, "lora_alpha": 32},
-        )
+        # One process writes the outputs (multi-process runs: every rank holds the same weights).
+        if is_main_process():
+            model.save_pretrained(output_dir)
+            tokenizer.save_pretrained(output_dir)
+            save_run_config(
+                output_dir,
+                mode="orpo",
+                model=model_name,
+                dataset=ds,
+                seed=DEFAULT_SEED,
+                report_to=DEFAULT_REPORT_TO,
+                hyperparams={
+                    "learning_rate": orpo_lr,
+                    "beta": orpo_beta,
+                    "alpha": orpo_alpha,
+                    "epochs": orpo_epochs,
+                    "batch_size": orpo_batch_size,
+                },
+                peft={"method": "LoRA", "lora_rank": 16, "lora_alpha": 32},
+            )
         del model
         if torch.cuda.is_available():
             torch.cuda.empty_cache()

@@ -228,3 +228,257 @@ def test_rows_whose_prompt_fills_max_length_are_dropped():
     assert dropped == 1 and kept[0]["prompt"][0]["content"] == "hi"
     text = Dataset.from_dict({"text": ["x" * 50]})
     assert drop_prompts_over_limit(text, _CharTokenizer(), 10) == (text, 0)
+
+
+# ── Tool calling and reasoning ─────────────────────────────────────────────
+
+CALL = {"type": "function", "function": {"name": "get_weather", "arguments": {"city": "Rome"}}}
+TOOL_CONV = [
+    {"role": "user", "content": "Weather in Rome?"},
+    {"role": "assistant", "content": None, "tool_calls": [CALL], "reasoning_content": " Think "},
+    {"role": "tool", "name": "get_weather", "tool_call_id": "c1", "content": "Sunny"},
+    {"role": "assistant", "content": "It is sunny."},
+]
+
+
+def test_clean_messages_keeps_tool_calls_tool_turns_and_reasoning():
+    out = clean_messages(TOOL_CONV)
+    assert out[1] == {"role": "assistant", "content": "", "tool_calls": [CALL],
+                      "reasoning_content": "Think"}  # fmt: skip
+    assert out[2] == {"role": "tool", "content": "Sunny", "name": "get_weather",
+                      "tool_call_id": "c1"}  # fmt: skip
+
+
+def test_json_string_arguments_become_objects_and_filler_nulls_go():
+    conv = [
+        {"role": "user", "content": "q"},
+        {"role": "assistant", "tool_calls": [{"function": {"name": "f", "arguments": '{"a": 1}'}}],
+         "name": None},
+        {"role": "assistant", "tool_calls": [{"function": {"name": "g",
+         "arguments": {"a": None, "b": 2}}}]},
+    ]  # fmt: skip
+    out = clean_messages(conv)
+    assert out[1]["tool_calls"][0] == {"type": "function",
+                                       "function": {"name": "f", "arguments": {"a": 1}}}  # fmt: skip
+    assert "name" not in out[1]
+    assert out[2]["tool_calls"][0]["function"]["arguments"] == {"b": 2}
+
+
+def test_a_final_tool_call_is_a_valid_training_target():
+    assert clean_messages(TOOL_CONV[:2])[-1]["tool_calls"] == [CALL]
+
+
+@pytest.mark.parametrize(
+    "bad_calls",
+    [[{"function": {"arguments": {}}}], [{"function": {"name": "f", "arguments": "{broken"}}],
+     "not a list", [{"function": {"name": "f", "arguments": [1, 2]}}]],
+)  # fmt: skip
+def test_malformed_tool_calls_reject_the_conversation(bad_calls):
+    conv = [{"role": "user", "content": "q"}, {"role": "assistant", "tool_calls": bad_calls}]
+    assert clean_messages(conv) is None
+
+
+def test_clean_tools():
+    from data.preprocessing import clean_tools
+
+    assert clean_tools(None) == "" and clean_tools(" ") == ""
+    assert clean_tools([{"type": "function", "x": None}]) == '[{"type": "function"}]'
+    assert clean_tools('[{"a": 1}]') == '[{"a": 1}]'
+    with pytest.raises(ValueError, match="list of JSON function schemas"):
+        clean_tools('{"a": 1}')
+
+
+def test_chat_dataset_keeps_differently_shaped_messages_exact():
+    from data.preprocessing import chat_dataset
+
+    other = {"type": "function", "function": {"name": "lights", "arguments": {"room": "k"}}}
+    ds = chat_dataset([
+        {"messages": [{"role": "user", "content": "a"}, {"role": "assistant", "tool_calls": [CALL]}],
+         "tools": [{"type": "function"}]},
+        {"messages": [{"role": "user", "content": "b"},
+                      {"role": "assistant", "tool_calls": [other]}], "tools": None},
+    ])  # fmt: skip
+    # Arrow struct inference would give each call the other's argument keys as nulls.
+    assert ds[0]["messages"][1]["tool_calls"][0]["function"]["arguments"] == {"city": "Rome"}
+    assert ds[1]["messages"][1]["tool_calls"][0]["function"]["arguments"] == {"room": "k"}
+    assert ds["tools"] == ['[{"type": "function"}]', ""]
+    assert len(chat_dataset([])) == 0
+
+
+def test_tool_chat_file_loads_cleans_and_expands_per_assistant_turn(tmp_path):
+    import json
+
+    data = tmp_path / "tools.jsonl"
+    data.write_text("\n".join(json.dumps(r) for r in [
+        {"messages": TOOL_CONV, "tools": [{"type": "function", "function": {"name": "get_weather"}}]},
+        {"messages": CONV},
+    ]))  # fmt: skip
+
+    class Upload:
+        name = str(data)
+
+    ds = loader.load_dataset_from_file(Upload(), "jsonl")
+    cleaned, _ = validate_and_clean_dataset(ds)
+    assert cleaned.column_names == ["messages", "tools"] and len(cleaned) == 2
+    assert "[calls get_weather" in preview_dataset(cleaned)["messages"][0]
+    sft = to_sft_dataset(cleaned, use_chat_template=True, system_prompt="")
+    # The tool chat trains its call and its answer; the plain chat only its last answer.
+    assert [[m["role"] for m in r["prompt"]] for r in sft] == [
+        ["user"],
+        ["user", "assistant", "tool"],
+        ["system", "user"],
+    ]
+    assert sft[0]["completion"][0]["tool_calls"] == [CALL]
+    assert json.loads(sft[0]["tools"])[0]["function"]["name"] == "get_weather"
+    assert sft[2]["tools"] == ""
+
+
+def test_token_report_renders_tools():
+    class ToolTokenizer(_CharTokenizer):
+        def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=False,
+                                tools=None):  # fmt: skip
+            prefix = json.dumps(tools) if tools else ""
+            return prefix + super().apply_chat_template(messages, tokenize, add_generation_prompt)
+
+    import json
+
+    from data.preprocessing import chat_dataset
+
+    ds = chat_dataset([{"prompt": [{"role": "user", "content": "ab"}],
+                        "completion": [{"role": "assistant", "content": "cd"}],
+                        "tools": '[{"n": 1}]'}])  # fmt: skip
+    report = token_length_report(ds, ToolTokenizer(), 1000, 10)
+    assert report["max"] == len('[{"n": 1}]' + "ab|cd")
+    kept, dropped = drop_prompts_over_limit(ds, ToolTokenizer(), max_length=5)
+    assert dropped == 1 and len(kept) == 0  # the tool schemas count towards the prompt
+
+
+# ── Vision chats (images) ──────────────────────────────────────────────────
+
+
+def _png(path, colour="red"):
+    from PIL import Image
+
+    Image.new("RGB", (8, 8), colour).save(path)
+
+
+def test_clean_messages_keeps_text_and_image_parts():
+    from data.preprocessing import content_text, count_image_parts
+
+    conv = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": " Hi "}]},
+            {"role": "assistant", "content": [{"type": "text", "text": "Red."}]}]  # fmt: skip
+    out = clean_messages(conv)
+    assert out[0]["content"] == [{"type": "image"}, {"type": "text", "text": "Hi"}]
+    assert count_image_parts(out) == 1 and content_text(out[1]["content"]) == "Red."
+    bad = [{"role": "user", "content": [{"type": "video"}]}, CONV[2]]
+    assert clean_messages(bad) is None
+
+
+def _vision_rows(tmp_path, n_images_per_row, parts_per_row):
+    import json
+
+    rows = []
+    for i, (n_images, parts) in enumerate(zip(n_images_per_row, parts_per_row, strict=True)):
+        names = []
+        for j in range(n_images):
+            _png(tmp_path / f"{i}_{j}.png", ["red", "blue"][j % 2])
+            names.append(f"{i}_{j}.png")
+        user = [{"type": "image"}] * parts + [{"type": "text", "text": f"q{i}"}]
+        rows.append({"messages": [{"role": "user", "content": user},
+                                  {"role": "assistant", "content": f"a{i}"}], "images": names})  # fmt: skip
+    data = tmp_path / "vision.jsonl"
+    data.write_text("\n".join(json.dumps(r) for r in rows))
+
+    class Upload:
+        name = str(data)
+
+    return loader.load_dataset_from_file(Upload(), "jsonl")
+
+
+def test_image_parts_must_match_images_unless_content_is_text_only(tmp_path):
+    # rows: 1 part/1 image ok; 2 parts/1 image dropped; 0 parts/1 image ok (TRL places it)
+    ds = _vision_rows(tmp_path, [1, 1, 1], [1, 2, 0])
+    cleaned, issues = validate_and_clean_dataset(ds)
+    assert len(cleaned) == 2 and any("invalid" in i for i in issues)
+    assert "🖼️ 1 image(s)" in preview_dataset(cleaned)["messages"][0]
+
+
+def test_images_are_kept_byte_for_byte(tmp_path):
+    from datasets import Image, List
+
+    ds = _vision_rows(tmp_path, [1], [1])
+    cleaned, _ = validate_and_clean_dataset(ds)
+    sft = to_sft_dataset(cleaned, True, "")
+    raw = sft.cast_column("images", List(Image(decode=False)))[0]["images"][0]
+    stored = raw["bytes"] or open(raw["path"], "rb").read()
+    assert stored == (tmp_path / "0_0.png").read_bytes()
+
+
+def test_same_text_with_different_images_is_not_a_duplicate(tmp_path):
+    import json
+
+    for name, colour in (("a.png", "red"), ("b.png", "blue"), ("c.png", "red")):
+        _png(tmp_path / name, colour)
+    conv = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": "q"}]},
+            {"role": "assistant", "content": "a"}]  # fmt: skip
+    data = tmp_path / "v.jsonl"
+    data.write_text("\n".join(json.dumps({"messages": conv, "images": [n]})
+                              for n in ("a.png", "b.png", "b.png")))  # fmt: skip
+
+    class Upload:
+        name = str(data)
+
+    cleaned, issues = validate_and_clean_dataset(loader.load_dataset_from_file(Upload(), "jsonl"))
+    assert len(cleaned) == 2 and any("1 duplicate" in i for i in issues)
+
+
+@pytest.mark.parametrize("ref", ["../outside.png", "/etc/passwd", "missing.png", 42])
+def test_local_images_must_be_files_next_to_the_data(tmp_path, ref):
+    import json
+
+    data = tmp_path / "data" / "v.jsonl"
+    data.parent.mkdir()
+    _png(tmp_path / "outside.png")
+    data.write_text(json.dumps({"messages": CONV, "images": [ref]}))
+
+    class Upload:
+        name = str(data)
+
+    with pytest.raises(RuntimeError, match="Image|image"):
+        loader.load_dataset_from_file(Upload(), "jsonl")
+
+
+def test_single_image_column_and_prompt_completion_chats_are_normalised(tmp_path):
+    import json
+
+    _png(tmp_path / "a.png")
+    row = {"prompt": [{"role": "user", "content": "What is it?"}],
+           "completion": [{"role": "assistant", "content": "A square."}], "image": "a.png"}  # fmt: skip
+    data = tmp_path / "pc.jsonl"
+    data.write_text(json.dumps(row))
+
+    class Upload:
+        name = str(data)
+
+    ds = loader.load_dataset_from_file(Upload(), "jsonl")
+    assert ds.column_names == ["messages", "images"] and len(ds[0]["messages"]) == 2
+
+
+def test_hub_prompt_completion_vision_chats(fake_hub):
+    import io
+
+    from datasets import Features, Image, List, Value
+    from PIL import Image as PILImage
+
+    buf = io.BytesIO()
+    PILImage.new("RGB", (8, 8), "red").save(buf, "PNG")
+    msg = List({"role": Value("string"), "content": Value("string")})
+    fake_hub["rows"] = Dataset.from_dict(
+        {"prompt": [[{"role": "user", "content": "Colour?"}]],
+         "completion": [[{"role": "assistant", "content": "Red."}]],
+         "images": [[{"bytes": buf.getvalue(), "path": None}]]},
+        features=Features({"prompt": msg, "completion": msg, "images": List(Image())}),
+    )  # fmt: skip
+    ds = loader.load_hub_dataset("owner/vision")
+    assert ds.column_names == ["messages", "images"]
+    assert [m["role"] for m in ds[0]["messages"]] == ["user", "assistant"]

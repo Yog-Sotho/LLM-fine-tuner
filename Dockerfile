@@ -59,8 +59,10 @@ RUN python3 -m pip install --upgrade pip setuptools wheel
 
 # ── PyTorch (CUDA 12.6 wheel) ─────────────────────────────────────────────────
 # torch >= 2.6 is required: <= 2.5.1 is affected by CVE-2025-32434 (torch.load RCE).
+# torchvision (vision-language fine-tuning) must be the build that matches torch.
 RUN pip install \
         torch==2.14.0+cu126 \
+        torchvision==0.29.0+cu126 \
         --index-url https://download.pytorch.org/whl/cu126
 
 # Fail the build if any command in a pipe fails (not just the last one).

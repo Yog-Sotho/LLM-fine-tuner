@@ -140,16 +140,41 @@ When it's disabled, your data is used as-is.
 
 ## Multi-GPU Training
 
-**Not supported yet.** Training runs as a single process. There is no data-parallel
-training (DDP), FSDP or DeepSpeed support, and launching the app with `accelerate launch`
-does not split training across GPUs — without arguments it would start one copy of the
-web UI per GPU.
+Training runs **data-parallel** across GPUs when you start the CLI with `accelerate launch`
+(or `torchrun`): each GPU trains its own copy of the model on its share of every batch, and
+the gradients are averaged, so the copies stay identical.
 
-What does happen on a machine with several GPUs: 4-bit (QLoRA) and GPU inference loads use
-`device_map="auto"`, so Transformers may place a model's layers on more than one GPU when
-it does not fit on one. The GPUs then work one after another — it lets a bigger model
-load, it does not make training faster. To keep a run on a single GPU, choose it with
-`CUDA_VISIBLE_DEVICES=0 python main.py`.
+```bash
+# All GPUs of this machine (after a one-time `accelerate config`, or pass flags):
+accelerate launch --multi_gpu --num_processes 4 main.py train \
+    --model Qwen/Qwen2.5-7B-Instruct --data train.jsonl --output ./runs/multi
+
+# Same with torchrun:
+torchrun --nproc_per_node 4 main.py train --model ... --data ... --output ...
+```
+
+Works for `train` (SFT/DPO, including vision-language data), `reward`, `orpo`, `kto` and `grpo`.
+
+- **Batch size** is per GPU: the effective batch is `--batch-size` × GPUs × gradient
+  accumulation. With 4 GPUs, divide `--batch-size` (or accumulation) by 4 to keep the same
+  training recipe.
+- **QLoRA / 4-bit:** each process loads its own 4-bit copy onto *its* GPU.
+- **Outputs** (adapter, `run_config.yaml`, model card) are written once, by the main process.
+- **The web UI is single-process.** Launching `main.py` without a command under
+  `accelerate launch`/`torchrun` stops with a message instead of starting one UI per GPU.
+- **Not supported yet:** model sharding (FSDP, DeepSpeed ZeRO-3) for models that don't fit on
+  one GPU — every GPU needs a full copy (4-bit helps).
+
+Verified with two processes on CPU (gloo), where both copies end with identical weights; the
+multi-GPU (NCCL) path uses the same code but hasn't been run in this project's CI.
+
+### GPU job queue (web UI)
+
+In the web UI, training, evaluation, benchmarks, GGUF export, adapter merging and vLLM
+generation share **one queue**: if a job is running, the next one waits (Gradio shows its
+place in line) instead of loading a second model onto the same GPU. Stop still works while a
+job runs, and the quick Generate buttons stay outside the queue. Set `LFT_GPU_JOBS=2` (1–8) to
+let more jobs run at once, e.g. on a multi-GPU machine.
 
 ---
 

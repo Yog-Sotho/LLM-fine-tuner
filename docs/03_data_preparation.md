@@ -48,7 +48,25 @@ The standard chat format used by OpenAI/ShareGPT-style datasets. The model is tr
 {"messages": [{"role": "system", "content": "You are concise."}, {"role": "user", "content": "What is DNA?"}, {"role": "assistant", "content": "The molecule that carries genetic instructions."}]}
 ```
 
-Roles must be `system`, `user` or `assistant`. Conversations without an answered user turn are dropped.
+Roles must be `system`, `user`, `assistant` or `tool`. Conversations without an answered user turn are dropped. TRL's conversational `prompt`/`completion` layout (both columns are message lists) is accepted too and joined into one conversation.
+
+**Tool calling (function calling).** Assistant turns may carry `tool_calls` instead of (or with) text, and the tool's result comes back in a `tool` turn. List the available functions (JSON schemas) in a `tools` column; the model's chat template puts them in the system prompt.
+
+```jsonl
+{"messages": [{"role": "user", "content": "Weather in Rome?"}, {"role": "assistant", "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {"city": "Rome"}}}]}, {"role": "tool", "name": "get_weather", "content": "Sunny, 24°C"}, {"role": "assistant", "content": "It's sunny and 24°C in Rome."}], "tools": [{"type": "function", "function": {"name": "get_weather", "description": "Current weather", "parameters": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}}}]}
+```
+
+- In conversations with tool calls **every assistant turn is trained** — the call (name + exact arguments) and the final answer — as separate examples. Plain chats train their last answer.
+- `arguments` may be an object or a JSON string (OpenAI style); strings are decoded. Each call keeps exactly its own arguments (an argument whose value is `null` is dropped).
+- Use a model whose chat template supports tools (e.g. Qwen2.5/Qwen3, Llama 3.1+, Mistral).
+
+**Reasoning traces.** Assistant turns may include their thinking in `reasoning_content` (or `thinking`); models whose template supports it (e.g. Qwen3's `<think>…</think>`) learn it before the answer. Templates without reasoning support ignore the field.
+
+**Images (vision-language models).** Add an `images` column (or `image` for one) and put `{"type": "image"}` parts in the message content where each image belongs — or keep plain text content and the images go into the first user turn. In a local JSONL file, images are paths **relative to the file** and must be inside its folder (CLI; the web UI uploads a single file, so use a Hub dataset there). Train with a vision-language model (e.g. Qwen2.5-VL) — see [04 — Training](04_training.md#vision-language-models).
+
+```jsonl
+{"messages": [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": "What colour is this?"}]}, {"role": "assistant", "content": "Red."}], "images": ["img/0.png"]}
+```
 
 **JSONL equivalent of Option 1:**
 ```jsonl
@@ -155,7 +173,7 @@ Instead of uploading a file, open **…or load from the Hugging Face Hub** in th
 2. Pick the split (`train` by default) and **Max rows** (default 20,000).
 3. Click **⬇️ Load from Hub**, check the preview, then click **▶ Start Training**.
 
-Rows are streamed, so only the rows you load are downloaded. Supported layouts: `messages`, `text`, `instruction`+`output`, and (in DPO mode) plain-text `prompt`+`chosen`+`rejected`. Other columns are ignored. Private or gated datasets need `HF_TOKEN`. From the CLI: `python main.py train --model <id> --hf-dataset owner/name --hf-max-rows 5000`.
+Rows are streamed, so only the rows you load are downloaded. Supported layouts: `messages` (with optional `tools` and `images`/`image`), conversational `prompt`+`completion`, `text`, `instruction`+`output`, and (in DPO mode) plain-text `prompt`+`chosen`+`rejected`. Other columns are ignored. Private or gated datasets need `HF_TOKEN`. From the CLI: `python main.py train --model <id> --hf-dataset owner/name --hf-max-rows 5000`.
 
 ---
 

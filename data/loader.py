@@ -12,6 +12,7 @@ load_dataset_from_file — unified loader for csv/jsonl/json/txt/excel/pdf
 safe_extract_zip       — ZIP extraction with path-traversal guard
 """
 
+import json
 import os
 import re
 import zipfile
@@ -21,7 +22,11 @@ import pandas as pd
 from datasets import Dataset
 
 from config.constants import (
+    CHAT_COLUMNS,
     COL_CHOSEN,
+    COL_COMPLETION,
+    COL_IMAGE,
+    COL_IMAGES,
     COL_INSTRUCTION,
     COL_MESSAGES,
     COL_OUTPUT,
@@ -42,6 +47,7 @@ from config.constants import (
     HUB_NAME_PATTERN,
 )
 from core.state import validate_path_traversal
+from data.preprocessing import chat_dataset
 
 
 def detect_file_type(file) -> str | None:
@@ -131,6 +137,71 @@ def load_dataset_from_dataframe(
         raise RuntimeError(f"Failed to load dataset from DataFrame: {e}") from e
 
 
+def _read_chat_rows(path: Path, file_type: str) -> list[dict] | None:
+    """Rows of a JSON/JSONL chat file (records with a ``messages`` field), else None.
+
+    Chat files are read with the json module and built by ``chat_dataset``: Arrow's
+    type inference would merge differently shaped messages and tool calls, filling
+    their missing keys with nulls.
+    """
+    with open(path, encoding="utf-8") as f:
+        if file_type == "jsonl":
+            first = next((line for line in f if line.strip()), "")
+            record = json.loads(first) if first else None
+            if not isinstance(record, dict) or not (
+                COL_MESSAGES in record or _is_conversational_pair(record)
+            ):
+                return None
+            f.seek(0)
+            rows = [json.loads(line) for line in f if line.strip()]
+        else:
+            rows = json.load(f)
+            if not (isinstance(rows, list) and rows and isinstance(rows[0], dict)):
+                return None
+            if not (COL_MESSAGES in rows[0] or _is_conversational_pair(rows[0])):
+                return None
+    rows = [_normalise_image_column(_as_messages(row)) for row in rows]
+    keep = [c for c in CHAT_COLUMNS if c in rows[0]]
+    if COL_IMAGES in keep:
+        base = path.parent.resolve()
+        for row in rows:
+            row[COL_IMAGES] = [_local_image(base, ref) for ref in row.get(COL_IMAGES) or []]
+    return [{c: row.get(c) for c in keep} for row in rows]
+
+
+def _is_conversational_pair(row: dict) -> bool:
+    """TRL's conversational prompt-completion layout: both columns are message lists."""
+    return isinstance(row.get(COL_PROMPT), list) and isinstance(row.get(COL_COMPLETION), list)
+
+
+def _as_messages(row: dict) -> dict:
+    """Prompt-completion chats become one ``messages`` conversation (other columns kept)."""
+    if COL_MESSAGES in row or not _is_conversational_pair(row):
+        return row
+    rest = {k: v for k, v in row.items() if k not in (COL_PROMPT, COL_COMPLETION)}
+    return {COL_MESSAGES: row[COL_PROMPT] + row[COL_COMPLETION], **rest}
+
+
+def _normalise_image_column(row: dict) -> dict:
+    """A single ``image`` becomes an ``images`` list (TRL accepts either; we keep one)."""
+    if COL_IMAGE in row and COL_IMAGES not in row:
+        row = {**row, COL_IMAGES: [] if row[COL_IMAGE] is None else [row[COL_IMAGE]]}
+        del row[COL_IMAGE]
+    return row
+
+
+def _local_image(base: Path, ref) -> dict:
+    """An image referenced by a local chat file: a path relative to that file's folder."""
+    if not isinstance(ref, str) or not ref.strip():
+        raise ValueError("Images in a local chat file must be file paths (strings).")
+    if validate_path_traversal(ref) or Path(ref).is_absolute():
+        raise ValueError(f"Image path must be relative to the data file, inside its folder: {ref}")
+    image_path = (base / ref).resolve()
+    if base not in image_path.parents or not image_path.is_file():
+        raise ValueError(f"Image not found next to the data file: {ref}")
+    return {"path": str(image_path), "bytes": None}
+
+
 def load_dataset_from_file(
     file,
     file_type: str,
@@ -161,13 +232,10 @@ def load_dataset_from_file(
         if not path.is_file():
             raise ValueError("Invalid file path")
 
-        # ── JSONL ─────────────────────────────────────────────────────────
-        if file_type == "jsonl":
-            # BOLT OPTIMIZATION: Use Dataset.from_json for faster, Arrow-backed loading.
-            return Dataset.from_json(str(path))
-
-        # ── JSON ──────────────────────────────────────────────────────────
-        if file_type == "json":
+        # ── JSON / JSONL ──────────────────────────────────────────────────
+        if file_type in ("jsonl", "json"):
+            if chat_rows := _read_chat_rows(path, file_type):
+                return chat_dataset(chat_rows)
             # BOLT OPTIMIZATION: Use Dataset.from_json for faster, Arrow-backed loading.
             return Dataset.from_json(str(path))
 
@@ -281,6 +349,15 @@ def load_hub_dataset(
     from datasets import load_dataset  # lazy: heavy import
 
     stream = load_dataset(repo_id, config or None, split=split, streaming=True)
+    # Images stay encoded (bytes/paths): decoding and re-encoding would cost time and quality.
+    # Only image columns: other features (e.g. Json messages) must still be decoded.
+    from datasets import Image, List
+
+    features = stream.features or {}
+    if COL_IMAGES in features:
+        stream = stream.cast_column(COL_IMAGES, List(Image(decode=False)))
+    if COL_IMAGE in features:
+        stream = stream.cast_column(COL_IMAGE, Image(decode=False))
     rows = list(stream.take(max_rows))
     if not rows:
         raise ValueError(f"'{repo_id}' split '{split}' has no rows.")
@@ -295,8 +372,9 @@ def load_hub_dataset(
                 "This preference dataset stores chats instead of plain text; "
                 "only plain-text prompt/chosen/rejected columns are supported."
             )
-    elif COL_MESSAGES in columns:
-        keep = [COL_MESSAGES]
+    elif COL_MESSAGES in columns or _is_conversational_pair(rows[0]):
+        rows = [_normalise_image_column(_as_messages(row)) for row in rows]
+        keep = [c for c in CHAT_COLUMNS if c in rows[0]]
     elif COL_TEXT in columns:
         keep = [COL_TEXT]
     elif {COL_INSTRUCTION, COL_OUTPUT} <= columns:
@@ -306,7 +384,8 @@ def load_hub_dataset(
             "Unsupported dataset layout. Needs 'messages', 'text' or 'instruction'+'output' "
             f"columns (DPO: prompt/chosen/rejected); found {sorted(columns)}"
         )
-    ds = Dataset.from_list([{c: row[c] for c in keep} for row in rows])
+    kept = [{c: row[c] for c in keep} for row in rows]
+    ds = chat_dataset(kept) if COL_MESSAGES in keep else Dataset.from_list(kept)
     ds.info.dataset_name = repo_id  # recorded in run_config.yaml and the model card
     return ds
 

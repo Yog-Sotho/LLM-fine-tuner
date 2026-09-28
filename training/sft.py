@@ -61,6 +61,7 @@ from transformers import (
 
 from config.constants import (
     ALLOW_REMOTE_CODE,
+    COL_IMAGES,
     COL_MESSAGES,
     DEFAULT_EVAL_SPLIT,
     DEFAULT_LORA_VARIANT,
@@ -84,9 +85,11 @@ from core.hardware import (
     compute_dtype,
     full_finetune_dtype,
     get_lora_targets,
+    is_main_process,
     is_unsloth_supported,
     lora_variant_kwargs,
-    select_precision,
+    quantized_device_map,
+    training_device_args,
 )
 from core.run_config import latest_checkpoint, save_run_config
 from core.state import app_state, validate_path_traversal
@@ -96,6 +99,7 @@ from data.preprocessing import (
     to_sft_dataset,
     token_length_report,
 )
+from training.vision import train_vision_sft
 
 
 def train_model(
@@ -162,6 +166,17 @@ def train_model(
     log_callback = LoggingCallback()
 
     try:
+        # ── Vision-language data: image + text chats ──────────────────────
+        if COL_IMAGES in dataset.column_names:
+            if is_dpo:
+                raise ValueError("DPO on image + text data isn't supported; use SFT.")
+            return train_vision_sft(
+                model_name, dataset, output_dir, hyperparams, device, peft_method, use_lora,
+                lora_rank, lora_alpha, lora_variant, gradient_checkpointing, lr_scheduler_type,
+                int(early_stop), resume_from_checkpoint, int(seed), report_to, run_name,
+                stop_event, progress,
+            )  # fmt: skip
+
         # ── Tokenizer ─────────────────────────────────────────────────────
         if progress is not None:
             progress(0, desc="Loading tokenizer… ")
@@ -261,7 +276,9 @@ def train_model(
             except TypeError:
                 bnb = BitsAndBytesConfig(**bnb_kwargs)
             model_kwargs = dict(
-                quantization_config=bnb, device_map="auto", trust_remote_code=ALLOW_REMOTE_CODE
+                quantization_config=bnb,
+                device_map=quantized_device_map(),
+                trust_remote_code=ALLOW_REMOTE_CODE,
             )
             if use_flash_attn:
                 # v3.1 Fix #2 (Critical): Guard bfloat16 with hardware support check.
@@ -335,7 +352,7 @@ def train_model(
                 )
                 model_kwargs = dict(
                     quantization_config=bnb,
-                    device_map="auto",
+                    device_map=quantized_device_map(),
                     trust_remote_code=ALLOW_REMOTE_CODE,
                 )
                 # Non-quantised tensors use the same dtype as the mixed-precision mode.
@@ -479,7 +496,7 @@ def train_model(
             greater_is_better=False,
             # bf16 on GPUs that support it, else fp16; full precision on CPU. Always
             # explicit: TRL configs default to bf16=True, which fails on CPU.
-            **select_precision(device),
+            **training_device_args(device),
             report_to=report_to,
             run_name=run_name,
             seed=seed,
@@ -579,39 +596,42 @@ def train_model(
         # ── Save ───────────────────────────────────────────────────────────
         if progress is not None:
             progress(0.9, desc="Saving model… ")
-        model.save_pretrained(output_dir)
-        tokenizer.save_pretrained(output_dir)
-        save_run_config(
-            output_dir,
-            mode=training_mode,
-            model=model_name,
-            dataset=dataset,
-            seed=seed,
-            report_to=report_to,
-            hyperparams=dict(hyperparams),
-            peft={
-                "method": peft_method,
-                "lora_rank": lora_rank,
-                "lora_alpha": lora_alpha,
-                "lora_variant": lora_variant,
-            },
-            use_chat_template=bool(use_chat_template),
-            system_prompt=system_prompt,
-            dpo_beta=dpo_beta if is_dpo else None,
-            use_flash_attn=bool(use_flash_attn),
-            gradient_checkpointing=bool(gradient_checkpointing),
-            lr_scheduler_type=lr_scheduler_type,
-            early_stop=int(early_stop),
-            token_stats=token_report,
-            dropped_long_prompts=dropped_long_prompts,
-        )
+        # One process writes the outputs: in a multi-process run every rank holds the
+        # same trained weights, and concurrent writes to one folder would clash.
+        if is_main_process():
+            model.save_pretrained(output_dir)
+            tokenizer.save_pretrained(output_dir)
+            save_run_config(
+                output_dir,
+                mode=training_mode,
+                model=model_name,
+                dataset=dataset,
+                seed=seed,
+                report_to=report_to,
+                hyperparams=dict(hyperparams),
+                peft={
+                    "method": peft_method,
+                    "lora_rank": lora_rank,
+                    "lora_alpha": lora_alpha,
+                    "lora_variant": lora_variant,
+                },
+                use_chat_template=bool(use_chat_template),
+                system_prompt=system_prompt,
+                dpo_beta=dpo_beta if is_dpo else None,
+                use_flash_attn=bool(use_flash_attn),
+                gradient_checkpointing=bool(gradient_checkpointing),
+                lr_scheduler_type=lr_scheduler_type,
+                early_stop=int(early_stop),
+                token_stats=token_report,
+                dropped_long_prompts=dropped_long_prompts,
+            )
         del model
         if device == "cuda":
             torch.cuda.empty_cache()
         gc.collect()
 
         # ── Heretic Mode ───────────────────────────────────────────────────
-        if heretic_mode:
+        if heretic_mode and is_main_process():
             if progress is not None:
                 progress(0.95, desc="🔓 Applying Heretic… ")
 

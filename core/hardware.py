@@ -17,6 +17,8 @@ Fix log
      to `/ (1024 ** 3)` and updated display labels to "GiB".
 """
 
+import os
+
 import torch
 
 from config.constants import (
@@ -191,6 +193,34 @@ def compute_dtype(device: str) -> torch.dtype:
     if precision["fp16"]:
         return torch.float16
     return torch.float32
+
+
+def training_device_args(device: str) -> dict[str, bool]:
+    """TrainingArguments for the device: precision, plus ``use_cpu`` on CPU.
+
+    ``use_cpu`` also lets a multi-process CPU launch (torchrun) train data-parallel
+    (gloo); on GPUs accelerate detects multi-GPU launches by itself.
+    """
+    return {**select_precision(device), "use_cpu": device != "cuda"}
+
+
+def world_size() -> int:
+    """Number of training processes (``torchrun`` / ``accelerate launch`` set WORLD_SIZE)."""
+    return int(os.environ.get("WORLD_SIZE") or 1)
+
+
+def is_main_process() -> bool:
+    """True in single-process runs and on rank 0 — the process that saves outputs."""
+    return int(os.environ.get("RANK") or 0) == 0
+
+
+def quantized_device_map():
+    """``device_map`` for 4-bit (QLoRA) loads.
+
+    One process: ``"auto"``. Multi-process (data-parallel) training: this process's
+    own GPU — ``"auto"`` would spread every copy of the model over all GPUs.
+    """
+    return {"": int(os.environ.get("LOCAL_RANK") or 0)} if world_size() > 1 else "auto"
 
 
 def full_finetune_dtype(device: str) -> torch.dtype:
