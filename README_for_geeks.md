@@ -39,9 +39,10 @@ config/ → core/ → data/ → training/ → inference/ → export/ → ui/ / c
 | `data/loader.py` | Multi-format ingest, ZIP path-traversal guard, `safe_extract_zip()` |
 | `data/preprocessing.py` | Whitespace/empty filtering, duplicate detection, `validate_and_clean_dataset()` |
 | `data/augmentation.py` | `nlpaug`-backed synonym/random/spelling augmentation |
-| `training/sft.py` | `train_model()` — unified SFT + DPO pipeline |
-| `training/reward.py` | `train_reward_model_v27()` — saves `AutoModelForCausalLMWithValueHead` |
-| `training/ppo.py` | `run_ppo_v27()` — full outer-epoch loop, float reward fix |
+| `training/sft.py` | `train_model()` — SFT (`SFTTrainer`, completion-only loss) + DPO |
+| `training/reward.py` | `train_reward_model_v27()` — sequence-classifier reward model, LoRA merged on save |
+| `training/grpo.py` | `train_grpo()` — GRPO with a reward model and/or reference-match reward |
+| `training/kto.py` | `train_kto()` — KTO from unpaired (or unpaired-from-paired) feedback |
 | `training/orpo.py` | `train_orpo_v27()` — TRL `ORPOTrainer` |
 | `inference/generate.py` | `_load_for_inference()`, `generate_text()`, `batch_generate()` |
 | `inference/vllm_runner.py` | vLLM engine with `vllm_cache`, `merge_adapter_for_inference()` |
@@ -300,7 +301,7 @@ else:
 
 ### SFT / DPO (training/sft.py)
 
-SFT uses `Trainer` + `DataCollatorForLanguageModeling`. DPO routes to `DPOTrainer` with `beta=dpo_beta`.
+SFT converts data with `to_sft_dataset()` (prompt-completion, or conversational when a chat template is used) and trains with TRL's `SFTTrainer`: loss on the response only, EOS appended, optional packing (Flash Attention 2 only), Liger kernels when installed on CUDA. DPO routes to `DPOTrainer` with `beta=dpo_beta`. Precision comes from `select_precision()` (bf16 → fp16 → fp32).
 
 **Recommended LR by mode:**
 | Mode | LR | Scheduler |
@@ -313,38 +314,53 @@ SFT uses `Trainer` + `DataCollatorForLanguageModeling`. DPO routes to `DPOTraine
 ### Reward Model (training/reward.py)
 
 ```python
-# Saves AutoModelForCausalLMWithValueHead (v2.9-A fix — PPO-compatible format)
+# AutoModelForSequenceClassification(num_labels=1) + LoRA (SEQ_CLS), trained with
+# RewardTrainer on prompt/chosen/rejected, then merged and saved as a full model.
 train_reward_model_v27(
     model_name,
     reward_file,
     output_dir,
     rm_epochs=3,
-    rm_lr=1.4e-5,
+    rm_lr=1e-4,
     rm_batch_size=4,
     rm_eval_steps=100,
-    rm_max_length=1024,  # v2.7 Fix 2c: exposed in UI + CLI
-    progress=None,  # v2.9-D: always guarded against None
+    rm_max_length=1024,
+    progress=None,
 )
 ```
 
-### PPO (training/ppo.py)
+### GRPO (training/grpo.py)
 
 ```python
-run_ppo_v27(
+train_grpo(
     policy_model_name,
-    reward_model_path,  # must be AutoModelForCausalLMWithValueHead
-    ppo_file,
+    reward_model_path,  # folder from train_reward_model_v27, or "" to use only references
+    prompts_file,  # 'prompt' column, optional 'reference'
     output_dir,
-    ppo_lr=1.4e-5,
-    ppo_batch_size=1,  # keep at 1–2; PPO stores full trajectory
-    ppo_mini_batch_size=1,
-    ppo_epochs=1,  # outer loop epochs (v2.7 Fix 1b)
-    ppo_max_new_tokens=128,
+    learning_rate=1e-5,
+    epochs=1,
+    num_generations=4,  # completions per prompt (group baseline)
+    prompts_per_step=1,  # per_device_train_batch_size = prompts × generations
+    max_completion_length=128,
+    beta=0.0,  # KL penalty; 0 = no reference model
     progress=None,
 )
-# v3.2 Fix #2: reward_val appended as float, not re-wrapped in torch.tensor()
-# v2.9-F:  debug print() statements removed
-# v2.9 Minor #4: outputs.values used directly (not .logits)
+```
+
+### KTO (training/kto.py)
+
+```python
+train_kto(
+    model_name,
+    kto_file,  # prompt/completion/label, or prompt/chosen/rejected
+    output_dir,
+    learning_rate=5e-5,
+    beta=0.1,
+    epochs=1,
+    batch_size=4,  # ≥ 2
+    max_length=512,
+    progress=None,
+)
 ```
 
 ### ORPO (training/orpo.py)
@@ -492,28 +508,35 @@ python main.py orpo \
     --epochs 3
 ```
 
-### `ppo`
+### `grpo`
 
 ```bash
-python main.py ppo \
-    --policy-model ./sft_model \
+python main.py grpo \
+    --policy-model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
     --reward-model ./reward_model \
     --data prompts.csv \
-    --output ./ppo_model \
-    --lr 1.4e-5 \
-    --batch-size 1 \
-    --mini-batch-size 1 \
-    --epochs 1 \
-    --max-new-tokens 128
+    --output ./grpo_model \
+    --num-generations 4 \
+    --max-completion-length 128
+```
+
+### `kto`
+
+```bash
+python main.py kto \
+    --model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
+    --data feedback.csv \
+    --output ./kto_model \
+    --batch-size 4
 ```
 
 ### `evaluate`
 
 ```bash
 python main.py evaluate \
-    --model ./ppo_model \
+    --model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
     --data eval.csv \
-    --lora ./ppo_model \
+    --lora ./grpo_model \
     --bertscore \
     --batch-size 8 \
     --max-new-tokens 256
@@ -551,11 +574,12 @@ python main.py reward \
     --model "$MODEL" --data data/reward.csv \
     --output models/reward --epochs 2 --max-length 1024
 
-echo "=== Step 3: PPO ==="
-python main.py ppo \
-    --policy-model models/sft --reward-model models/reward \
-    --data data/prompts.csv --output models/ppo \
-    --batch-size 1 --epochs 1 --max-new-tokens 256
+echo "=== Step 3: GRPO ==="
+# GRPO needs a full policy model: the base model, or the SFT adapter merged first.
+python main.py grpo \
+    --policy-model "$MODEL" --reward-model models/reward \
+    --data data/prompts.csv --output models/grpo \
+    --num-generations 4 --max-completion-length 256
 
 echo "=== Step 4: ORPO (alternative to steps 2+3) ==="
 # python main.py orpo \
@@ -564,7 +588,7 @@ echo "=== Step 4: ORPO (alternative to steps 2+3) ==="
 
 echo "=== Step 5: Evaluate ==="
 python main.py evaluate \
-    --model models/ppo --data data/eval.csv --bertscore
+    --model "$MODEL" --lora models/grpo --data data/eval.csv --bertscore
 
 echo "All done!"
 ```

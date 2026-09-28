@@ -82,6 +82,12 @@ def build_train_tab() -> dict:
                         value=False,
                         info="Significantly reduces VRAM and speeds up attention computation.",
                     )
+                    packing = gr.Checkbox(
+                        label="📦 Sequence packing (SFT, needs Flash Attention 2)",
+                        value=False,
+                        info="Packs short examples into full-length sequences: much faster on "
+                        "short data. Ignored without Flash Attention (samples would mix).",
+                    )
                     # Minor Fix 5: QLoRA Enhanced checkbox removed from UI — driven by peft_method radio.
                     # gr.State preserves event-wiring arity.
                     use_qlora_enhanced = gr.State(False)
@@ -206,6 +212,7 @@ def build_train_tab() -> dict:
         heretic_mode=heretic_mode,
         system_prompt=system_prompt,
         use_flash_attn=use_flash_attn,
+        packing=packing,
         use_qlora_enhanced=use_qlora_enhanced,
         peft_method=peft_method,
         training_preset=training_preset,

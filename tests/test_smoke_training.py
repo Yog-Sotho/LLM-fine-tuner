@@ -153,15 +153,157 @@ def test_inference_with_trained_adapter(tiny_model, tmp_path):
     assert not reply.startswith("❌"), reply
 
 
-def test_reward_and_ppo_report_unavailable_instead_of_crashing():
-    from config.constants import HAS_PPO
-    from training.ppo import run_ppo_v27
+class _Upload:
+    def __init__(self, path) -> None:
+        self.name = str(path)
+
+
+PREFS = {
+    "prompt": ["Greet me", "Say goodbye", "Pick a number", "Name a fruit"],
+    "chosen": ["Hello!", "Goodbye!", "Seven", "Apple"],
+    "rejected": ["Go away", "Whatever", "Banana", "Seven"],
+}
+
+
+def test_sft_masks_prompt_and_trains_eos(tiny_model):
+    """Completion-only loss: prompt tokens are -100 and the EOS token is a training label."""
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from trl import SFTConfig, SFTTrainer
+
+    from data.preprocessing import to_sft_dataset
+
+    tokenizer = AutoTokenizer.from_pretrained(tiny_model)
+    tokenizer.pad_token = tokenizer.eos_token  # same setup as train_model
+    ds = to_sft_dataset(
+        Dataset.from_dict({"instruction": ["Say hi"], "output": ["Hi there"]}),
+        use_chat_template=False,
+        system_prompt="",
+    )
+    trainer = SFTTrainer(
+        model=AutoModelForCausalLM.from_pretrained(tiny_model),
+        args=SFTConfig(output_dir="/tmp/sft_label_check", report_to="none", bf16=False),
+        train_dataset=ds,
+        processing_class=tokenizer,
+    )
+    batch = next(iter(trainer.get_train_dataloader()))
+    labels = batch["labels"][0].tolist()
+    input_ids = batch["input_ids"][0].tolist()
+    prompt_len = len(tokenizer("### Instruction:\nSay hi\n\n### Response:\n")["input_ids"])
+    assert all(label == -100 for label in labels[: prompt_len - 1]), "prompt must not be trained"
+    trained = [t for t in labels if t != -100]
+    assert trained, "completion must be trained"
+    assert trained[-1] == tokenizer.eos_token_id, "EOS must be a training target"
+    assert input_ids[-1] == tokenizer.eos_token_id
+
+
+def test_sft_with_chat_template_trains(tiny_model, tmp_path):
+    from training.sft import train_model
+
+    ds = Dataset.from_dict({"instruction": ["Say hi", "Say bye"], "output": ["Hi", "Bye"]})
+    summary, _ = train_model(
+        tiny_model, ds, str(tmp_path), _hyperparams(), "cpu", "LoRA",
+        True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+        False, True, "You are a helpful assistant.",
+        training_mode="sft", progress=None,
+    )  # fmt: skip
+    assert summary.startswith("✅ Training complete")
+    _assert_safetensors_adapter(tmp_path)
+
+
+def test_packing_is_skipped_without_flash_attention(tiny_model, tmp_path):
+    """Packing needs Flash Attention 2 on CUDA; otherwise it is skipped with a visible note."""
+    from training.sft import train_model
+
+    ds = Dataset.from_dict({"text": ["alpha beta", "gamma delta", "epsilon zeta", "eta theta"]})
+    summary, records = train_model(
+        tiny_model, ds, str(tmp_path), {**_hyperparams(), "packing": True}, "cpu", "LoRA",
+        True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+        False, False, "", training_mode="sft", progress=None,
+    )  # fmt: skip
+    assert summary.startswith("✅ Training complete")
+    assert any("Packing skipped" in r.get("note", "") for r in records)
+
+
+@pytest.fixture(scope="module")
+def reward_model_dir(tiny_model, tmp_path_factory):
     from training.reward import train_reward_model_v27
 
-    if HAS_PPO:
-        pytest.skip("Legacy PPO API present; this test covers supported TRL versions")
-    assert "being rebuilt" in train_reward_model_v27("m", object(), "out", progress=None)
-    assert "being rebuilt" in run_ppo_v27("m", ".", object(), "out", progress=None)
+    root = tmp_path_factory.mktemp("reward")
+    data = root / "prefs.csv"
+    pd.DataFrame(PREFS).to_csv(data, index=False)
+    out = root / "rm"
+    result = train_reward_model_v27(
+        tiny_model, _Upload(data), str(out),
+        rm_epochs=1, rm_batch_size=2, rm_eval_steps=10, rm_max_length=64, progress=None,
+    )  # fmt: skip
+    assert result.startswith("✅ Reward model training complete"), result
+    return out
+
+
+def test_reward_model_is_a_merged_sequence_classifier(reward_model_dir):
+    import torch
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+    assert (reward_model_dir / "config.json").is_file()
+    assert not (reward_model_dir / "adapter_config.json").exists(), "LoRA must be merged"
+    model = AutoModelForSequenceClassification.from_pretrained(reward_model_dir, num_labels=1)
+    tok = AutoTokenizer.from_pretrained(reward_model_dir)
+    with torch.no_grad():
+        score = model(**tok("Greet me Hello!", return_tensors="pt")).logits
+    assert score.shape == (1, 1)
+
+
+def test_grpo_with_reference_reward(tiny_model, tmp_path):
+    from training.grpo import train_grpo
+
+    data = tmp_path / "prompts.csv"
+    pd.DataFrame({"prompt": ["2+2=", "3+3="], "reference": ["4", "6"]}).to_csv(data, index=False)
+    out = tmp_path / "grpo"
+    result = train_grpo(
+        tiny_model, "", _Upload(data), str(out),
+        num_generations=2, max_completion_length=8, progress=None,
+    )  # fmt: skip
+    assert result.startswith("✅ GRPO training complete"), result
+    assert "reference match" in result
+    _assert_safetensors_adapter(out)
+
+
+def test_grpo_with_trained_reward_model(tiny_model, reward_model_dir, tmp_path):
+    from training.grpo import train_grpo
+
+    data = tmp_path / "prompts.csv"
+    pd.DataFrame({"prompt": ["Greet me", "Name a fruit"]}).to_csv(data, index=False)
+    out = tmp_path / "grpo_rm"
+    result = train_grpo(
+        tiny_model, str(reward_model_dir), _Upload(data), str(out),
+        num_generations=2, max_completion_length=8, progress=None,
+    )  # fmt: skip
+    assert result.startswith("✅ GRPO training complete"), result
+    assert "reward model" in result
+    _assert_safetensors_adapter(out)
+
+
+@pytest.mark.parametrize("fmt", ["paired", "unpaired"])
+def test_kto_trains(tiny_model, tmp_path, fmt):
+    from training.kto import train_kto
+
+    data = tmp_path / "kto.csv"
+    if fmt == "paired":
+        pd.DataFrame(PREFS).to_csv(data, index=False)
+    else:
+        pd.DataFrame(
+            {
+                "prompt": ["Greet me", "Greet me", "Name a fruit", "Name a fruit"],
+                "completion": ["Hello!", "Go away", "Apple", "Seven"],
+                "label": ["true", "false", "true", "false"],
+            }
+        ).to_csv(data, index=False)
+    out = tmp_path / "kto"
+    result = train_kto(
+        tiny_model, _Upload(data), str(out), batch_size=2, max_length=64, progress=None
+    )
+    assert result.startswith("✅ KTO training complete"), result
+    _assert_safetensors_adapter(out)
 
 
 def test_cli_train_runs_end_to_end(tiny_model, tmp_path):

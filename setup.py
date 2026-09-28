@@ -227,7 +227,7 @@ setup(
     name="llm-fine-tuner",  # matches pyproject.toml name
     version=_version,  # read from pyproject.toml
     description=(
-        "Advanced LLM Fine-Tuner — SFT, DPO, ORPO, PPO, reward modelling and evaluation. "
+        "Advanced LLM Fine-Tuner — SFT, DPO, ORPO, KTO, GRPO, reward modelling and evaluation. "
         "No-code Gradio UI + full CLI. QLoRA, Unsloth, GGUF, vLLM, Heretic Mode."
     ),
     long_description=_long_description,
@@ -276,7 +276,8 @@ setup(
         "qlora",
         "dpo",
         "rlhf",
-        "ppo",
+        "grpo",
+        "kto",
         "orpo",
         "transformers",
         "huggingface",

@@ -6,7 +6,7 @@ This file provides context for AI assistants (Claude, Copilot, etc.) working in 
 
 ## Repository Overview
 
-**LLM Fine-Tuner v3.2** is a production-ready application for fine-tuning large language models. It exposes two interfaces over the same core: a Gradio web UI and a Typer CLI. The application supports supervised fine-tuning (SFT), DPO, ORPO, PPO, and reward model training, with optional acceleration via Unsloth and vLLM.
+**LLM Fine-Tuner v3.2** is a production-ready application for fine-tuning large language models. It exposes two interfaces over the same core: a Gradio web UI and a Typer CLI. The application supports supervised fine-tuning (SFT), DPO, ORPO, KTO, GRPO, and reward model training, with optional acceleration via Unsloth and vLLM.
 
 **Entry point:** `main.py` — if `sys.argv` has arguments, delegates to the Typer CLI; otherwise launches the Gradio UI on port 7860.
 
@@ -36,8 +36,9 @@ LLM-fine-tuner/
 │
 ├── training/
 │   ├── sft.py               # train_model() — SFT/DPO unified pipeline
-│   ├── reward.py            # train_reward_model_v27()
-│   ├── ppo.py               # run_ppo_v27() — PPO fine-tuning
+│   ├── reward.py            # train_reward_model_v27() — sequence-classifier reward model
+│   ├── grpo.py              # train_grpo() — GRPO (reward model and/or reference answers)
+│   ├── kto.py               # train_kto() — KTO from desirable/undesirable examples
 │   └── orpo.py              # train_orpo_v27() — ORPO alignment
 │
 ├── inference/
@@ -60,19 +61,19 @@ LLM-fine-tuner/
 │       ├── train_tab.py     # Training configuration layout
 │       ├── gguf_tab.py      # GGUF export layout
 │       ├── inference_tab.py # Inference layout
-│       ├── rlhf_tab.py      # Reward/PPO/ORPO layout
+│       ├── rlhf_tab.py      # Reward/GRPO/ORPO/KTO layout
 │       ├── evaluation_tab.py# Evaluation layout
 │       └── share_tab.py     # Hub push & download layout
 │
 ├── cli/
-│   └── commands.py          # Typer CLI (train, reward, orpo, ppo, evaluate)
+│   └── commands.py          # Typer CLI (train, reward, orpo, grpo, kto, evaluate)
 │
 ├── tests/
 │   ├── conftest.py          # pytest setup (inserts repo root into sys.path)
 │   ├── test_cli.py
 │   ├── test_data_loader.py
 │   ├── test_preprocessing.py
-│   ├── test_ppo_reward_type.py
+│   ├── test_training_data.py
 │   └── test_training_guards.py
 │
 ├── docs/                    # User-facing documentation (01_installation.md … 13_docker.md)
@@ -271,7 +272,13 @@ Trained model → push_to_hub()
 
 ## Training Modes & PEFT Methods
 
-**Training modes:** SFT, DPO (via `training/sft.py`), ORPO (`training/orpo.py`), PPO (`training/ppo.py`), Reward modeling (`training/reward.py`)
+**Training modes:** SFT, DPO (via `training/sft.py`), ORPO (`training/orpo.py`), KTO (`training/kto.py`), GRPO (`training/grpo.py`), Reward modeling (`training/reward.py`)
+
+**SFT data** goes through `to_sft_dataset()` into TRL's prompt-completion format, so `SFTTrainer` trains on the response only and appends EOS. Don't pre-tokenise or build `labels` yourself.
+
+**Precision:** use `select_precision(device)` / `compute_dtype(device)` from `core/hardware.py` (bf16 where supported, else fp16; fp32 on CPU). Always pass them explicitly — TRL configs default to bf16, which fails on CPU.
+
+**Reward models** are saved merged (full sequence classifier) because `GRPOTrainer` loads a reward-model path as `AutoModelForSequenceClassification(num_labels=1)`.
 
 **PEFT methods:** LoRA, QLoRA Enhanced (NF4 + double quantization), Prefix Tuning, Prompt Tuning, Adapters, Full fine-tuning
 
@@ -285,7 +292,7 @@ Trained model → push_to_hub()
 2. **Do not wire Gradio events in tab files** — only `ui/app.py:build_demo()` does this.
 3. **Do not add constants outside `config/constants.py`** — column names, file extensions, and feature flags belong there.
 4. **Do not re-check `HAS_*` flags with `try/except`** — import from `config/constants.py`.
-5. **PPO rewards must stay float32** — mixed types cause runtime errors; see `test_ppo_reward_type.py`.
+5. **GRPO mutates `reward_funcs`** — `GRPOTrainer` replaces reward-model paths in the list with loaded models; pass a copy and derive anything you need from the list beforehand.
 6. **Small dataset guard** — `train_model()` has a split guard for tiny datasets; do not remove it.
 7. **Inference cache** — always acquire `_cache_lock` before reading/writing the cache dict; return a locally-held reference, not a re-read from the dict (prevents race conditions).
 8. **sys.path in tests** — `conftest.py` inserts the repo root; do not move or remove this.

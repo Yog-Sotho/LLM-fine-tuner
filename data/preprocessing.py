@@ -9,7 +9,7 @@ Functions
 get_dataset_stats          — calculate vectorized dataset count/avg-length
 validate_and_clean_dataset — filter empty/long rows; return issues list
 preview_dataset            — return first N rows as a pandas DataFrame
-preprocess_function        — tokenise examples; apply chat template if available
+to_sft_dataset             — convert to TRL prompt-completion / text format
 
 Fix log
 -------
@@ -33,11 +33,13 @@ from datasets import Dataset
 
 from config.constants import (
     COL_CHOSEN,
+    COL_COMPLETION,
     COL_INSTRUCTION,
     COL_OUTPUT,
     COL_PROMPT,
     COL_REJECTED,
     COL_TEXT,
+    SFT_PROMPT_TEMPLATE,
 )
 
 
@@ -233,98 +235,34 @@ def preview_dataset(dataset: Dataset, is_dpo: bool = False) -> pd.DataFrame:
         )
 
 
-def preprocess_function(
-    examples,
-    tokenizer,
-    max_length: int,
-    task_type: str,
-    use_chat_template: bool,
-    system_prompt: str,
-) -> dict:
-    """Tokenise a batch of examples for causal-LM training.
+def to_sft_dataset(dataset: Dataset, use_chat_template: bool, system_prompt: str) -> Dataset:
+    """Convert project columns into the dataset formats TRL's SFTTrainer expects.
 
-    When use_chat_template is True and the tokenizer has a chat_template,
-    the standard ChatML format is applied. Otherwise falls back to the
-    '### Instruction / ### Response' prompt format.
-
-    Returns a dict with input_ids and attention_mask (labels are added by the collator).
+    - instruction/output → prompt-completion, so loss is computed on the response
+      only and SFTTrainer appends the EOS token (the model learns to stop).
+      Conversational (chat-template) form when ``use_chat_template`` is True,
+      otherwise the plain "### Instruction / ### Response" layout.
+    - text → language-modelling format (loss on all tokens).
     """
-    if use_chat_template and tokenizer.chat_template is not None:
-        texts = []
-        if task_type == COL_INSTRUCTION:
-            for inst, out in zip(examples[COL_INSTRUCTION], examples[COL_OUTPUT], strict=True):
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": inst},
-                    {"role": "assistant", "content": out},
-                ]
-                texts.append(
-                    tokenizer.apply_chat_template(
-                        messages, tokenize=False, add_generation_prompt=False
-                    )
-                )
-        else:
-            for t in examples[COL_TEXT]:
-                messages = [{"role": "user", "content": t}]
-                texts.append(
-                    tokenizer.apply_chat_template(
-                        messages, tokenize=False, add_generation_prompt=False
-                    )
-                )
-    else:
-        if task_type == COL_INSTRUCTION:
-            texts = [
-                f"### Instruction:\n{inst}\n\n### Response:\n{out}"
-                for inst, out in zip(examples[COL_INSTRUCTION], examples[COL_OUTPUT], strict=True)
-            ]
-        else:
-            texts = examples[COL_TEXT]
+    columns = dataset.column_names
+    if COL_INSTRUCTION in columns and COL_OUTPUT in columns:
+        system = [{"role": "system", "content": system_prompt}] if system_prompt else []
 
-    # BOLT OPTIMIZATION: Use padding=False (dynamic padding) instead of
-    # padding="max_length". The DataCollator will pad batches to the longest
-    # sequence in that batch, significantly reducing VRAM and increasing speed.
-    tokenized = tokenizer(
-        texts,
-        truncation=True,
-        padding=False,
-        max_length=max_length,
+        def _convert(batch: dict) -> dict:
+            pairs = list(zip(batch[COL_INSTRUCTION], batch[COL_OUTPUT], strict=True))
+            if use_chat_template:
+                return {
+                    COL_PROMPT: [[*system, {"role": "user", "content": i}] for i, _ in pairs],
+                    COL_COMPLETION: [[{"role": "assistant", "content": o}] for _, o in pairs],
+                }
+            return {
+                COL_PROMPT: [SFT_PROMPT_TEMPLATE.format(instruction=i) for i, _ in pairs],
+                COL_COMPLETION: [o for _, o in pairs],
+            }
+
+        return dataset.map(_convert, batched=True, remove_columns=columns)
+    if COL_TEXT in columns:
+        return dataset.select_columns([COL_TEXT])
+    raise ValueError(
+        f"SFT needs '{COL_INSTRUCTION}'+'{COL_OUTPUT}' or '{COL_TEXT}' columns; got {columns}"
     )
-    # No "labels" here: with dynamic padding they'd be ragged lists the collator can't
-    # tensorize. DataCollatorForLanguageModeling(mlm=False) builds them from the
-    # padded input_ids instead.
-    return tokenized
-
-
-def tokenize_reward_function(
-    examples,
-    tokenizer,
-    rm_max_length: int,
-) -> dict:
-    """Tokenise a batch of examples for Reward Model training.
-
-    Returns a dict with input_ids and attention_mask for both chosen and
-    rejected responses.
-    """
-    # BOLT OPTIMIZATION: Use padding=False (dynamic padding) instead of
-    # padding="max_length". The DataCollator will pad batches to the longest
-    # sequence in that batch, significantly reducing VRAM and increasing speed.
-    chosen_tok = tokenizer(
-        examples[COL_CHOSEN],
-        truncation=True,
-        max_length=rm_max_length,
-        padding=False,
-        return_attention_mask=True,
-    )
-    rejected_tok = tokenizer(
-        examples[COL_REJECTED],
-        truncation=True,
-        max_length=rm_max_length,
-        padding=False,
-        return_attention_mask=True,
-    )
-    return {
-        "input_ids_chosen": chosen_tok["input_ids"],
-        "attention_mask_chosen": chosen_tok["attention_mask"],
-        "input_ids_rejected": rejected_tok["input_ids"],
-        "attention_mask_rejected": rejected_tok["attention_mask"],
-    }

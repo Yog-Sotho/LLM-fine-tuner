@@ -36,11 +36,11 @@ def test_cli_orpo_path_traversal():
     assert "❌ Path traversal attempt detected." in result.stderr
 
 
-def test_cli_ppo_path_traversal():
+def test_cli_grpo_path_traversal():
     result = runner.invoke(
         app,
         [
-            "ppo",
+            "grpo",
             "--policy-model",
             "../unsafe",
             "--reward-model",
@@ -57,5 +57,13 @@ def test_cli_ppo_path_traversal():
 
 def test_cli_evaluate_path_traversal():
     result = runner.invoke(app, ["evaluate", "--model", "../unsafe", "--data", "dummy.csv"])
+    assert result.exit_code == 1
+    assert "❌ Path traversal attempt detected." in result.stderr
+
+
+def test_cli_kto_path_traversal():
+    result = runner.invoke(
+        app, ["kto", "--model", "../unsafe", "--data", "dummy.csv", "--output", "./ok"]
+    )
     assert result.exit_code == 1
     assert "❌ Path traversal attempt detected." in result.stderr

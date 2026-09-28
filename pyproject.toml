@@ -7,12 +7,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "llm-fine-tuner"
 version = "3.2.0"
-description = "Advanced LLM Fine-Tuner — SFT, DPO, ORPO, PPO, reward modelling and evaluation"
+description = "Advanced LLM Fine-Tuner — SFT, DPO, ORPO, KTO, GRPO, reward modelling and evaluation"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Yog-Sotho" }]
-keywords = ["llm", "fine-tuning", "peft", "lora", "qlora", "dpo", "ppo", "orpo", "rlhf"]
+keywords = ["llm", "fine-tuning", "peft", "lora", "qlora", "dpo", "grpo", "kto", "orpo", "rlhf"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",

@@ -32,7 +32,8 @@ Commands:
   train     Headless SFT training
   reward    Train a Reward Model from preference data
   orpo      ORPO alignment training
-  ppo       PPO fine-tuning with a trained reward model
+  grpo      GRPO fine-tuning with a reward model and/or reference answers
+  kto       KTO alignment from desirable / undesirable examples
   evaluate  Batched BLEU / ROUGE / BERTScore evaluation
 ```
 
@@ -78,6 +79,7 @@ python main.py train \
 | `--lora-rank` | `8` | LoRA rank |
 | `--qlora-enhanced` | off | Enable QLoRA Enhanced (overrides `--peft`) |
 | `--flash-attn` | off | Enable Flash Attention 2 |
+| `--packing` | off | Pack short samples into full-length sequences (needs `--flash-attn` on a CUDA GPU; ignored otherwise) |
 
 **Example — fine-tune TinyLlama on a JSONL dataset:**
 ```bash
@@ -103,7 +105,7 @@ python main.py train \
 
 ### `reward` — Train a Reward Model
 
-Trains a reward model from preference (chosen/rejected) data.
+Trains a prompt-aware reward model (a sequence classifier with one score output) from preference pairs. LoRA is merged at the end, so the output folder can be passed straight to `grpo --reward-model`.
 
 ```bash
 python main.py reward \
@@ -111,7 +113,7 @@ python main.py reward \
     --data reward_pairs.csv \
     --output ./reward_model \
     --epochs 3 \
-    --lr 1.4e-5 \
+    --lr 1e-4 \
     --max-length 1024 \
     --batch-size 4
 ```
@@ -121,17 +123,17 @@ python main.py reward \
 | Flag | Default | Description |
 |---|---|---|
 | `--model` | *(required)* | Base model ID |
-| `--data` | *(required)* | CSV/JSONL with `chosen` and `rejected` columns |
+| `--data` | *(required)* | CSV/JSONL with `prompt`, `chosen` and `rejected` columns |
 | `--output` | `./reward_model` | Where to save the reward model |
 | `--epochs` | `3` | Training epochs |
-| `--lr` | `1.4e-5` | Learning rate |
-| `--max-length` | `1024` | Max sequence length |
+| `--lr` | `1e-4` | Learning rate (LoRA) |
+| `--max-length` | `1024` | Max tokens for prompt + response |
 | `--batch-size` | `4` | Batch size |
 
 **Data format** (`reward_pairs.csv`):
 ```csv
-chosen,rejected
-"A detailed and accurate answer.","A vague or wrong answer."
+prompt,chosen,rejected
+"How long is a year?","About 365.25 days.","No idea."
 ```
 
 ---
@@ -167,42 +169,76 @@ python main.py orpo \
 
 ---
 
-### `ppo` — PPO Fine-Tuning
+### `grpo` — GRPO Fine-Tuning
 
-Reinforcement learning step using a trained reward model.
+Online reinforcement learning: several answers are generated per prompt and the ones that beat their group's average reward are reinforced. At least one reward source is required: `--reward-model` and/or a `reference` column in the data.
 
 ```bash
-python main.py ppo \
-    --policy-model ./my_sft_model \
+python main.py grpo \
+    --policy-model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
     --reward-model ./reward_model \
     --data prompts.csv \
-    --output ./ppo_model \
-    --epochs 1 \
-    --lr 1.4e-5 \
-    --batch-size 1 \
-    --max-new-tokens 128
+    --output ./grpo_model \
+    --num-generations 4 \
+    --max-completion-length 128
 ```
 
 **All options:**
 
 | Flag | Default | Description |
 |---|---|---|
-| `--policy-model` | *(required)* | SFT model path or HF ID |
-| `--reward-model` | *(required)* | Path to trained reward model |
-| `--data` | *(required)* | CSV/JSONL with `prompt` column |
-| `--output` | `./ppo_model` | Output directory |
-| `--epochs` | `1` | PPO epochs |
-| `--lr` | `1.4e-5` | Learning rate |
-| `--batch-size` | `1` | Keep at 1–2 (PPO is memory-intensive) |
-| `--mini-batch-size` | `1` | Must be ≤ batch size |
-| `--max-new-tokens` | `128` | Max tokens to generate per prompt |
+| `--policy-model` | *(required)* | Model to train (HF ID or full model folder) |
+| `--data` | *(required)* | CSV/JSONL with `prompt`; optional `reference` (expected answer) |
+| `--reward-model` | — | Folder from the `reward` command |
+| `--output` | `./grpo_model` | Where the LoRA adapter is saved |
+| `--epochs` | `1` | Passes over the prompts |
+| `--lr` | `1e-5` | Learning rate |
+| `--num-generations` | `4` | Completions per prompt (≥ 2) |
+| `--prompts-per-step` | `1` | Prompts per optimisation step |
+| `--max-completion-length` | `128` | Tokens generated per completion |
+| `--beta` | `0.0` | KL penalty towards the original model (0 = off) |
 
 **Data format** (`prompts.csv`):
 ```csv
-prompt
-"What is a healthy diet?"
-"Explain machine learning simply."
-"How do I manage stress?"
+prompt,reference
+"What is 12 × 12?","144"
+"What is the capital of France?","Paris"
+```
+
+A reference-match reward gives 1 when the completion contains the `reference` text (case-insensitive).
+
+---
+
+### `kto` — KTO Alignment
+
+Aligns from single responses labelled good or bad — no ranked pairs needed.
+
+```bash
+python main.py kto \
+    --model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
+    --data feedback.csv \
+    --output ./kto_model \
+    --batch-size 4
+```
+
+**All options:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--model` | *(required)* | Base model ID |
+| `--data` | *(required)* | `prompt`,`completion`,`label` or `prompt`,`chosen`,`rejected` |
+| `--output` | `./kto_model` | Where the LoRA adapter is saved |
+| `--epochs` | `1` | |
+| `--lr` | `5e-5` | Learning rate |
+| `--beta` | `0.1` | How far the model may move from the original |
+| `--batch-size` | `4` | At least 2 |
+| `--max-length` | `512` | Max tokens for prompt + response |
+
+**Data format** (`feedback.csv`):
+```csv
+prompt,completion,label
+"Summarise this email","Meeting moved to Friday at 3pm.",true
+"Summarise this email","lol idk",false
 ```
 
 ---
@@ -269,17 +305,19 @@ python main.py reward \
     --output ./models/reward \
     --epochs 2
 
-echo "Step 3: PPO alignment"
-python main.py ppo \
-    --policy-model ./models/sft \
+echo "Step 3: GRPO alignment"
+# The policy must be a full model: use the base model, or merge the SFT adapter
+# first (Inference tab → Merge Adapter) and pass the merged folder.
+python main.py grpo \
+    --policy-model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
     --reward-model ./models/reward \
     --data data/prompts.csv \
-    --output ./models/final \
-    --epochs 1
+    --output ./models/final
 
 echo "Step 4: Evaluate"
 python main.py evaluate \
-    --model ./models/final \
+    --model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
+    --lora ./models/final \
     --data data/eval.csv \
     --bertscore
 
