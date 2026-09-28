@@ -37,8 +37,8 @@ Patch log
            the comment to accurately describe what the code does.
 """
 
-import os
 import random
+import re
 
 import gradio as gr
 import numpy as np  # M-5 FIX: moved from inside compute_bleu_rouge() to module top-level
@@ -77,57 +77,11 @@ def _esc(s: str) -> str:
 # ── BLEU + ROUGE ───────────────────────────────────────────────────────────
 
 
-def _compute_bleu_rouge_chunk(chunk_data: tuple) -> tuple:
-    """Helper function to compute BLEU and ROUGE scores for a single chunk.
-    This is a top-level function so it can be pickled by multiprocessing.
-    """
-    predictions, references, has_nltk, has_rouge = chunk_data
-    bleu_scores = []
-    r1_scores = []
-    r2_scores = []
-    rl_scores = []
-
-    if has_nltk and predictions and references:
-        from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu  # lazy
-
-        smoothing = SmoothingFunction().method4
-        for pred, ref in zip(predictions, references, strict=False):
-            pred_tokens = pred.split()
-            ref_tokens = [ref.split()]
-            if pred_tokens:
-                try:
-                    score = sentence_bleu(ref_tokens, pred_tokens, smoothing_function=smoothing)
-                    bleu_scores.append(score)
-                except Exception:
-                    bleu_scores.append(0.0)
-            else:
-                bleu_scores.append(0.0)
-
-    if has_rouge and predictions and references:
-        from rouge_score import rouge_scorer as rouge_scorer_lib  # lazy
-
-        scorer = rouge_scorer_lib.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=True)
-        for pred, ref in zip(predictions, references, strict=False):
-            try:
-                scores = scorer.score(ref, pred)
-                r1_scores.append(scores["rouge1"].fmeasure)
-                r2_scores.append(scores["rouge2"].fmeasure)
-                rl_scores.append(scores["rougeL"].fmeasure)
-            except Exception:
-                r1_scores.append(0.0)
-                r2_scores.append(0.0)
-                rl_scores.append(0.0)
-
-    return bleu_scores, r1_scores, r2_scores, rl_scores
-
-
 def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict[str, float | str]:
     """Compute BLEU-1, ROUGE-1, ROUGE-2, ROUGE-L over paired lists.
 
-    BOLT OPTIMIZATION: Uses chunk-based multiprocessing via ProcessPoolExecutor on large
-    datasets to calculate scores in parallel, avoiding GIL contention and single-thread bottlenecks.
-    Uses the high-performance 'fork' start method on Linux/Unix systems to avoid massive PyTorch/Transformers re-import overhead,
-    and falls back to sequential execution on small datasets or single-core systems.
+    Runs in-process: forking worker processes from a server process that already
+    runs threads (torch, Gradio) can deadlock, and scoring is cheap next to generation.
     """
     results: dict[str, float | str] = {}
     if not predictions or not references:
@@ -138,78 +92,6 @@ def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict[st
     has_nltk = bool(HAS_NLTK)
     has_rouge = bool(HAS_ROUGE)
 
-    num_items = len(predictions)
-    num_cores = os.cpu_count() or 1
-
-    # Multiprocessing threshold: at least 100 items, and multiple CPU cores available
-    use_mp = (num_items >= 100) and (num_cores > 1)
-
-    if use_mp:
-        try:
-            import multiprocessing
-            from concurrent.futures import ProcessPoolExecutor
-
-            # Determine start method: "fork" is highly preferred on Linux/Unix because it is very fast
-            # and avoids re-importing torch and transformers in the spawned child processes.
-            if "fork" in multiprocessing.get_all_start_methods():
-                mp_context: multiprocessing.context.BaseContext = multiprocessing.get_context(
-                    "fork"
-                )
-            else:
-                mp_context = (
-                    multiprocessing.get_context()
-                )  # fallback to default (spawn or forkserver)
-
-            # Cap the number of workers to avoid excessive process creation overhead
-            num_workers = min(num_cores, num_items // 50, 8)
-
-            if num_workers > 1:
-                # Chunk data
-                chunk_size = (num_items + num_workers - 1) // num_workers
-                chunks = []
-                for i in range(0, num_items, chunk_size):
-                    chunk_preds = predictions[i : i + chunk_size]
-                    chunk_refs = references[i : i + chunk_size]
-                    chunks.append((chunk_preds, chunk_refs, has_nltk, has_rouge))
-
-                bleu_scores = []
-                r1_scores = []
-                r2_scores = []
-                rl_scores = []
-
-                with ProcessPoolExecutor(
-                    max_workers=num_workers, mp_context=mp_context
-                ) as executor:
-                    for chunk_bleu, chunk_r1, chunk_r2, chunk_rl in executor.map(
-                        _compute_bleu_rouge_chunk, chunks
-                    ):
-                        bleu_scores.extend(chunk_bleu)
-                        r1_scores.extend(chunk_r1)
-                        r2_scores.extend(chunk_r2)
-                        rl_scores.extend(chunk_rl)
-
-                if has_nltk and bleu_scores:
-                    results["BLEU-1"] = round(float(np.mean(bleu_scores)), 4)
-                else:
-                    results["BLEU-1"] = "nltk not installed" if not has_nltk else 0.0
-
-                if has_rouge and r1_scores:
-                    results["ROUGE-1"] = round(float(np.mean(r1_scores)), 4)
-                    results["ROUGE-2"] = round(float(np.mean(r2_scores)), 4)
-                    results["ROUGE-L"] = round(float(np.mean(rl_scores)), 4)
-                else:
-                    results["ROUGE-1"] = results["ROUGE-2"] = results["ROUGE-L"] = (
-                        "rouge_score not installed"
-                    )
-
-                return results
-        except Exception as e:
-            # Fallback to sequential execution if multiprocessing encounters an error
-            print(
-                f"⚠️ Multiprocessing evaluation failed: {e}. Falling back to sequential execution."
-            )
-
-    # ── Sequential Execution / Fallback ──────────────────────────────────────────
     if has_nltk:
         from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu  # lazy
 
@@ -292,7 +174,76 @@ def compute_bertscore_metric(
         }
 
 
+# ── Generation ─────────────────────────────────────────────────────────────
+
+
+def is_lora_model(model) -> bool:
+    config = getattr(model, "peft_config", {}).get("default")
+    return config is not None and str(getattr(config, "peft_type", "")).upper().endswith("LORA")
+
+
+def generate_predictions(
+    model,
+    tokenizer,
+    prompts: list[str],
+    max_new_tokens: int,
+    stop_event=None,
+    base_model: bool = False,
+    batch_size: int = 8,
+) -> list[str]:
+    """Greedy generation in batches (deterministic, so runs and models are comparable).
+
+    ``base_model=True`` generates with the LoRA adapter switched off for this call
+    only (PEFT ``adapter_names=["__base__"]``) — the cached model is shared between
+    sessions, so its global adapter state must not be toggled.
+    """
+    if base_model and not is_lora_model(model):
+        raise ValueError("Comparing with the base model needs a LoRA adapter.")
+    predictions: list[str] = []
+    for i in range(0, len(prompts), batch_size):
+        if stop_event is not None and stop_event.is_set():
+            break
+        batch = prompts[i : i + batch_size]
+        inputs = tokenizer(
+            batch, return_tensors="pt", padding=True, truncation=True, max_length=512
+        )
+        if torch.cuda.is_available():
+            inputs = {k: v.cuda() for k, v in inputs.items()}
+        extra = {"adapter_names": ["__base__"] * len(batch)} if base_model else {}
+        with torch.inference_mode():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=int(max_new_tokens),
+                do_sample=False,
+                pad_token_id=tokenizer.eos_token_id,
+                **extra,
+            )
+        # Left padding: every completion starts right after the (padded) prompt.
+        input_len = inputs["input_ids"].shape[1]
+        predictions.extend(tokenizer.batch_decode(outputs[:, input_len:], skip_special_tokens=True))
+    return predictions
+
+
 # ── LLM-as-Judge ──────────────────────────────────────────────────────────
+
+_SCORE_PATTERNS = (
+    re.compile(r"\bscore\s*[:=]\s*(10|[1-9])(?!\d)", re.IGNORECASE),
+    re.compile(r"^\s*(10|[1-9])\s*(?:/\s*10)?(?!\d)"),
+)
+
+
+def parse_judge_score(text: str) -> int | None:
+    """Extract the 1–10 score from a judge reply ("Score: 7", "7/10 …"), else None."""
+    for pattern in _SCORE_PATTERNS:
+        if match := pattern.search(text or ""):
+            return int(match.group(1))
+    return None
+
+
+def mean_judge_score(results: list[dict]) -> tuple[float | None, int]:
+    """(mean of parsed scores, number of replies without a score)."""
+    scores = [r["score"] for r in results if r["score"] is not None]
+    return (round(float(np.mean(scores)), 2) if scores else None), len(results) - len(scores)
 
 
 def llm_judge_evaluate(
@@ -330,11 +281,21 @@ def llm_judge_evaluate(
         batch_responses = responses[i : i + batch_size]
 
         eval_texts = [
-            f"Evaluate the following response based on: {criteria}\n"
+            f"Rate the response to the prompt for: {criteria}.\n"
             f"Prompt: {p}\nResponse: {r}\n"
-            f"Score (1-10) and brief reasoning:"
+            "Reply with 'Score: N' (N from 1 to 10) on the first line, then one sentence "
+            "of reasoning."
             for p, r in zip(batch_prompts, batch_responses, strict=False)
         ]
+        # Chat/instruct judges follow the format far more reliably through their template.
+        if isinstance(getattr(tokenizer, "chat_template", None), str):
+            eval_texts = [
+                tokenizer.apply_chat_template(
+                    [{"role": "user", "content": t}], tokenize=False, add_generation_prompt=True
+                )
+                + "Score:"
+                for t in eval_texts
+            ]
 
         inputs = tokenizer(
             eval_texts,
@@ -361,7 +322,17 @@ def llm_judge_evaluate(
         judgments = tokenizer.batch_decode(outputs[:, input_len:], skip_special_tokens=True)
 
         for p, r, judgment in zip(batch_prompts, batch_responses, judgments, strict=False):
-            results.append({"prompt": p, "response": r, "judgment": judgment.strip()})
+            judgment = judgment.strip()
+            if isinstance(getattr(tokenizer, "chat_template", None), str):
+                judgment = "Score:" + judgment  # the prompt ended with "Score:"
+            results.append(
+                {
+                    "prompt": p,
+                    "response": r,
+                    "judgment": judgment,
+                    "score": parse_judge_score(judgment),
+                }
+            )
 
     return results
 
@@ -535,6 +506,25 @@ def build_prediction_preview_html(
 # ── Gradio UI handler ──────────────────────────────────────────────────────
 
 
+def _format_metrics(table: dict[str, dict]) -> str:
+    """Markdown for one model, or a fine-tuned vs base table with the difference."""
+    names = list(table)
+    if not any(table.values()):
+        return "No reference data — skipped automatic metrics."
+    if len(names) == 1:
+        return "\n".join(f"**{k}:** {v}" for k, v in table[names[0]].items())
+    lines = ["| Metric | Fine-tuned | Base | Δ |", "|---|---|---|---|"]
+    for metric, value in table["fine-tuned"].items():
+        base = table["base"].get(metric, "")
+        delta = (
+            f"{value - base:+.4f}"
+            if isinstance(value, (int, float)) and isinstance(base, (int, float))
+            else ""
+        )
+        lines.append(f"| {metric} | {value} | {base} | {delta} |")
+    return "\n".join(lines)
+
+
 def on_evaluate_click(
     eval_model_name: str,
     eval_custom_model: str,
@@ -545,6 +535,7 @@ def on_evaluate_click(
     judge_model_name: str,
     judge_criteria: str,
     eval_max_new_tokens: int = 150,
+    compare_base: bool = False,
     progress=gr.Progress(),
     request: gr.Request | None = None,
 ):
@@ -578,6 +569,8 @@ def on_evaluate_click(
     model_name = eval_custom_model if eval_custom_model else eval_model_name
     if not model_name:
         return "❌ Please select a model.", pd.DataFrame(), ""
+    if compare_base and not eval_lora_path:
+        return "❌ Comparing with the base model needs a LoRA adapter path.", pd.DataFrame(), ""
     if eval_file is None:
         return (
             "❌ Please upload a test dataset (CSV with 'prompt' and 'reference' columns).",
@@ -625,88 +618,72 @@ def on_evaluate_click(
             eval_df["reference"].astype(str).tolist() if "reference" in eval_df.columns else []
         )
 
-        # ── Batched generation ─────────────────────────────────────────────
-        progress(0.1, desc="Generating predictions (Batched)…")
-        predictions: list[str] = []
+        # ── Generation (greedy, so fine-tuned vs base is a fair comparison) ──
+        progress(0.1, desc="Generating predictions…")
         model, tokenizer = _load_for_inference(
             model_name,
             eval_lora_path if eval_lora_path else None,
         )
-        # BOLT OPTIMIZATION: Increased batch size to 8 to better utilize GPU
-        # parallelism, matching the judge evaluation component.
-        batch_size = 8
-
-        for i in range(0, len(prompts), batch_size):
-            if stop_event.is_set():
-                break
-            batch_prompts = prompts[i : i + batch_size]
-            inputs = tokenizer(
-                batch_prompts,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                max_length=512,
-            )
-            if torch.cuda.is_available():
-                inputs = {k: v.cuda() for k, v in inputs.items()}
-            with torch.inference_mode():
-                outputs = model.generate(
-                    **inputs,
-                    max_new_tokens=int(eval_max_new_tokens),
-                    do_sample=True,
-                    temperature=0.7,
-                    top_p=0.9,
-                    pad_token_id=tokenizer.eos_token_id,
-                )
-            # BOLT OPTIMIZATION: Left-padding simplifies prompt stripping by
-            # ensuring all responses start at input_ids.shape[1].
-            # Using batch_decode instead of serial decode for faster processing.
-            input_len = inputs["input_ids"].shape[1]
-            batch_responses = tokenizer.batch_decode(
-                outputs[:, input_len:], skip_special_tokens=True
-            )
-            predictions.extend(batch_responses)
+        predictions = generate_predictions(
+            model, tokenizer, prompts, eval_max_new_tokens, stop_event=stop_event
+        )
+        base_predictions: list[str] = []
+        if compare_base:
+            progress(0.35, desc="Generating base-model predictions…")
+            base_predictions = generate_predictions(
+                model, tokenizer, prompts[: len(predictions)], eval_max_new_tokens,
+                stop_event=stop_event, base_model=True,
+            )  # fmt: skip
+        if stop_event.is_set():
+            predictions = predictions[: len(base_predictions)] if compare_base else predictions
 
         # ── Metrics ────────────────────────────────────────────────────────
-        metrics: dict = {}
+        runs = {"fine-tuned" if compare_base else "model": predictions}
+        if compare_base:
+            runs["base"] = base_predictions
+        table: dict[str, dict] = {name: {} for name in runs}
         if references:
             progress(0.5, desc="Computing BLEU & ROUGE…")
-            metrics.update(compute_bleu_rouge(predictions, references))
-            if eval_run_bertscore:
-                progress(0.65, desc="Computing BERTScore…")
-                metrics.update(compute_bertscore_metric(predictions, references))
+            for name, preds in runs.items():
+                refs = references[: len(preds)]
+                table[name].update(compute_bleu_rouge(preds, refs))
+                if eval_run_bertscore:
+                    table[name].update(compute_bertscore_metric(preds, refs))
 
         # ── LLM-as-Judge ───────────────────────────────────────────────────
-        judge_results: list[dict] = []
+        judged: dict[str, list[dict]] = {}
+        judge_error = ""
         if eval_use_judge and judge_model_name:
             progress(0.75, desc="Running LLM-as-Judge…")
             try:
-                judge_results = llm_judge_evaluate(
-                    prompts, predictions, judge_criteria, judge_model_name
-                )
+                for name, preds in runs.items():
+                    judged[name] = llm_judge_evaluate(
+                        prompts[: len(preds)], preds, judge_criteria, judge_model_name
+                    )
+                    mean, missing = mean_judge_score(judged[name])
+                    table[name]["Judge score (1-10)"] = mean if mean is not None else "n/a"
+                    if missing:
+                        table[name]["Judge replies without a score"] = missing
             except RuntimeError as judge_err:
-                # H5 FIX: surface the judge failure as a clear warning in the
-                # metrics string rather than silently polluting the result DataFrame.
-                metrics["LLM-Judge-Error"] = str(judge_err)
+                judge_error = str(judge_err)
 
         progress(1.0, desc="Done!")
-
-        metrics_str = (
-            "\n".join(f"**{k}:** {v}" for k, v in metrics.items())
-            if metrics
-            else "No reference data — skipped automatic metrics."
-        )
-        if judge_results:
-            metrics_str += f"\n**LLM-as-Judge:** {len(judge_results)} examples evaluated."
+        metrics_str = _format_metrics(table)
+        if judge_error:
+            metrics_str += f"\n**LLM-Judge-Error:** {judge_error}"
 
         result_data: dict = {
             "prompt": prompts[: len(predictions)],
             "prediction": predictions,
         }
+        if compare_base:
+            result_data["base_prediction"] = base_predictions[: len(predictions)]
         if references:
             result_data["reference"] = references[: len(predictions)]
-        if judge_results:
-            result_data["judgment"] = [r["judgment"] for r in judge_results[: len(predictions)]]
+        for name, rows in judged.items():
+            prefix = "" if name in ("model", "fine-tuned") else "base_"
+            result_data[f"{prefix}judge_score"] = [r["score"] for r in rows]
+            result_data[f"{prefix}judgment"] = [r["judgment"] for r in rows]
 
         # F-6: Build the per-example HTML preview (safe — never raises)
         try:

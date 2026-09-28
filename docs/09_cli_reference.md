@@ -34,7 +34,8 @@ Commands:
   orpo      ORPO alignment training
   grpo      GRPO fine-tuning with a reward model and/or reference answers
   kto       KTO alignment from desirable / undesirable examples
-  evaluate  Batched BLEU / ROUGE / BERTScore evaluation
+  evaluate  Batched BLEU / ROUGE / BERTScore evaluation (greedy decoding)
+  benchmark Standard benchmarks with lm-evaluation-harness (ARC, HellaSwag, GSM8K, …)
 ```
 
 Each command also has its own `--help`:
@@ -252,15 +253,15 @@ prompt,completion,label
 
 ### `evaluate` — Batch Evaluation
 
-Runs BLEU, ROUGE, and optionally BERTScore on your model.
+Runs BLEU, ROUGE, and optionally BERTScore on your model. Generation is greedy
+(deterministic), so two runs — or two models — can be compared fairly.
 
 ```bash
 python main.py evaluate \
-    --model ./my_model \
-    --data eval.csv \
+    --model mistralai/Mistral-7B-v0.1 \
     --lora ./my_model \
-    --bertscore \
-    --batch-size 4 \
+    --data eval.csv \
+    --compare-base \
     --max-new-tokens 150
 ```
 
@@ -269,24 +270,58 @@ python main.py evaluate \
 | Flag | Default | Description |
 |---|---|---|
 | `--model` | *(required)* | Model ID or path |
-| `--data` | *(required)* | CSV with `prompt` and `reference` columns |
-| `--lora` | *(optional)* | PEFT adapter path (if separate from model) |
+| `--data` | *(required)* | CSV/JSONL with a `prompt` column and optionally `reference` |
+| `--lora` | *(optional)* | PEFT adapter path |
+| `--compare-base` | off | Also score the base model with the LoRA adapter switched off (needs `--lora`) |
 | `--bertscore` | off | Compute BERTScore (slower) |
-| `--batch-size` | `4` | Generation batch size |
+| `--batch-size` | `8` | Generation batch size |
 | `--max-new-tokens` | `150` | Max tokens per response |
 
-**Output:**
+**Output** (with `--compare-base`):
 ```
 📊 EVALUATION RESULTS
-══════════════════════════════════════════════════
-BLEU           : 0.412
-ROUGE-1        : 0.674
-ROUGE-2        : 0.441
-ROUGE-L        : 0.618
+==================================================
+metric           fine-tuned        base         Δ
+BLEU-1                0.412       0.305     0.107
+ROUGE-1               0.674       0.551     0.123
+...
 
 ✅ Evaluation complete — 50 examples
-💾 Predictions saved to: eval_results_20260308_143012.csv
+💾 Saved to: eval_results_20260308_143012.csv
 ```
+
+The CSV holds `prompt`, `prediction`, `base_prediction` (with `--compare-base`) and `reference`.
+
+---
+
+### `benchmark` — Standard Benchmarks
+
+Scores a model on standard benchmarks through
+[lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness)
+(`pip install "lm-eval>=0.4.13,<0.5"`, included in the `eval` extra).
+
+```bash
+python main.py benchmark \
+    --model mistralai/Mistral-7B-v0.1 \
+    --lora ./my_model \
+    --tasks arc_easy,hellaswag \
+    --limit 200 \
+    --compare-base \
+    --output scores.csv
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--model` | *(required)* | Model ID or path |
+| `--tasks` | `arc_easy` | Comma-separated: `arc_easy`, `arc_challenge`, `hellaswag`, `piqa`, `winogrande`, `boolq`, `truthfulqa_mc2`, `gsm8k` |
+| `--lora` | *(optional)* | PEFT adapter path (safetensors) |
+| `--limit` | `100` | Examples per benchmark (1–10 000). Small limits give rough estimates |
+| `--compare-base` | off | Also score the base model (needs `--lora`) |
+| `--batch-size` | `8` | Evaluation batch size |
+| `--output` | *(optional)* | Save the scores table as CSV |
+
+Scores are fractions (1.0 = 100%). Benchmark datasets are downloaded from the
+Hugging Face Hub on first use.
 
 ---
 

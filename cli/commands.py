@@ -3,7 +3,7 @@ cli/commands.py
 ================
 v3.2 fully-functional Typer CLI — all five commands implemented (not stubs).
 Imports: config.constants, data.loader, data.preprocessing, training.*,
-         inference.evaluation, stdlib, torch, typer.
+         inference.evaluation, inference.benchmarks, stdlib, torch, typer.
 
 Commands
 --------
@@ -12,7 +12,8 @@ reward    — train a reward model from preference data
 orpo      — ORPO alignment training
 grpo      — GRPO fine-tuning with a reward model and/or reference answers
 kto       — KTO alignment from desirable / undesirable examples
-evaluate  — batched BLEU / ROUGE / BERTScore evaluation
+evaluate  — batched BLEU / ROUGE / BERTScore evaluation (optionally vs the base model)
+benchmark — standard benchmarks through lm-evaluation-harness
 
 Fix history preserved inline:
   Minor Fix 1   : --qlora-enhanced overrides --peft correctly
@@ -35,6 +36,8 @@ import typer
 import yaml
 
 from config.constants import (
+    BENCHMARK_DEFAULT_LIMIT,
+    BENCHMARK_TASKS,
     COL_CHOSEN,
     COL_PROMPT,
     COL_REJECTED,
@@ -52,7 +55,12 @@ from core.run_config import dataset_fingerprint, load_run_config, resolve_report
 from core.state import validate_path_traversal
 from data.loader import load_dataset_from_file, load_hub_dataset
 from data.preprocessing import validate_and_clean_dataset
-from inference.evaluation import compute_bertscore_metric, compute_bleu_rouge
+from inference.benchmarks import run_benchmarks
+from inference.evaluation import (
+    compute_bertscore_metric,
+    compute_bleu_rouge,
+    generate_predictions,
+)
 from inference.generate import _load_for_inference
 from training.grpo import train_grpo
 from training.kto import train_kto
@@ -553,8 +561,14 @@ def evaluate(
         8, "--batch-size", help="Generation batch size (BOLT OPTIMIZED)"
     ),
     max_new_tokens: int = typer.Option(150, "--max-new-tokens", help="Tokens to generate"),
+    compare_base: bool = typer.Option(
+        False, "--compare-base", help="Also score the base model (adapter off; needs --lora)"
+    ),
 ):
-    """Batched BLEU / ROUGE / BERTScore evaluation suite (BOLT OPTIMIZED)."""
+    """Batched BLEU / ROUGE / BERTScore evaluation (greedy decoding)."""
+    if compare_base and not lora:
+        typer.echo("❌ --compare-base needs a LoRA adapter (--lora).", err=True)
+        raise typer.Exit(code=1)
     if err := (
         validate_path_traversal(model)
         or validate_path_traversal(data)
@@ -592,59 +606,47 @@ def evaluate(
         prompts = df["prompt"].astype(str).tolist()
         references = df["reference"].astype(str).tolist() if "reference" in df.columns else []
 
-        # FIX 2b: batched generation with attention-mask-based prompt stripping
         model_obj, tokenizer = _load_for_inference(model, lora)
-        predictions: list[str] = []
-        for i in range(0, len(prompts), batch_size):
-            batch = prompts[i : i + batch_size]
-            inputs = tokenizer(
-                batch,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                max_length=512,
-            )
-            if torch.cuda.is_available():
-                inputs = {k: v.cuda() for k, v in inputs.items()}
-            with torch.inference_mode():
-                outputs = model_obj.generate(
-                    **inputs,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=True,
-                    temperature=0.7,
-                    top_p=0.9,
-                    pad_token_id=tokenizer.eos_token_id,
-                )
-            # BOLT OPTIMIZATION: Standardized batch decoding and prompt stripping
-            # Left-padding ensures all responses start at input_ids.shape[1].
-            input_len = inputs["input_ids"].shape[1]
-            batch_responses = tokenizer.batch_decode(
-                outputs[:, input_len:], skip_special_tokens=True
-            )
-            predictions.extend(batch_responses)
-
-        metrics: dict = {}
-        if references:
-            metrics.update(compute_bleu_rouge(predictions, references))
-            if bertscore:
-                metrics.update(compute_bertscore_metric(predictions, references))
+        runs = {"fine-tuned": False, "base": True} if compare_base else {"model": False}
+        predictions: dict[str, list[str]] = {}
+        table: dict[str, dict] = {}
+        for name, base_model in runs.items():
+            predictions[name] = generate_predictions(
+                model_obj, tokenizer, prompts, max_new_tokens,
+                base_model=base_model, batch_size=batch_size,
+            )  # fmt: skip
+            metrics: dict = {}
+            if references:
+                metrics.update(compute_bleu_rouge(predictions[name], references))
+                if bertscore:
+                    metrics.update(compute_bertscore_metric(predictions[name], references))
+            table[name] = metrics
 
         typer.echo("\n📊 EVALUATION RESULTS")
         typer.echo("=" * 50)
-        if metrics:
-            for k, v in metrics.items():
-                typer.echo(f"{k:15s}: {v}")
-        else:
+        if not references:
             typer.echo("ℹ️  No reference column — automatic metrics skipped.")
+        elif compare_base:
+            typer.echo(f"{'metric':15s}  {'fine-tuned':>10s}  {'base':>10s}  {'Δ':>8s}")
+            for k, v in table["fine-tuned"].items():
+                b = table["base"].get(k)
+                delta = v - b if isinstance(v, (int, float)) and isinstance(b, (int, float)) else ""
+                typer.echo(f"{k:15s}  {v!s:>10s}  {b!s:>10s}  {delta!s:>8s}")
+        else:
+            for k, v in table["model"].items():
+                typer.echo(f"{k:15s}: {v}")
 
         import pandas as _pd
 
-        result_df = _pd.DataFrame({"prompt": prompts, "prediction": predictions})
+        first = "fine-tuned" if compare_base else "model"
+        result_df = _pd.DataFrame({"prompt": prompts, "prediction": predictions[first]})
+        if compare_base:
+            result_df["base_prediction"] = predictions["base"]
         if references:
             result_df["reference"] = references
         out_file = f"eval_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         result_df.to_csv(out_file, index=False)
-        typer.echo(f"\n✅ Evaluation complete — {len(predictions)} examples")
+        typer.echo(f"\n✅ Evaluation complete — {len(prompts)} examples")
         typer.echo(f"💾 Saved to: {out_file}")
 
     except typer.Exit:
@@ -652,6 +654,39 @@ def evaluate(
     except Exception as e:
         typer.echo(f"\n❌ Evaluation failed: {e}", err=True)
         raise typer.Exit(code=1) from e
+
+
+@app.command()
+def benchmark(
+    model: str = typer.Option(..., "--model", help="Model ID or local path"),
+    tasks: str = typer.Option(
+        "arc_easy", "--tasks", help=f"Comma-separated: {', '.join(BENCHMARK_TASKS)}"
+    ),
+    lora: str | None = typer.Option(None, "--lora", help="PEFT adapter path"),
+    limit: int = typer.Option(
+        BENCHMARK_DEFAULT_LIMIT, "--limit", help="Examples per benchmark (small = rough estimate)"
+    ),
+    compare_base: bool = typer.Option(
+        False, "--compare-base", help="Also score the base model (needs --lora)"
+    ),
+    batch_size: int = typer.Option(8, "--batch-size", help="Evaluation batch size"),
+    output: str | None = typer.Option(None, "--output", help="Save scores to this CSV file"),
+):
+    """Standard benchmarks with lm-evaluation-harness (ARC, HellaSwag, GSM8K, …)."""
+    task_list = [t.strip() for t in tasks.split(",") if t.strip()]
+    if err := validate_path_traversal(output):
+        typer.echo(err, err=True)
+        raise typer.Exit(code=1)
+    typer.echo(f"📏 Benchmarking {model} on {', '.join(task_list)} (limit={limit})")
+    try:
+        table = run_benchmarks(model, lora, task_list, limit, compare_base, batch_size)
+    except Exception as e:
+        typer.echo(f"❌ Benchmarks failed: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    typer.echo(table.to_string(index=False))
+    if output:
+        table.to_csv(output, index=False)
+        typer.echo(f"💾 Saved to: {output}")
 
 
 # ── helpers ────────────────────────────────────────────────────────────────

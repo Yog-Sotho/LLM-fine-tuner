@@ -44,7 +44,8 @@ LLM-fine-tuner/
 │
 ├── inference/
 │   ├── generate.py          # _load_for_inference(), generate_text(), batch_generate()
-│   ├── evaluation.py        # BLEU/ROUGE/BERTScore/LLM-judge evaluation
+│   ├── evaluation.py        # BLEU/ROUGE/BERTScore/LLM-judge evaluation, base-model comparison
+│   ├── benchmarks.py        # run_benchmarks() — lm-evaluation-harness (ARC, HellaSwag, GSM8K…)
 │   └── vllm_runner.py       # vLLM engine with caching
 │
 ├── export/
@@ -67,7 +68,7 @@ LLM-fine-tuner/
 │       └── share_tab.py     # Hub push & download layout
 │
 ├── cli/
-│   └── commands.py          # Typer CLI (train, reward, orpo, grpo, kto, evaluate)
+│   └── commands.py          # Typer CLI (train, reward, orpo, grpo, kto, evaluate, benchmark)
 │
 ├── tests/
 │   ├── conftest.py          # pytest setup (inserts repo root into sys.path)
@@ -264,6 +265,16 @@ File upload → load_dataset_from_file() → validate_and_clean_dataset()
 Generate request → _load_for_inference() [thread-safe, cached]
     → generate_text() [single] or batch_generate() [batch]
 ```
+
+### Evaluation
+```
+Test CSV/JSONL → on_evaluate_click() / `evaluate` → generate_predictions() [greedy]
+    → [compare_base: same model, adapter_names=["__base__"] per call] → BLEU/ROUGE/BERTScore
+    → [optional] llm_judge_evaluate() → parse_judge_score() ("Score: N", 1–10)
+Benchmarks → run_benchmarks() → lm_eval HFLM object (never a model_args string) → simple_evaluate()
+```
+Never toggle adapters on the cached inference model (`disable_adapter()`, `set_adapter()`) —
+it is shared between sessions; pass `adapter_names` per `generate()` call instead.
 
 ### GGUF export
 ```

@@ -11,7 +11,16 @@ Patch log
 
 import gradio as gr
 
-from config.constants import HAS_BERTSCORE, HAS_NLTK, HAS_ROUGE, LLM_JUDGE_CRITERIA
+from config.constants import (
+    BENCHMARK_DEFAULT_LIMIT,
+    BENCHMARK_MAX_LIMIT,
+    BENCHMARK_TASKS,
+    HAS_BERTSCORE,
+    HAS_LM_EVAL,
+    HAS_NLTK,
+    HAS_ROUGE,
+    LLM_JUDGE_CRITERIA,
+)
 
 
 def build_evaluation_tab() -> dict:
@@ -61,6 +70,11 @@ def build_evaluation_tab() -> dict:
                     label="Max New Tokens (generation)",
                     info="Maximum tokens generated per prompt during evaluation.",
                 )  # Minor Fix 6: was previously hardcoded at 150
+                eval_compare_base = gr.Checkbox(
+                    label="Compare with the base model (LoRA adapters only)",
+                    value=False,
+                    info="Also generates with the adapter switched off and shows the Δ.",
+                )
                 eval_run_bertscore = gr.Checkbox(
                     label="Compute BERTScore (slow, requires GPU for speed)", value=False
                 )
@@ -88,12 +102,44 @@ def build_evaluation_tab() -> dict:
                     visible=True,
                 )
 
+        gr.Markdown(
+            "### 📏 Standard benchmarks (lm-evaluation-harness)\n"
+            + (
+                "Uses the model and adapter chosen above. "
+                "Scores are fractions (1.0 = 100%); small limits give rough estimates."
+                if HAS_LM_EVAL
+                else '❌ Not installed — `pip install "lm-eval>=0.4.13,<0.5"`'
+            )
+        )
+        with gr.Row():
+            with gr.Column():
+                bench_tasks = gr.CheckboxGroup(
+                    choices=[(desc, task) for task, desc in BENCHMARK_TASKS.items()],
+                    value=["arc_easy"],
+                    label="Benchmarks",
+                )
+                bench_limit = gr.Number(
+                    value=BENCHMARK_DEFAULT_LIMIT,
+                    minimum=1,
+                    maximum=BENCHMARK_MAX_LIMIT,
+                    precision=0,
+                    label="Examples per benchmark",
+                )
+                bench_compare_base = gr.Checkbox(
+                    label="Compare with the base model (needs an adapter path)", value=False
+                )
+                bench_btn = gr.Button("📏 Run Benchmarks", variant="primary")
+            with gr.Column():
+                bench_status = gr.Markdown("")
+                bench_results_df = gr.DataFrame(label="Benchmark scores", interactive=False)
+
     return dict(
         eval_model_choice=eval_model_choice,
         eval_custom_model=eval_custom_model,
         eval_lora_path_in=eval_lora_path_in,
         eval_file=eval_file,
         eval_max_new_tokens_slider=eval_max_new_tokens_slider,
+        eval_compare_base=eval_compare_base,
         eval_run_bertscore=eval_run_bertscore,
         eval_use_judge=eval_use_judge,
         judge_model_name=judge_model_name,
@@ -102,4 +148,10 @@ def build_evaluation_tab() -> dict:
         eval_metrics_out=eval_metrics_out,
         eval_results_df=eval_results_df,
         eval_preview_html=eval_preview_html,  # F-6: new component exposed to app.py
+        bench_tasks=bench_tasks,
+        bench_limit=bench_limit,
+        bench_compare_base=bench_compare_base,
+        bench_btn=bench_btn,
+        bench_status=bench_status,
+        bench_results_df=bench_results_df,
     )

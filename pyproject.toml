@@ -60,6 +60,7 @@ eval = [
     "bert-score>=0.3.13",
     "nltk>=3.8.0",
     "nlpaug>=1.1.10",
+    "lm-eval>=0.4.13,<0.5",  # standard benchmarks (ARC, HellaSwag, GSM8K, …)
 ]
 quant = [
     "auto-gptq>=0.7.1",

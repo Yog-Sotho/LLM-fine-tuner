@@ -88,6 +88,7 @@ evaluate>=0.4.0           # HAS_EVALUATE
 rouge-score>=0.1.2        # HAS_ROUGE
 bert-score>=0.3.13        # HAS_BERTSCORE
 nltk>=3.8.0               # HAS_NLTK     — BLEU corpus scoring
+lm-eval>=0.4.13,<0.5      # HAS_LM_EVAL  — standard benchmarks
 nlpaug>=1.1.10            # HAS_NLPAUG   — data augmentation
 pypdf>=6.16.1             # HAS_PDF
 openpyxl>=3.1.0           # HAS_OPENPYXL
@@ -538,9 +539,29 @@ python main.py evaluate \
     --data eval.csv \
     --lora ./grpo_model \
     --bertscore \
+    --compare-base \
     --batch-size 8 \
     --max-new-tokens 256
 ```
+
+Greedy decoding; `--compare-base` also scores the base model with the LoRA adapter switched
+off per `generate()` call (PEFT `adapter_names=["__base__"]`) and prints the Δ.
+
+### `benchmark`
+
+```bash
+python main.py benchmark \
+    --model TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
+    --lora ./grpo_model \
+    --tasks arc_easy,hellaswag,gsm8k \
+    --limit 200 \
+    --compare-base \
+    --output scores.csv
+```
+
+lm-evaluation-harness (`lm-eval>=0.4.13,<0.5`, `eval` extra). The harness model is built as an
+`HFLM` object — never a `model_args` string — so user input cannot inject options such as
+`trust_remote_code`.
 
 ### v3.2 Fix #3 — `--help` routing
 
@@ -588,7 +609,9 @@ echo "=== Step 4: ORPO (alternative to steps 2+3) ==="
 
 echo "=== Step 5: Evaluate ==="
 python main.py evaluate \
-    --model "$MODEL" --lora models/grpo --data data/eval.csv --bertscore
+    --model "$MODEL" --lora models/grpo --data data/eval.csv --bertscore --compare-base
+python main.py benchmark \
+    --model "$MODEL" --lora models/grpo --tasks arc_easy,hellaswag --compare-base
 
 echo "All done!"
 ```

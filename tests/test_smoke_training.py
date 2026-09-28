@@ -680,3 +680,60 @@ def test_all_prompts_too_long_is_a_clear_error(tiny_model, tmp_path):
             {**_hyperparams(), "max_length": 64}, "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16,
             False, 0, "linear", False, False, True, "", training_mode="sft", progress=None,
         )  # fmt: skip
+
+
+# ── Evaluation: fine-tuned vs base ─────────────────────────────────────────
+
+
+@pytest.fixture
+def random_lora(tiny_model, tmp_path):
+    """A LoRA adapter with non-zero weights, so it visibly changes the output."""
+    import torch
+    from peft import LoraConfig, get_peft_model
+    from transformers import AutoModelForCausalLM
+
+    torch.manual_seed(0)
+    config = LoraConfig(r=8, lora_alpha=64, target_modules=["q_proj", "v_proj"],
+                        init_lora_weights=False)  # fmt: skip
+    model = get_peft_model(AutoModelForCausalLM.from_pretrained(tiny_model), config)
+    model.save_pretrained(tmp_path / "adapter")
+    return str(tmp_path / "adapter")
+
+
+def test_base_predictions_match_the_plain_base_model(tiny_model, random_lora):
+    from transformers import AutoModelForCausalLM
+
+    from inference.evaluation import generate_predictions
+    from inference.generate import _load_for_inference
+
+    prompts = ["alpha beta", "a longer prompt with more words", "x"]
+    model, tokenizer = _load_for_inference(tiny_model, random_lora)
+    tuned = generate_predictions(model, tokenizer, prompts, 6)
+    base = generate_predictions(model, tokenizer, prompts, 6, base_model=True)
+    plain = AutoModelForCausalLM.from_pretrained(tiny_model).eval()
+    assert base == generate_predictions(plain, tokenizer, prompts, 6)
+    assert tuned != base
+    # The adapter is only switched off for that call: the shared model is unchanged.
+    assert generate_predictions(model, tokenizer, prompts, 6) == tuned
+    with pytest.raises(ValueError, match="LoRA"):
+        generate_predictions(plain, tokenizer, prompts, 6, base_model=True)
+
+
+def test_ui_evaluation_compares_with_base(tiny_model, random_lora, tmp_path):
+    from inference.evaluation import on_evaluate_click
+
+    data = tmp_path / "test.csv"
+    pd.DataFrame({"prompt": ["alpha", "beta", "gamma"], "reference": ["a", "b", "c"]}).to_csv(
+        data, index=False
+    )
+    metrics, table, _ = on_evaluate_click(
+        "gpt2", tiny_model, random_lora, _Upload(data), False, True, tiny_model, "helpfulness",
+        eval_max_new_tokens=4, compare_base=True, progress=lambda *a, **k: None,
+    )  # fmt: skip
+    assert "| Metric | Fine-tuned | Base | Δ |" in metrics, metrics
+    assert "| Judge score (1-10) |" in metrics  # a random judge gives "n/a" or a number
+    assert list(table.columns) == [
+        "prompt", "prediction", "base_prediction", "reference",
+        "judge_score", "judgment", "base_judge_score", "base_judgment",
+    ]  # fmt: skip
+    assert len(table) == 3
