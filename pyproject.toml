@@ -85,6 +85,11 @@ dev = [
 vision = [
     "torchvision",
 ]
+# Quantized export (FP8 / W4A16 for vLLM). llm-compressor pins recent torch/Transformers
+# ranges tightly, so it is not part of "all"; install it in its own environment if needed.
+compress = [
+    "llmcompressor>=0.14.0",
+]
 all = [
     "llm-fine-tuner[eval,quant,vllm,heretic,vision,dev]",
 ]

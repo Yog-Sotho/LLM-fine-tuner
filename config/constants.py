@@ -369,6 +369,14 @@ BENCHMARK_TASKS: dict[str, str] = {
 BENCHMARK_DEFAULT_LIMIT = 100  # examples per task; full sets take hours on CPU
 BENCHMARK_MAX_LIMIT = 10_000
 
+# ── Quantized export (llm-compressor → compressed safetensors, served by vLLM) ──
+# fp8: data-free FP8 weights + dynamic per-token activations (Hopper/Ada GPUs run it
+# natively). w4a16: 4-bit GPTQ weights, needs calibration text.
+QUANT_EXPORT_FORMATS: dict[str, str] = {"fp8": "FP8_DYNAMIC", "w4a16": "W4A16"}
+QUANT_CALIBRATION_SAMPLES = 128  # llm-compressor examples use 128–512
+QUANT_CALIBRATION_MAX_LENGTH = 512
+HAS_LLMCOMPRESSOR: bool = importlib.util.find_spec("llmcompressor") is not None
+
 # ── GPU job queue (web UI) ─────────────────────────────────────────────────
 # Training, evaluation, benchmarks, GGUF export, merging and vLLM runs share one queue,
 # so two users (or two tabs) never load models onto the GPU at the same time.

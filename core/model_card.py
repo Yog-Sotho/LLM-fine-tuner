@@ -67,6 +67,7 @@ def build_model_card(record: dict, is_adapter: bool) -> ModelCard:
             mode,
             *([_method_tag(method)] if method else []),
             *(["vision"] if record.get("vision") else []),
+            *([record["quantization"]] if record.get("quantization") else []),
         ],
     )
 

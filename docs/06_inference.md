@@ -118,6 +118,20 @@ The engine stays loaded between requests, so each generation after the first is 
 
 ---
 
+## Remote Endpoint (OpenAI-compatible)
+
+The **🌐 Remote endpoint** section chats with a deployed model: `python main.py serve` (see
+[08 — Export & Deploy](08_export_and_deploy.md)), vLLM, llama.cpp, TGI, or a hosted
+OpenAI-compatible API.
+
+- **Endpoint URL** — e.g. `http://127.0.0.1:8000` (`/v1` is added if missing); http(s) only.
+- **Model name** — leave blank to use the server's first model.
+- **API key** — sent as `Authorization: Bearer …` when set.
+
+The request is sent from the machine running this app, not from your browser.
+
+---
+
 ## Next Step
 
 → [07 — Evaluation](07_evaluation.md): Measure your model's quality with automatic metrics.

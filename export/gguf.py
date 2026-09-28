@@ -25,11 +25,12 @@ from core.state import app_state, validate_path_traversal
 from inference.vllm_runner import merge_adapter_for_inference
 
 
-def _merge_adapter_for_conversion(adapter_dir: str) -> tuple[str | None, str]:
+def merge_adapter_to_temp(adapter_dir: str) -> tuple[str | None, str]:
     """Merge a LoRA adapter into its base model in a temporary folder.
 
-    llama.cpp converts full models only; an adapter folder has no config.json or
-    base weights. Returns (merged_dir, "") or (None, error message).
+    Exporters (llama.cpp GGUF, llm-compressor) need a full model; an adapter folder
+    has no config.json or base weights. Returns (merged_dir, "") or (None, error);
+    the caller deletes merged_dir.
     """
     with open(os.path.join(adapter_dir, "adapter_config.json"), encoding="utf-8") as f:
         adapter_config = json.load(f)
@@ -130,7 +131,7 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
 
         merged_dir = None
         if os.path.isfile(os.path.join(model_path, "adapter_config.json")):
-            merged_dir, error = _merge_adapter_for_conversion(model_path)
+            merged_dir, error = merge_adapter_to_temp(model_path)
             if merged_dir is None:
                 return error
         fp16_path = os.path.join(output_dir, "model_fp16.gguf")

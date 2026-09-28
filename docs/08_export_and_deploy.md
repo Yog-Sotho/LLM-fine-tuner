@@ -11,6 +11,8 @@ Once your model is trained, you have several ways to share it and put it to use.
 | **ZIP Download** | Saving a backup, sharing privately | `.zip` folder |
 | **HuggingFace Hub** | Sharing publicly, version control | HF model repository |
 | **GGUF Export** | Running locally with Ollama or LM Studio | `.gguf` file |
+| **Quantized safetensors** | Serving on NVIDIA GPUs with vLLM | FP8 / W4A16 model folder |
+| **Serve** | An OpenAI-compatible API for apps and clients | `/v1/chat/completions` |
 | **Model Registry** | Tracking multiple models within the tool | Internal catalogue |
 
 ---
@@ -153,7 +155,53 @@ ollama run my-model
 
 ---
 
-## Method 4 — Model Registry
+## Method 4 — Quantized safetensors for vLLM
+
+For serving on NVIDIA GPUs with [vLLM](https://docs.vllm.ai), export a compressed model with
+[llm-compressor](https://github.com/vllm-project/llm-compressor) (`pip install
+"llm-fine-tuner[compress]"` — it pins recent torch/Transformers, so a separate environment can
+be simpler):
+
+| Format | What it does | Needs |
+|---|---|---|
+| **FP8** | 8-bit float weights + dynamic 8-bit activations — about half the size, near-lossless; native speed on Hopper/Ada GPUs | nothing (data-free) |
+| **W4A16** | 4-bit GPTQ weights, 16-bit activations — about ¼ of the size | calibration text: your training data (≈128 examples); layer widths divisible by 128 (true for real models) |
+
+In the **📦 Export** tab choose the format and click **🗜️ Export quantized** (W4A16 uses the data
+loaded in 📂 Data). From the CLI:
+
+```bash
+python main.py export --model ./runs/my-run --format fp8 --output ./runs/my-run-fp8
+python main.py export --model ./runs/my-run --format w4a16 --calibration-data train.jsonl \
+    --output ./runs/my-run-w4a16
+```
+
+A LoRA adapter is merged into its base model first. Both formats run on CPU too (slower), and
+the model card is tagged with the format.
+
+---
+
+## Method 5 — Serve behind an OpenAI-compatible API
+
+```bash
+python main.py serve --model ./gguf/model_q4_k_m.gguf --port 8000   # llama.cpp (CPU or GPU)
+python main.py serve --model ./runs/my-run-fp8 --port 8000          # vLLM (CUDA)
+python main.py serve --model ./runs/my-run --port 8000 --name my-bot # LoRA adapter on its base (vLLM)
+```
+
+- `.gguf` files are served by llama.cpp's `llama-server` (build it as in the GGUF prerequisite,
+  target `llama-server`); anything else by `vllm serve` (`pip install "trl[vllm]"`, CUDA).
+- Clients use `http://<host>:8000/v1` — `/v1/chat/completions`, `/v1/models` — with the model
+  name from `--name` (default `model`).
+- `--host` defaults to `127.0.0.1`; use `0.0.0.0` to accept network connections, and then set
+  `LFT_SERVE_API_KEY` so clients must send `Authorization: Bearer <key>`. The key is passed to the
+  server through its environment, never on the command line.
+
+Test it from the **💬 Inference** tab (**🌐 Remote endpoint**) or with any OpenAI client.
+
+---
+
+## Method 6 — Model Registry
 
 The Model Registry is an internal catalogue inside the tool for keeping track of your models. Useful if you're training many versions and want to compare them.
 

@@ -46,6 +46,7 @@ from config.constants import (
     DEFAULT_LORA_VARIANT,
     DEFAULT_REPORT_TO,
     DEFAULT_SEED,
+    GGUF_QUANT_PRESETS,
     GRPO_LORA_ALPHA,
     GRPO_LORA_RANK,
     GRPO_LOSS_TYPES,
@@ -56,12 +57,18 @@ from config.constants import (
     HAS_REWARD_TRAINER,
     HUB_DEFAULT_MAX_ROWS,
     LORA_VARIANTS,
+    QUANT_CALIBRATION_SAMPLES,
+    QUANT_EXPORT_FORMATS,
     TRACKING_BACKENDS,
 )
 from core.run_config import dataset_fingerprint, load_run_config, resolve_report_to
 from core.state import validate_path_traversal
 from data.loader import load_dataset_from_file, load_hub_dataset
 from data.preprocessing import validate_and_clean_dataset
+from export.gguf import export_to_gguf
+from export.hub import push_to_hub
+from export.quantize import calibration_texts, quantize_model
+from export.serve import serve
 from inference.benchmarks import run_benchmarks
 from inference.evaluation import (
     compute_bertscore_metric,
@@ -69,6 +76,7 @@ from inference.evaluation import (
     generate_predictions,
 )
 from inference.generate import _load_for_inference
+from inference.vllm_runner import merge_adapter_for_inference
 from training.grpo import train_grpo
 from training.kto import train_kto
 from training.orpo import train_orpo_v27
@@ -735,6 +743,116 @@ def benchmark(
     if output:
         table.to_csv(output, index=False)
         typer.echo(f"💾 Saved to: {output}")
+
+
+# ── export / merge / push / serve ──────────────────────────────────────────
+
+
+@app.command()
+def merge(
+    adapter: str = typer.Option(..., "--adapter", help="LoRA adapter folder (training output)"),
+    output: str = typer.Option(..., "--output", help="Folder for the merged full model"),
+    base: str | None = typer.Option(
+        None, "--base", help="Base model (default: the one named in adapter_config.json)"
+    ),
+):
+    """Merge a LoRA adapter into its base model (a standalone full model)."""
+    import json
+
+    if err := (validate_path_traversal(adapter) or validate_path_traversal(output)
+               or validate_path_traversal(base)):  # fmt: skip
+        typer.echo(err, err=True)
+        raise typer.Exit(code=1)
+    config = os.path.join(adapter, "adapter_config.json")
+    if not base and os.path.isfile(config):
+        with open(config, encoding="utf-8") as f:
+            base = json.load(f).get("base_model_name_or_path")
+    result = merge_adapter_for_inference(base or "", adapter, output)
+    typer.echo(result, err=not result.startswith("✅"))
+    if not result.startswith("✅"):
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def export(
+    model: str = typer.Option(..., "--model", help="Trained model or LoRA adapter folder"),
+    output: str = typer.Option(..., "--output", help="Output folder"),
+    fmt: str = typer.Option("gguf", "--format", help=f"gguf | {' | '.join(QUANT_EXPORT_FORMATS)}"),
+    quant: str = typer.Option(
+        "q6_k", "--quant", help=f"GGUF quantisation: {' | '.join(GGUF_QUANT_PRESETS)}"
+    ),
+    calibration_data: str | None = typer.Option(
+        None, "--calibration-data", help="w4a16: CSV/JSONL of training-like examples"
+    ),
+    calibration_samples: int = typer.Option(
+        QUANT_CALIBRATION_SAMPLES, "--calibration-samples", help="w4a16: examples to use"
+    ),
+):
+    """Export for deployment: GGUF (llama.cpp/Ollama) or FP8/W4A16 safetensors (vLLM)."""
+    for path in (model, output, calibration_data):
+        if err := validate_path_traversal(path):
+            typer.echo(err, err=True)
+            raise typer.Exit(code=1)
+    if fmt == "gguf":
+        if quant not in GGUF_QUANT_PRESETS:
+            typer.echo(f"❌ --quant must be one of: {', '.join(GGUF_QUANT_PRESETS)}", err=True)
+            raise typer.Exit(code=1)
+        result = export_to_gguf(model, output, quant)
+    elif fmt in QUANT_EXPORT_FORMATS:
+        texts = None
+        if fmt == "w4a16":
+            if not calibration_data or not os.path.isfile(calibration_data):
+                typer.echo("❌ w4a16 needs --calibration-data (CSV/JSONL).", err=True)
+                raise typer.Exit(code=1)
+            from transformers import AutoTokenizer
+
+            ds, _ = validate_and_clean_dataset(
+                load_dataset_from_file(DummyFile(calibration_data), _infer_ftype(calibration_data))
+            )
+            texts = calibration_texts(ds, AutoTokenizer.from_pretrained(model),
+                                      limit=calibration_samples)  # fmt: skip
+        result = quantize_model(model, output, fmt, texts)
+    else:
+        typer.echo(f"❌ --format must be gguf or one of: {', '.join(QUANT_EXPORT_FORMATS)}",
+                   err=True)  # fmt: skip
+        raise typer.Exit(code=1)
+    typer.echo(result, err=not result.startswith("✅"))
+    if not result.startswith("✅"):
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def push(
+    model: str = typer.Option(..., "--model", help="Model or adapter folder to upload"),
+    repo: str = typer.Option(..., "--repo", help="Hub repo: username/model-name"),
+    token: str | None = typer.Option(
+        None, "--token", help="Write token (default: the HF_TOKEN environment variable)"
+    ),
+):
+    """Upload a model folder to the Hugging Face Hub (creates the repo if needed)."""
+    result = push_to_hub(model, repo, token or os.environ.get("HF_TOKEN", ""))
+    typer.echo(result, err=not result.startswith("✅"))
+    if not result.startswith("✅"):
+        raise typer.Exit(code=1)
+
+
+@app.command(name="serve")
+def serve_cmd(
+    model: str = typer.Option(..., "--model", help=".gguf file, model/adapter folder or Hub id"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Bind address (0.0.0.0 = network)"),
+    port: int = typer.Option(8000, "--port"),
+    name: str = typer.Option("model", "--name", help="Model name clients send"),
+):
+    """Serve a model behind an OpenAI-compatible API (llama-server for GGUF, else vLLM).
+
+    Set LFT_SERVE_API_KEY to require an API key.
+    """
+    try:
+        code = serve(model, host, port, os.environ.get("LFT_SERVE_API_KEY", ""), name)
+    except ValueError as e:
+        typer.echo(f"❌ {e}", err=True)
+        raise typer.Exit(code=1) from e
+    raise typer.Exit(code=code)
 
 
 # ── helpers ────────────────────────────────────────────────────────────────

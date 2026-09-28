@@ -48,11 +48,14 @@ LLM-fine-tuner/
 │   ├── generate.py          # _load_for_inference(), generate_text(), batch_generate()
 │   ├── evaluation.py        # BLEU/ROUGE/BERTScore/LLM-judge evaluation, base-model comparison
 │   ├── benchmarks.py        # run_benchmarks() — lm-evaluation-harness (ARC, HellaSwag, GSM8K…)
+│   ├── remote.py            # remote_chat() — any OpenAI-compatible /v1/chat/completions server
 │   └── vllm_runner.py       # vLLM engine with caching
 │
 ├── export/
 │   ├── gguf.py              # on_export_gguf() — GGUF quantization via Unsloth/llama.cpp
 │   ├── hub.py               # push_to_hub() — HuggingFace Hub publishing
+│   ├── quantize.py          # quantize_model() — FP8 / W4A16 safetensors via llm-compressor (vLLM)
+│   ├── serve.py             # build_serve_command() / serve() — llama-server (GGUF) or vllm serve
 │   ├── registry.py          # Model registry reader
 │   └── utils.py             # ZIP creation, model card generation
 │
@@ -70,7 +73,7 @@ LLM-fine-tuner/
 │       └── share_tab.py     # Hub push & download layout
 │
 ├── cli/
-│   └── commands.py          # Typer CLI (train, reward, orpo, grpo, kto, evaluate, benchmark)
+│   └── commands.py          # Typer CLI (train … benchmark, merge, export, push, serve)
 │
 ├── tests/
 │   ├── conftest.py          # pytest setup (inserts repo root into sys.path)
@@ -251,6 +254,7 @@ HF_TOKEN=hf_xxx docker compose up llm-fine-tuner-gpu
 | `ALLOW_REMOTE_CODE` | `false` | Enables `trust_remote_code` for Hub models with custom code — off by default |
 | `LFT_RUNS_DIR` | `runs` (Docker: `/app/models`) | Where UI training runs are saved (`<dir>/<run name>/`) |
 | `LFT_GPU_JOBS` | `1` | Heavy GPU jobs (training, eval, benchmarks, export, merge, vLLM) the web UI runs at once (1–8) |
+| `LFT_SERVE_API_KEY` | — | API key required by `main.py serve` (passed to the server via its environment) |
 | `LFT_REPORT_TO` | `none` | Default experiment tracker (`trackio`, `wandb`, `mlflow`, `tensorboard`) if installed |
 | `HF_TOKEN` | — | HuggingFace Hub auth (gated models, Hub push) |
 | `SHARE` | `false` | Enable public Gradio link |
@@ -291,6 +295,14 @@ Trained model → on_export_gguf()
     → [Unsloth available] FastLanguageModel GGUF export
     → [Fallback] LoRA adapter merged into its base (temp dir) → convert_hf_to_gguf.py
       (run with sys.executable) → llama-quantize
+```
+
+### Quantized export and serving
+```
+Model / LoRA adapter → quantize_model() [adapter merged to a temp dir] → llm-compressor oneshot
+    (FP8_DYNAMIC data-free | W4A16 GPTQ on calibration_texts()) → save_pretrained(save_compressed)
+serve --model X → build_serve_command(): .gguf → llama-server | folder/Hub id → vllm serve
+    (adapter → base + --lora-modules); API key via env (LLAMA_API_KEY / VLLM_API_KEY), never argv
 ```
 
 ### Hub push
@@ -359,7 +371,7 @@ Example: `# C-1: Removed broken llm_fine_tuner.* package imports`
 ## Package & Dependency Notes
 
 - **Core deps:** transformers, datasets, peft, trl, torch, gradio, typer, pandas, safetensors
-- **Optional groups** (install via `pip install -e ".[group]"`): `eval`, `quant`, `vllm`, `heretic`, `dev`, `all`
+- **Optional groups** (install via `pip install -e ".[group]"`): `eval`, `quant`, `vllm`, `heretic`, `vision`, `compress` (llm-compressor — pins recent torch/Transformers, not in `all`), `dev`, `all`
 - **Unsloth:** installed separately — not in `requirements.txt`. Provides 2–5× training speedup and native GGUF export.
 - **heretic-llm:** optional dep (moved out of required in v3.2 to avoid PyPI install failures).
 - **Python:** 3.10, 3.11, 3.12 supported.

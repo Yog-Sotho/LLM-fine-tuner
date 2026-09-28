@@ -36,6 +36,10 @@ Commands:
   kto       KTO alignment from desirable / undesirable examples
   evaluate  Batched BLEU / ROUGE / BERTScore evaluation (greedy decoding)
   benchmark Standard benchmarks with lm-evaluation-harness (ARC, HellaSwag, GSM8K, …)
+  merge     Merge a LoRA adapter into its base model
+  export    Export for deployment: GGUF or FP8/W4A16 safetensors (vLLM)
+  push      Upload a model folder to the Hugging Face Hub
+  serve     Serve a model behind an OpenAI-compatible API
 ```
 
 Each command also has its own `--help`:
@@ -337,6 +341,58 @@ python main.py benchmark \
 
 Scores are fractions (1.0 = 100%). Benchmark datasets are downloaded from the
 Hugging Face Hub on first use.
+
+---
+
+### `merge` — Merge a LoRA Adapter
+
+```bash
+python main.py merge --adapter ./runs/my-run --output ./runs/my-run-merged
+```
+
+`--base` overrides the base model named in `adapter_config.json`.
+
+---
+
+### `export` — Export for Deployment
+
+| Flag | Default | Description |
+|---|---|---|
+| `--model` | *(required)* | Trained model or LoRA adapter folder |
+| `--output` | *(required)* | Output folder |
+| `--format` | `gguf` | `gguf`, `fp8` or `w4a16` |
+| `--quant` | `q6_k` | GGUF quantisation (`q8_0`, `q6_k`, `q5_k_m`, `q4_k_m`) |
+| `--calibration-data` | — | `w4a16`: CSV/JSONL of training-like examples |
+| `--calibration-samples` | `128` | `w4a16`: how many examples to use |
+
+GGUF needs Unsloth or llama.cpp; `fp8`/`w4a16` need `pip install "llm-fine-tuner[compress]"`.
+See [08 — Export & Deploy](08_export_and_deploy.md).
+
+---
+
+### `push` — Upload to the Hub
+
+```bash
+HF_TOKEN=hf_... python main.py push --model ./runs/my-run --repo my-user/my-model
+```
+
+Creates the repo if needed and completes the model card (canonical base model, license).
+`--token` works too, but the environment keeps the token out of your shell history.
+
+---
+
+### `serve` — OpenAI-compatible Server
+
+```bash
+LFT_SERVE_API_KEY=secret python main.py serve --model ./model.gguf --host 0.0.0.0 --port 8000
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--model` | *(required)* | `.gguf` file (llama-server), model/adapter folder or Hub id (vLLM) |
+| `--host` | `127.0.0.1` | Bind address |
+| `--port` | `8000` | Port |
+| `--name` | `model` | Model name clients send |
 
 ---
 
