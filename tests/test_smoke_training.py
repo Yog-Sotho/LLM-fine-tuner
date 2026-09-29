@@ -19,6 +19,7 @@ TINY_MODEL = "hf-internal-testing/tiny-random-LlamaForCausalLM"
 # Real tokenizer and chat template with tool calling and <think> reasoning.
 TINY_CHAT_MODEL = "trl-internal-testing/tiny-Qwen3ForCausalLM"
 TINY_VLM = "trl-internal-testing/tiny-Qwen2_5_VLForConditionalGeneration"
+TINY_MOE = "trl-internal-testing/tiny-Qwen3MoeForCausalLM"  # 4 experts, top-2 routing
 
 
 def _cached_model(name: str) -> str:
@@ -42,6 +43,11 @@ def tiny_model() -> str:
 @pytest.fixture(scope="module")
 def tiny_chat_model() -> str:
     return _cached_model(TINY_CHAT_MODEL)
+
+
+@pytest.fixture(scope="module")
+def tiny_moe() -> str:
+    return _cached_model(TINY_MOE)
 
 
 @pytest.fixture(scope="module")
@@ -1009,6 +1015,138 @@ def test_merge_refuses_what_it_cannot_merge(tiny_model, tmp_path):
         (tmp_path / "a" / "adapter_model.safetensors").read_bytes()
     )
     assert "same base model" in merge_lora_adapters([a, str(other)], str(tmp_path / "o"))
+
+
+# ── Mixture-of-experts models ──────────────────────────────────────────────
+
+
+def _log_keys(monkeypatch):
+    """Record the keys of every Trainer log (TRL logs `aux_loss` when it adds it)."""
+    import transformers
+
+    keys: set = set()
+    original = transformers.Trainer.log
+
+    def spy(self, logs, *args, **kwargs):
+        keys.update(logs)
+        return original(self, logs, *args, **kwargs)
+
+    monkeypatch.setattr(transformers.Trainer, "log", spy)
+    return keys
+
+
+def _moe_train(model, out, peft_method="LoRA", mode="sft", grad_ckpt=False):
+    from training.sft import train_model
+
+    if mode == "dpo":
+        ds = Dataset.from_dict({"prompt": [f"Question {i}?" for i in range(6)],
+                                "chosen": [f"Good answer {i}" for i in range(6)],
+                                "rejected": [f"Bad {i}" for i in range(6)]})  # fmt: skip
+    else:
+        ds = Dataset.from_dict({"instruction": [f"Say {i}" for i in range(6)],
+                                "output": [f"word {i}" for i in range(6)]})  # fmt: skip
+    hp = {**_hyperparams(), "learning_rate": 1e-2, "eval_split": 0.0}
+    return train_model(model, ds, str(out), hp, "cpu", peft_method, True, 4, 8, 10, 64, 1, 10,
+                       False, 0, "linear", grad_ckpt, False, False, "", training_mode=mode,
+                       progress=None)  # fmt: skip
+
+
+def test_moe_lora_keeps_the_router_and_balances_experts(tiny_moe, tmp_path, monkeypatch):
+    from safetensors.torch import load_file
+
+    from core.run_config import load_run_config
+    from inference.generate import generate_text
+
+    keys = _log_keys(monkeypatch)
+    summary, _ = _moe_train(tiny_moe, tmp_path)
+    assert summary.startswith("✅"), summary
+    assert "aux_loss" in keys  # the router load-balancing loss is part of training
+    weights = load_file(str(tmp_path / "adapter_model.safetensors"))
+    router = [w for k, w in weights.items() if ".gate.lora_B" in k]
+    assert router and all(w.abs().sum() == 0 for w in router)  # routing as pretrained
+    assert any(w.abs().sum() > 0 for k, w in weights.items() if "lora_B" in k and ".gate." not in k)
+    assert load_run_config(str(tmp_path / "run_config.yaml"))["moe"] == {
+        "experts": 4, "router_aux_loss": True, "router_trained": False}  # fmt: skip
+    assert "moe" in (tmp_path / "README.md").read_text()
+    assert not generate_text(tiny_moe, str(tmp_path), "Say 1", 4, 0.7, 0.9).startswith("❌")
+
+
+def test_moe_full_finetuning_trains_the_router(tiny_moe, tmp_path, monkeypatch):
+    from core.run_config import load_run_config
+
+    keys = _log_keys(monkeypatch)
+    summary, _ = _moe_train(tiny_moe, tmp_path, peft_method="Full Fine-tuning")
+    assert summary.startswith("✅"), summary
+    assert "aux_loss" in keys
+    assert load_run_config(str(tmp_path / "run_config.yaml"))["moe"]["router_trained"] is True
+
+
+def test_moe_dpo_and_kto_train_with_gradient_checkpointing(tiny_moe, tmp_path):
+    """DPO / KTO leave the router to TRL: a frozen router adapter breaks checkpointing."""
+    from core.run_config import load_run_config
+    from training.kto import train_kto
+
+    summary, _ = _moe_train(tiny_moe, tmp_path / "dpo", mode="dpo", grad_ckpt=True)
+    assert summary.startswith("✅"), summary
+    moe = load_run_config(str(tmp_path / "dpo" / "run_config.yaml"))["moe"]
+    assert moe == {"experts": 4, "router_aux_loss": False, "router_trained": True}
+    data = tmp_path / "kto.csv"
+    pd.DataFrame({"prompt": ["Q1?", "Q2?", "Q3?", "Q4?"], "completion": ["good", "bad", "fine", "no"],
+                  "label": [True, False, True, False]}).to_csv(data, index=False)  # fmt: skip
+    status = train_kto(tiny_moe, _Upload(data), str(tmp_path / "kto"), batch_size=2,
+                       max_length=64, progress=None)  # KTO checkpoints by default  # fmt: skip
+    assert status.startswith("✅"), status
+
+
+def test_moe_with_orpo_reward_and_grpo(tiny_moe, tmp_path):
+    import json
+
+    from training.grpo import train_grpo
+    from training.orpo import train_orpo_v27
+    from training.reward import train_reward_model_v27
+
+    prefs = tmp_path / "prefs.csv"
+    pd.DataFrame({"prompt": [f"Q{i}?" for i in range(4)], "chosen": [f"good {i}" for i in range(4)],
+                  "rejected": [f"bad {i}" for i in range(4)]}).to_csv(prefs, index=False)  # fmt: skip
+    prompts = tmp_path / "prompts.jsonl"
+    prompts.write_text("".join(json.dumps({"prompt": f"What is {i}+{i}?", "reference": str(2 * i)})
+                               + "\n" for i in range(4)))  # fmt: skip
+    statuses = [
+        train_orpo_v27(tiny_moe, _Upload(prefs), str(tmp_path / "orpo"), orpo_epochs=1,
+                       orpo_batch_size=2, progress=None),
+        train_reward_model_v27(tiny_moe, _Upload(prefs), str(tmp_path / "rm"), rm_epochs=1,
+                               rm_batch_size=2, rm_max_length=64, progress=None),
+        train_grpo(tiny_moe, "", _Upload(prompts), str(tmp_path / "grpo"), num_generations=2,
+                   max_completion_length=8, progress=None),
+    ]  # fmt: skip
+    assert all(s.startswith("✅") for s in statuses), statuses
+
+
+# ── Sharded saving (FSDP / DeepSpeed path, exercised on CPU) ────────────────
+
+
+def test_sharded_runs_save_through_the_trainer(tiny_model, tmp_path, monkeypatch):
+    """Under FSDP / DeepSpeed every process calls trainer.save_model (a collective)."""
+    import transformers
+
+    import training.sft as sft
+    from core.run_config import load_run_config
+
+    calls = []
+    original = transformers.Trainer.save_model
+
+    def spy(self, output_dir=None, *args, **kwargs):
+        calls.append(output_dir)
+        return original(self, output_dir, *args, **kwargs)
+
+    monkeypatch.setattr(transformers.Trainer, "save_model", spy)
+    monkeypatch.setattr(sft, "sharding_backend", lambda: "deepspeed")
+    ds = Dataset.from_dict({"instruction": ["Say hi", "Say bye"], "output": ["Hi", "Bye"]})
+    summary, _ = _train(tiny_model, ds, tmp_path, "sft")
+    assert summary.startswith("✅"), summary
+    assert str(tmp_path) in calls  # the final save went through the trainer
+    _assert_safetensors_adapter(tmp_path)
+    assert load_run_config(str(tmp_path / "run_config.yaml"))["sharding"] == "deepspeed"
 
 
 # ── GRPO / KTO checkpoints and resume ──────────────────────────────────────

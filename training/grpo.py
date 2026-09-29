@@ -50,7 +50,10 @@ from core.hardware import (
     compute_dtype,
     get_lora_targets,
     is_main_process,
+    lora_dropout,
     lora_variant_kwargs,
+    setup_moe,
+    sharding_unsupported,
     training_device_args,
 )
 from core.run_config import latest_checkpoint, save_run_config
@@ -189,6 +192,8 @@ def train_grpo(
     ):
         return err
 
+    if err := sharding_unsupported("GRPO"):
+        return err
     if not HAS_GRPO:
         return '❌ GRPOTrainer not available. Install: pip install "trl>=0.29.1,<2"'
     if prompts_file is None:
@@ -297,7 +302,7 @@ def train_grpo(
             r=int(lora_rank),
             lora_alpha=int(lora_alpha),
             target_modules=get_lora_targets(),
-            lora_dropout=0.05,
+            lora_dropout=lora_dropout(model),
             bias="none",
             **variant_kwargs,
         )
@@ -318,6 +323,8 @@ def train_grpo(
             callbacks=callbacks,
             peft_config=peft_config,
         )
+        # After TRL applied LoRA: freeze the router adapter (no aux-loss flag, see setup_moe).
+        moe = setup_moe(trainer.model, router_aux_loss=False)
 
         if progress is not None:
             progress(0.2, desc="GRPO training started… calculating ETA…")
@@ -334,6 +341,7 @@ def train_grpo(
             tokenizer.save_pretrained(output_dir)
             save_run_config(
                 output_dir,
+                moe=moe,
                 mode="grpo",
                 model=policy_model_name,
                 dataset=ds,

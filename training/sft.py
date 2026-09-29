@@ -85,8 +85,12 @@ from core.hardware import (
     get_lora_targets,
     is_main_process,
     is_unsloth_supported,
+    lora_dropout,
     lora_variant_kwargs,
     quantized_device_map,
+    setup_moe,
+    sharded_quant_storage,
+    sharding_backend,
     training_device_args,
 )
 from core.run_config import latest_checkpoint, save_run_config
@@ -109,6 +113,28 @@ def _warn(log_callback, message: str) -> None:
         {"step": 0, "train_loss": 0.0, "eval_loss": float("nan"), "elapsed_s": 0.0,
          "eta_s": 0.0, "note": f"⚠️ {message}"}
     )  # fmt: skip
+
+
+def _long_context_args(hyperparams: dict, device: str, uses_fa2: bool, log_callback) -> dict:
+    """SFTConfig options for long sequences, applied only where they work.
+
+    • activation_offloading: keeps activations in CPU RAM between forward and backward
+      (TRL moves only GPU tensors, so CUDA only).
+    • padding_free: one flat sequence per batch, no padding — only Flash Attention
+      keeps the examples apart (TRL warns about other attention implementations).
+    """
+    args = {}
+    if hyperparams.get("activation_offloading"):
+        if device == "cuda":
+            args["activation_offloading"] = True
+        else:
+            _warn(log_callback, "Activation offloading skipped: it needs a CUDA GPU.")
+    if hyperparams.get("padding_free"):
+        if uses_fa2 and device == "cuda":
+            args["padding_free"] = True
+        else:
+            _warn(log_callback, "Padding-free skipped: it needs Flash Attention 2 on a CUDA GPU.")
+    return args
 
 
 def train_model(
@@ -175,7 +201,13 @@ def train_model(
 
     try:
         # ── Vision-language data: image + text chats ──────────────────────
+        # FSDP / DeepSpeed launched by `accelerate launch --config_file configs/accelerate/…`.
+        sharded = sharding_backend()
         if COL_IMAGES in dataset.column_names:
+            if sharded:
+                raise ValueError(
+                    "Vision fine-tuning runs data-parallel only, not with FSDP/DeepSpeed."
+                )
             if is_dpo:
                 raise ValueError("DPO on image + text data isn't supported; use SFT.")
             return train_vision_sft(
@@ -270,16 +302,19 @@ def train_model(
             # v3.0 Fix #5: Fall back to float16 if bfloat16 unsupported.
             if not torch.cuda.is_bf16_supported():
                 bnb_kwargs["bnb_4bit_compute_dtype"] = torch.float16
+            # Sharded QLoRA (FSDP / ZeRO-3) shards the 4-bit weights as their storage dtype,
+            # which must equal the model dtype; each process loads without a device_map.
+            storage = sharded_quant_storage(device) if sharded else torch.bfloat16
             try:
-                bnb = BitsAndBytesConfig(**bnb_kwargs, bnb_4bit_quant_storage=torch.bfloat16)
+                bnb = BitsAndBytesConfig(**bnb_kwargs, bnb_4bit_quant_storage=storage)
             except TypeError:
                 bnb = BitsAndBytesConfig(**bnb_kwargs)
-            model_kwargs = dict(
-                quantization_config=bnb,
-                device_map=quantized_device_map(),
-                trust_remote_code=ALLOW_REMOTE_CODE,
-            )
-            if use_flash_attn:
+            model_kwargs = dict(quantization_config=bnb, trust_remote_code=ALLOW_REMOTE_CODE)
+            if sharded:
+                model_kwargs["torch_dtype"] = storage
+            else:
+                model_kwargs["device_map"] = quantized_device_map()
+            if use_flash_attn and (not sharded or storage == torch.bfloat16):
                 # v3.1 Fix #2 (Critical): Guard bfloat16 with hardware support check.
                 model_kwargs["attn_implementation"] = "flash_attention_2"
                 model_kwargs["torch_dtype"] = (
@@ -291,7 +326,7 @@ def train_model(
                 r=QLORA_ENHANCED_LORA_CONFIG["r"],
                 lora_alpha=QLORA_ENHANCED_LORA_CONFIG["lora_alpha"],
                 target_modules=QLORA_ENHANCED_LORA_CONFIG["target_modules"],
-                lora_dropout=QLORA_ENHANCED_LORA_CONFIG["lora_dropout"],
+                lora_dropout=min(QLORA_ENHANCED_LORA_CONFIG["lora_dropout"], lora_dropout(model)),
                 bias=QLORA_ENHANCED_LORA_CONFIG["bias"],
                 **variant_kwargs,
             )
@@ -302,6 +337,7 @@ def train_model(
         elif (
             use_unsloth
             and HAS_UNSLOTH
+            and not sharded  # Unsloth runs on one GPU; FSDP / DeepSpeed need the PEFT path
             and peft_method in ["LoRA", "Auto"]
             and is_unsloth_supported(model_name)
             and lora_variant != "DoRA"  # Unsloth documents no DoRA support
@@ -343,20 +379,24 @@ def train_model(
                     model_kwargs["attn_implementation"] = "flash_attention_2"
                 model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
             elif device == "cuda":
+                # Sharded QLoRA (FSDP / ZeRO-3): 4-bit storage dtype = model dtype, and no
+                # device_map (the sharding places the weights).
+                storage = sharded_quant_storage(device) if sharded else None
                 bnb = BitsAndBytesConfig(
                     load_in_4bit=True,
                     bnb_4bit_quant_type="nf4",
                     bnb_4bit_compute_dtype=compute_dtype(device),
                     bnb_4bit_use_double_quant=True,
+                    **({"bnb_4bit_quant_storage": storage} if storage is not None else {}),
                 )
-                model_kwargs = dict(
-                    quantization_config=bnb,
-                    device_map=quantized_device_map(),
-                    trust_remote_code=ALLOW_REMOTE_CODE,
-                )
+                model_kwargs = dict(quantization_config=bnb, trust_remote_code=ALLOW_REMOTE_CODE)
+                if not sharded:
+                    model_kwargs["device_map"] = quantized_device_map()
                 # Non-quantised tensors use the same dtype as the mixed-precision mode.
-                model_kwargs["torch_dtype"] = compute_dtype(device)
-                if use_flash_attn:
+                model_kwargs["torch_dtype"] = (
+                    storage if storage is not None else compute_dtype(device)
+                )
+                if use_flash_attn and model_kwargs["torch_dtype"] != torch.float32:
                     model_kwargs["attn_implementation"] = "flash_attention_2"
                 model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
             else:
@@ -366,6 +406,8 @@ def train_model(
                     trust_remote_code=ALLOW_REMOTE_CODE,
                 )
 
+        if use_unsloth and HAS_UNSLOTH and sharded:
+            _warn(log_callback, f"Unsloth skipped: it doesn't support {sharded.upper()} sharding.")
         if use_unsloth and HAS_UNSLOTH and lora_variant == "DoRA":
             _warn(log_callback, "Unsloth skipped: it does not support DoRA — using PEFT.")
 
@@ -393,7 +435,7 @@ def train_model(
                     r=lora_rank,
                     lora_alpha=lora_alpha,
                     target_modules=get_lora_targets(),
-                    lora_dropout=0.05,
+                    lora_dropout=lora_dropout(model),
                     bias="none",
                     **variant_kwargs,
                 )
@@ -446,7 +488,7 @@ def train_model(
                     r=lora_rank,
                     lora_alpha=lora_alpha,
                     target_modules=get_lora_targets(),
-                    lora_dropout=0.05,
+                    lora_dropout=lora_dropout(model),
                     bias="none",
                     **variant_kwargs,
                 )
@@ -492,6 +534,9 @@ def train_model(
             else None,
         )
 
+        # MoE: SFT gets the router aux loss and a frozen router; DPO keeps TRL's own
+        # handling (see setup_moe).
+        moe = setup_moe(model, router_aux_loss=not is_dpo, freeze_router=not is_dpo)
         if is_dpo:
             if not HAS_TRL:
                 raise ImportError('TRL not installed. Run: pip install "trl>=0.29.1,<2"')
@@ -532,6 +577,7 @@ def train_model(
                 _warn(log_callback, "Packing skipped: it needs Flash Attention 2 on a CUDA GPU.")
             sft_config = SFTConfig(
                 **base_training_args,
+                **_long_context_args(hyperparams, device, uses_fa2, log_callback),
                 max_length=hyperparams["max_length"],
                 packing=packing,
                 # Dataset prep stays in-process: forking worker processes from a process
@@ -570,13 +616,23 @@ def train_model(
         # ── Save ───────────────────────────────────────────────────────────
         if progress is not None:
             progress(0.9, desc="Saving model… ")
+        if sharded:
+            # Sharded weights are gathered collectively: every process must call save_model
+            # (only rank 0 writes). FSDP needs the full, not sharded, state dict for a
+            # normal adapter / model folder (PEFT's FSDP guide).
+            if getattr(trainer, "is_fsdp_enabled", False):
+                trainer.accelerator.state.fsdp_plugin.set_state_dict_type("FULL_STATE_DICT")
+            trainer.save_model(output_dir)
         # One process writes the outputs: in a multi-process run every rank holds the
         # same trained weights, and concurrent writes to one folder would clash.
         if is_main_process():
-            model.save_pretrained(output_dir)
+            if not sharded:
+                model.save_pretrained(output_dir)
             tokenizer.save_pretrained(output_dir)
             save_run_config(
                 output_dir,
+                moe=moe,
+                sharding=sharded,
                 mode=training_mode,
                 model=model_name,
                 dataset=dataset,

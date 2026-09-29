@@ -32,8 +32,10 @@ from core.hardware import (
     full_finetune_dtype,
     get_lora_targets,
     is_main_process,
+    lora_dropout,
     lora_variant_kwargs,
     quantized_device_map,
+    setup_moe,
     training_device_args,
 )
 from core.run_config import latest_checkpoint, save_run_config
@@ -125,7 +127,7 @@ def train_vision_sft(
             r=int(lora_rank),
             lora_alpha=int(lora_alpha),
             target_modules=get_lora_targets(),
-            lora_dropout=0.05,
+            lora_dropout=lora_dropout(model),
             bias="none",
             **variant_kwargs,
         )
@@ -165,6 +167,7 @@ def train_vision_sft(
         max_length=None,
         dataset_num_proc=None,
     )
+    setup_moe(model)  # router aux-loss flag must be set before the trainer reads it
     trainer = SFTTrainer(
         model=model,
         args=config,
@@ -174,6 +177,7 @@ def train_vision_sft(
         peft_config=peft_config,
         callbacks=callbacks,
     )
+    moe = setup_moe(trainer.model)  # after TRL applied LoRA: freeze the router adapter
     if progress is not None:
         progress(0.3, desc="Training started… calculating ETA…")
     t0 = time.time()
@@ -189,6 +193,7 @@ def train_vision_sft(
         processor.save_pretrained(output_dir)
         save_run_config(
             output_dir,
+            moe=moe,
             mode="sft",
             model=model_name,
             dataset=dataset,

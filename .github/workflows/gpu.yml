@@ -32,6 +32,11 @@ on:
         required: false
         type: boolean
         default: false
+      deepspeed:
+        description: "Also install DeepSpeed and run the ZeRO-2/3 tests (2+ GPUs)"
+        required: false
+        type: boolean
+        default: false
   schedule:
     - cron: "17 3 * * 1"  # Mondays 03:17 UTC
 
@@ -67,6 +72,10 @@ jobs:
         if: inputs.vllm
         run: pip install --quiet "trl[vllm]"
 
+      - name: "Install DeepSpeed"
+        if: inputs.deepspeed
+        run: pip install --quiet deepspeed
+
       - name: "Install package and test tools"
         run: |
           pip install --quiet -e ".[eval]"
@@ -88,6 +97,7 @@ jobs:
           from huggingface_hub import snapshot_download
           snapshot_download('hf-internal-testing/tiny-random-LlamaForCausalLM')
           snapshot_download('trl-internal-testing/tiny-Qwen3ForCausalLM')
+          snapshot_download('trl-internal-testing/tiny-Qwen3MoeForCausalLM')
           "
 
       - name: "Run GPU tests"

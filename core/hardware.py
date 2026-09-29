@@ -38,8 +38,11 @@ from config.constants import (
     HAS_TRL,
     HAS_UNSLOTH,
     HAS_VLLM,
+    LORA_DROPOUT,
     LORA_TARGET_MODULES,
     LORA_VARIANTS,
+    MOE_EXPERT_FIELDS,
+    MOE_ROUTER_MODULES,
 )
 
 
@@ -221,6 +224,96 @@ def quantized_device_map():
     own GPU — ``"auto"`` would spread every copy of the model over all GPUs.
     """
     return {"": int(os.environ.get("LOCAL_RANK") or 0)} if world_size() > 1 else "auto"
+
+
+def sharding_backend() -> str | None:
+    """``"fsdp"`` / ``"deepspeed"`` when started by ``accelerate launch`` with such a config.
+
+    The launcher sets the variables on CPU too, but accelerate only shards on GPUs (on
+    CPU it runs plain data-parallel), so no CUDA means no sharding.
+    """
+    if not torch.cuda.is_available():
+        return None
+    if os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true":
+        return "fsdp"
+    if os.environ.get("ACCELERATE_USE_DEEPSPEED", "false").lower() == "true":
+        return "deepspeed"
+    return None
+
+
+def sharding_unsupported(trainer: str) -> str | None:
+    """Error for trainers that only support single-GPU / data-parallel runs."""
+    if backend := sharding_backend():
+        return (
+            f"❌ {trainer} runs on one GPU or data-parallel (DDP) only, not with "
+            f"{backend.upper()} sharding. Sharded training is available for `train` (SFT/DPO); "
+            "launch this with configs/accelerate/multi_gpu.yaml instead."
+        )
+    return None
+
+
+def sharded_quant_storage(device: str) -> torch.dtype:
+    """4-bit storage dtype for sharded QLoRA (FSDP / ZeRO-3): the model's dtype.
+
+    bf16 when training in bf16; float32 for fp16 mixed precision (PEFT's guidance).
+    """
+    return torch.bfloat16 if select_precision(device)["bf16"] else torch.float32
+
+
+def moe_expert_count(model) -> int:
+    """Experts per MoE layer (0 for dense models)."""
+    config = getattr(model, "config", None)
+    text_config = config.get_text_config() if hasattr(config, "get_text_config") else config
+    for field in MOE_EXPERT_FIELDS:
+        value = getattr(text_config, field, None)
+        if isinstance(value, int) and value > 1:
+            return value
+    return 0
+
+
+def lora_dropout(model) -> float:
+    """LoRA dropout for ``model``: 0 for MoE models, else LORA_DROPOUT.
+
+    PEFT (0.18+, Transformers 5) adapts fused MoE expert weights through a parameter
+    wrapper that refuses any dropout ("ParamWrapper does not work with lora_dropout != 0").
+    """
+    return 0.0 if moe_expert_count(model) else LORA_DROPOUT
+
+
+def setup_moe(model, router_aux_loss: bool = True, freeze_router: bool = True) -> dict | None:
+    """Prepare a (PEFT-wrapped or full) MoE model for fine-tuning; None for dense models.
+
+    • ``router_aux_loss``: switches on the router load-balancing loss — TRL's SFT, ORPO,
+      reward and GKD trainers add it only when ``output_router_logits`` is set, and most
+      MoE configs ship with it off. Pass False for DPO, KTO and GRPO: with the config
+      flag, their training fails (checkpoint recompute / generation shape errors, TRL
+      0.29–1.14); current TRL's DPO adds the loss itself.
+    • ``freeze_router``: freezes adapter weights on the routers (LoRA's B starts at zero,
+      so routing stays as pretrained); training the router risks expert collapse. PEFT's
+      Transformers-5 MoE conversion ignores ``exclude_modules``, hence freezing. Pass
+      False for DPO and KTO: a frozen router with gradient checkpointing fails there
+      ("Recomputed values … have different metadata").
+    Each trainer passes the combination verified on TRL 0.29 and 1.14 (tests/test_smoke_training).
+    Full fine-tuning still trains the router, balanced by the auxiliary loss.
+    """
+    experts = moe_expert_count(model)
+    if not experts:
+        return None
+    if router_aux_loss:
+        for config in {id(c): c for c in (model.config, model.config.get_text_config())}.values():
+            config.output_router_logits = True
+    router_trained = False
+    for name, param in model.named_parameters():
+        if not any(part in MOE_ROUTER_MODULES for part in name.split(".")):
+            continue
+        if freeze_router and any(key in name for key in ("lora_", "ia3_")):
+            param.requires_grad = False
+        router_trained = router_trained or param.requires_grad
+    return {
+        "experts": experts,
+        "router_aux_loss": router_aux_loss,
+        "router_trained": router_trained,
+    }
 
 
 def full_finetune_dtype(device: str) -> torch.dtype:

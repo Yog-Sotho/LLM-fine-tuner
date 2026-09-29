@@ -20,6 +20,7 @@ LLM-fine-tuner/
 ├── pyproject.toml           # Package metadata, dependencies, pytest config
 ├── requirements.txt         # Direct pip dependencies
 ├── docker-compose.yml       # GPU and CPU Docker services
+├── configs/accelerate/      # multi_gpu, fsdp2, fsdp_qlora, deepspeed_zero2/3 launch presets
 │
 ├── config/
 │   └── constants.py         # APP_VERSION, ALL constants, HAS_* flags, LoRA presets — Layer 0
@@ -148,6 +149,8 @@ Tab files (`ui/tabs/*.py`) define **layout only** — no `.click()`, `.change()`
 
 - Trainers must work under `accelerate launch` / `torchrun` (data-parallel): load 4-bit models with `device_map=quantized_device_map()` (never `"auto"`), pass `**training_device_args(device)` to the TRL config, and write outputs (`save_pretrained`, `save_run_config`, subprocesses) only `if is_main_process():` — all from `core/hardware.py`.
 - New heavy GPU event handlers in `ui/app.py` get `**GPU_JOB` so they join the shared queue; Stop must stay outside it.
+- Sharding (FSDP / DeepSpeed via `configs/accelerate/`): `sharding_backend()` (needs CUDA — the launcher sets the env on CPU too, but accelerate only shards on GPUs). Only `train_model` supports it: 4-bit loads get `bnb_4bit_quant_storage = sharded_quant_storage()` = `torch_dtype` and no `device_map`; the final save is `trainer.save_model()` on **every** process (collective; FSDP switched to `FULL_STATE_DICT` first). Other trainers return `sharding_unsupported(name)`. Presets keep `mixed_precision: 'no'` so the app's precision wins.
+- MoE: call `setup_moe(model, router_aux_loss=…, freeze_router=…)` before creating the TRL trainer (and again on `trainer.model` when TRL applies LoRA). Use the combination the smoke tests verify per trainer: DPO/KTO pass `freeze_router=False` and DPO/KTO/GRPO `router_aux_loss=False` (they fail otherwise). LoRA dropout comes from `lora_dropout(model)` (0 for MoE).
 
 ### Security defaults
 

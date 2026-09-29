@@ -96,6 +96,8 @@ python main.py train \
 | `--qlora-enhanced` | off | Enable QLoRA Enhanced (overrides `--peft`) |
 | `--flash-attn` | off | Enable Flash Attention 2 |
 | `--packing` | off | Pack short samples into full-length sequences (needs `--flash-attn` on a CUDA GPU; ignored otherwise) |
+| `--activation-offloading` | off | Long sequences: keep activations in CPU RAM (CUDA; skipped otherwise) |
+| `--padding-free` | off | Long sequences: batches without padding (needs `--flash-attn` on a CUDA GPU) |
 | `--hf-dataset` | — | Hugging Face Hub dataset (`owner/name`) instead of `--data`; streamed |
 | `--hf-config` / `--hf-split` | — / `train` | Hub dataset config and split |
 | `--hf-max-rows` | `20000` | Rows to stream from the Hub dataset |

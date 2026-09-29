@@ -38,7 +38,15 @@ from core.callbacks import (
     StopCallback,
     final_train_loss,
 )
-from core.hardware import compute_dtype, get_lora_targets, is_main_process, training_device_args
+from core.hardware import (
+    compute_dtype,
+    get_lora_targets,
+    is_main_process,
+    lora_dropout,
+    setup_moe,
+    sharding_unsupported,
+    training_device_args,
+)
 from core.run_config import latest_checkpoint, save_run_config
 from core.state import app_state, validate_path_traversal
 from data.loader import load_table_dataset
@@ -101,6 +109,8 @@ def train_kto(
     output_dir = output_dir.strip() if output_dir else ""
     if err := (validate_path_traversal(model_name) or validate_path_traversal(output_dir)):
         return err
+    if err := sharding_unsupported("KTO"):
+        return err
     if not HAS_KTO:
         return '❌ KTOTrainer not available. Install: pip install "trl>=0.29.1,<2"'
     if kto_file is None:
@@ -141,7 +151,7 @@ def train_kto(
                 r=16,
                 lora_alpha=32,
                 target_modules=get_lora_targets(),
-                lora_dropout=0.05,
+                lora_dropout=lora_dropout(model),
                 bias="none",
             ),
         )
@@ -170,6 +180,7 @@ def train_kto(
                 ETAProgressCallback(gradio_progress=progress, progress_start=0.2, progress_end=0.9)
             )
 
+        moe = setup_moe(model, router_aux_loss=False, freeze_router=False)  # see setup_moe
         trainer = KTOTrainer(
             model=model,
             args=config,
@@ -193,6 +204,7 @@ def train_kto(
             tokenizer.save_pretrained(output_dir)
             save_run_config(
                 output_dir,
+                moe=moe,
                 mode="kto",
                 model=model_name,
                 dataset=ds,

@@ -162,11 +162,60 @@ Works for `train` (SFT/DPO, including vision-language data), `reward`, `orpo`, `
 - **Outputs** (adapter, `run_config.yaml`, model card) are written once, by the main process.
 - **The web UI is single-process.** Launching `main.py` without a command under
   `accelerate launch`/`torchrun` stops with a message instead of starting one UI per GPU.
-- **Not supported yet:** model sharding (FSDP, DeepSpeed ZeRO-3) for models that don't fit on
-  one GPU — every GPU needs a full copy (4-bit helps).
 
 Verified with two processes on CPU (gloo), where both copies end with identical weights; the
 multi-GPU (NCCL) path uses the same code but hasn't been run in this project's CI.
+
+### Sharded training (FSDP / DeepSpeed) for models that don't fit on one GPU
+
+Ready-made accelerate configs live in `configs/accelerate/` (based on TRL's and PEFT's
+official ones). Pick the GPU count with `--num_processes`:
+
+```bash
+accelerate launch --config_file configs/accelerate/fsdp2.yaml --num_processes 4 \
+    main.py train --model Qwen/Qwen2.5-32B-Instruct --data train.jsonl --peft "Full Fine-tuning"
+```
+
+| Config | Shards | Use for |
+|---|---|---|
+| `multi_gpu.yaml` | nothing (DDP) | models that fit on one GPU; every trainer |
+| `fsdp2.yaml` | weights, gradients, optimizer | LoRA or full fine-tuning of large models (accelerate ≥ 1.7) |
+| `fsdp_qlora.yaml` | 4-bit weights + offload to CPU RAM | QLoRA of very large models on a few consumer GPUs |
+| `deepspeed_zero2.yaml` | gradients, optimizer | faster than ZeRO-3 when the model fits (`pip install deepspeed`) |
+| `deepspeed_zero3.yaml` | weights, gradients, optimizer | alternative to FSDP (`pip install deepspeed`) |
+
+- Sharding is supported by **`train` (SFT/DPO, text data)**. `reward`, `orpo`, `kto`, `grpo`
+  and `distill` stop with a message under FSDP/DeepSpeed — run them with `multi_gpu.yaml`.
+  Unsloth is skipped (single-GPU only) and vision data is refused.
+- The app handles what sharding needs: 4-bit weights are stored in the model dtype and loaded
+  without a per-GPU `device_map`, and the final model is gathered from all GPUs
+  (`trainer.save_model` on every process, FSDP switched to a full state dict), so the output
+  folder is a normal adapter / model. `run_config.yaml` records `sharding: fsdp|deepspeed`.
+- The configs set `mixed_precision: 'no'` on purpose: the app picks bf16, fp16 or fp32 for the
+  GPU (an accelerate default would override fp32 runs).
+- ZeRO-3 note: the model is loaded before the trainer starts, so every process first loads it
+  whole; for models too big for that, use `fsdp2.yaml` or `fsdp_qlora.yaml`.
+- **Not yet run on GPUs by this project** (no GPU in its CI): the configs parse with
+  accelerate, the code paths follow the PEFT/TRL guides, and `tests/test_gpu.py` runs each
+  config on 2 GPUs through `.github/workflows/gpu.yml` — run it before relying on sharding.
+
+### Mixture-of-experts (MoE) models
+
+MoE models are detected from their config (`num_experts`, `num_local_experts` or
+`n_routed_experts` — Qwen-MoE, Mixtral, OLMoE, DeepSeek, …); tested on a Qwen3-MoE model with
+TRL 0.29 and 1.14:
+
+- The **router load-balancing loss** is switched on for SFT, ORPO, reward models and
+  distillation (TRL only adds it when `output_router_logits` is set, and most MoE configs ship
+  with it off), so fine-tuning doesn't pile tokens onto a few experts.
+- The **router is kept frozen** (its LoRA weights stay at zero) for SFT, ORPO, reward models,
+  GRPO and distillation: training it risks expert collapse — Unsloth does the same.
+- DPO and KTO keep TRL's own handling (current TRL's DPO adds the loss itself): a frozen router
+  combined with gradient checkpointing makes them fail in current TRL.
+- LoRA dropout is 0 for MoE models: PEFT adapts the fused expert weights of Transformers 5
+  through a wrapper that doesn't support dropout.
+- `run_config.yaml` records `moe: {experts, router_aux_loss, router_trained}`; the card is
+  tagged `moe`.
 
 ### GPU job queue (web UI)
 

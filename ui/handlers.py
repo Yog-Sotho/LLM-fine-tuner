@@ -103,6 +103,8 @@ def on_train_click(
     report_to=DEFAULT_REPORT_TO,
     eval_split=DEFAULT_EVAL_SPLIT,
     lora_variant=DEFAULT_LORA_VARIANT,
+    activation_offloading=False,
+    padding_free=False,
     progress=gr.Progress(),
     request: gr.Request | None = None,
 ):
@@ -210,6 +212,8 @@ def on_train_click(
         prompt_tuning_num_virtual_tokens=int(prompt_tuning_num_virtual_tokens),
         dpo_beta=float(dpo_beta),
         packing=bool(packing),
+        activation_offloading=bool(activation_offloading),
+        padding_free=bool(padding_free),
         eval_split=float(eval_split),
     )
     os.makedirs(output_dir, exist_ok=True)

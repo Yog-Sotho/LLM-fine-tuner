@@ -37,7 +37,10 @@ from core.hardware import (
     compute_dtype,
     get_lora_targets,
     is_main_process,
+    lora_dropout,
     quantized_device_map,
+    setup_moe,
+    sharding_unsupported,
     training_device_args,
 )
 from core.run_config import save_run_config
@@ -72,6 +75,8 @@ def train_orpo_v27(
     if err := (validate_path_traversal(model_name) or validate_path_traversal(output_dir)):
         return err
 
+    if err := sharding_unsupported("ORPO"):
+        return err
     if not HAS_ORPO:
         return '❌ ORPOTrainer not available. Install: pip install "trl>=0.29.1,<2"'
     if orpo_file is None:
@@ -134,7 +139,7 @@ def train_orpo_v27(
             r=16,
             lora_alpha=32,
             target_modules=get_lora_targets(),
-            lora_dropout=0.05,
+            lora_dropout=lora_dropout(model),
             bias="none",
         )
         model = get_peft_model(model, lora_cfg)
@@ -201,6 +206,7 @@ def train_orpo_v27(
             "callbacks": orpo_callbacks,
         }
 
+        moe = setup_moe(model)  # MoE: router aux loss on, router adapter frozen
         orpo_trainer = ORPOTrainer(**orpo_trainer_kwargs)
 
         if progress is not None:
@@ -219,6 +225,7 @@ def train_orpo_v27(
             tokenizer.save_pretrained(output_dir)
             save_run_config(
                 output_dir,
+                moe=moe,
                 mode="orpo",
                 model=model_name,
                 dataset=ds,

@@ -341,3 +341,9 @@ def test_loss_chart():
     assert chart["Eval Loss"].isna().tolist() == [True, False]
     old = handlers.build_loss_chart([{"step": 1, "train_loss": 1.0, "eval_loss": 1.0}])
     assert "ETA" not in old.columns
+
+
+def test_long_sequence_options_reach_the_trainer(runs, fake_train, tmp_path):
+    _train(_csv(tmp_path, **SFT), activation_offloading=True, padding_free=True)
+    hp = fake_train[0]["hp"]
+    assert hp["activation_offloading"] is True and hp["padding_free"] is True

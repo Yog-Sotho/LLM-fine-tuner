@@ -97,6 +97,19 @@ def build_train_tab() -> dict:
                         info="Packs short examples into full-length sequences: much faster on "
                         "short data. Ignored without Flash Attention (samples would mix).",
                     )
+                    gr.Markdown("**Long sequences** (CUDA; skipped with a note otherwise)")
+                    activation_offloading = gr.Checkbox(
+                        label="🧠 Activation offloading",
+                        value=False,
+                        info="Keeps activations in CPU RAM between forward and backward: much "
+                        "less GPU memory for long sequences, somewhat slower.",
+                    )
+                    padding_free = gr.Checkbox(
+                        label="📏 Padding-free batches (needs Flash Attention 2)",
+                        value=False,
+                        info="Concatenates each batch without padding: no memory or compute "
+                        "spent on pad tokens.",
+                    )
                     # Minor Fix 5: QLoRA Enhanced checkbox removed from UI — driven by peft_method radio.
                     # gr.State preserves event-wiring arity.
                     use_qlora_enhanced = gr.State(False)
@@ -256,6 +269,8 @@ def build_train_tab() -> dict:
         system_prompt=system_prompt,
         use_flash_attn=use_flash_attn,
         packing=packing,
+        activation_offloading=activation_offloading,
+        padding_free=padding_free,
         use_qlora_enhanced=use_qlora_enhanced,
         peft_method=peft_method,
         training_preset=training_preset,
