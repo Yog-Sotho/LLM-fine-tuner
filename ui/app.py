@@ -27,11 +27,13 @@ from core.hardware import get_hardware_summary, get_model_info
 from core.state import app_state
 from data.augmentation import on_augment_click, on_quality_filter_click
 from export.gguf import on_export_gguf
+from export.merge import on_merge_adapters_click
 from export.registry import on_registry_list, on_registry_upload
 from export.utils import clear_gpu_cache, on_peft_zip_upload
 from inference.benchmarks import on_benchmark_click
 from inference.evaluation import on_evaluate_click
 from inference.vllm_runner import on_merge_adapter_click, on_vllm_generate
+from training.distill import train_distill
 from training.grpo import train_grpo
 from training.kto import train_kto
 from training.orpo import train_orpo_v27
@@ -196,7 +198,6 @@ def build_demo() -> gr.Blocks:
             prefix_tuning_token_dim,
             prefix_tuning_num_layers,
             prompt_tuning_num_virtual_tokens,
-            adapter_reduction_factor,
             lr,
             epochs,
             bs,
@@ -241,7 +242,6 @@ def build_demo() -> gr.Blocks:
                 prefix_tuning_token_dim,
                 prefix_tuning_num_layers,
                 prompt_tuning_num_virtual_tokens,
-                adapter_reduction_factor,
                 lr,
                 epochs,
                 bs,
@@ -291,7 +291,6 @@ def build_demo() -> gr.Blocks:
                 tt["prefix_tuning_token_dim"],
                 tt["prefix_tuning_num_layers"],
                 tt["prompt_tuning_num_virtual_tokens"],
-                tt["adapter_reduction_factor"],
                 tt["lr"],
                 tt["epochs"],
                 tt["bs"],
@@ -354,6 +353,13 @@ def build_demo() -> gr.Blocks:
             inputs=[gt["export_model_path"], gt["quant_format"], dt["file_input"],
                     dt["augmented_ds_state"]],
             outputs=[gt["quant_status"]],
+        )  # fmt: skip
+        gt["merge_btn"].click(
+            fn=on_merge_adapters_click,
+            **GPU_JOB,  # loads the base model: one heavy job at a time
+            inputs=[gt["merge_adapters"], gt["merge_weights"], gt["merge_method"],
+                    gt["merge_density"], gt["merge_output"]],
+            outputs=[gt["merge_status"]],
         )  # fmt: skip
         it["remote_btn"].click(
             fn=on_remote_chat,
@@ -466,6 +472,27 @@ def build_demo() -> gr.Blocks:
                 rlt["kto_resume"],
             ],
             outputs=[rlt["kto_status"]],
+        )
+        # Input order matches train_distill's positional parameters.
+        rlt["distill_train_btn"].click(
+            fn=train_distill,
+            **GPU_JOB,  # one shared GPU queue (see config.constants)
+            inputs=[
+                rlt["distill_student"],
+                rlt["distill_teacher"],
+                rlt["distill_file"],
+                rlt["distill_output_dir"],
+                rlt["distill_lr"],
+                rlt["distill_epochs"],
+                rlt["distill_batch"],
+                rlt["distill_max_length"],
+                rlt["distill_lmbda"],
+                rlt["distill_beta"],
+                rlt["distill_temperature"],
+                rlt["distill_max_new_tokens"],
+                rlt["distill_resume"],
+            ],
+            outputs=[rlt["distill_status"]],
         )
         rlt["orpo_train_btn"].click(
             fn=train_orpo_v27,

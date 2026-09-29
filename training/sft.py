@@ -40,11 +40,7 @@ import time
 import gradio as gr
 import torch
 from peft import (
-    # C-2 FIX: AdapterConfig removed from unconditional top-level import.
-    # It is an experimental feature absent from many peft releases. If this import
-    # failed, the ENTIRE training module crashed before a single job could start.
-    # AdapterConfig is now imported lazily and guarded by HAS_ADAPTER_CONFIG inside
-    # the Adapters branch of train_model() below.
+    IA3Config,
     LoraConfig,
     PrefixTuningConfig,
     PromptTuningConfig,
@@ -52,6 +48,7 @@ from peft import (
     TaskType,
     get_peft_model,
 )
+from peft.utils import TRANSFORMERS_MODELS_TO_IA3_TARGET_MODULES_MAPPING as IA3_DEFAULT_TARGETS
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -67,7 +64,6 @@ from config.constants import (
     DEFAULT_EVAL_SPLIT,
     DEFAULT_LORA_VARIANT,
     DEFAULT_SEED,
-    HAS_ADAPTER_CONFIG,
     HAS_HERETIC,  # N-5 FIX: imported so the Heretic Mode branch can guard the subprocess call
     HAS_LIGER,
     HAS_TRL,
@@ -129,7 +125,6 @@ def train_model(
     prefix_tuning_token_dim,
     prefix_tuning_num_layers,
     prompt_tuning_num_virtual_tokens,
-    adapter_reduction_factor,
     resume_from_checkpoint,
     early_stop,
     lr_scheduler_type,
@@ -433,23 +428,16 @@ def train_model(
                 )
                 model = get_peft_model(model, prompt_cfg)
 
-            elif peft_method == "Adapters":
-                # C-2 FIX: AdapterConfig is now imported lazily here, guarded by
-                # HAS_ADAPTER_CONFIG. Previously this was an unconditional top-level
-                # import that crashed the entire module on peft versions without it.
-                if not HAS_ADAPTER_CONFIG:
-                    raise ImportError(
-                        "AdapterConfig requires the adapter-transformers fork of peft. "
-                        "Install with: pip install adapter-transformers"
+            elif peft_method == "IA3":
+                # (IA)³ learns one scaling vector per attention key/value and MLP output:
+                # far fewer weights than LoRA. PEFT knows the layers for common
+                # architectures (Llama, Qwen, Mistral, Gemma, GPT-2, …).
+                model_type = getattr(model.config, "model_type", "")
+                if model_type not in IA3_DEFAULT_TARGETS:
+                    raise ValueError(
+                        f"IA3 has no default layers for model type '{model_type}'. Use LoRA."
                     )
-                from peft import AdapterConfig  # lazy, guarded  # noqa: PLC0415
-
-                adapter_cfg = AdapterConfig(
-                    non_linearity="relu",
-                    reduction_factor=adapter_reduction_factor,
-                    leave_out=[],
-                )
-                model = get_peft_model(model, adapter_cfg)
+                model = get_peft_model(model, IA3Config(task_type=TaskType.CAUSAL_LM))
 
             elif peft_method == "QLoRA Enhanced":
                 # v3.0 Fix #3 & #4: CUDA unavailable — fall back to standard LoRA.

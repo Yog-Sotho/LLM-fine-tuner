@@ -65,7 +65,13 @@ def build_serve_command(
         if err := validate_adapter_dir(model):
             raise ValueError(err)
         with open(os.path.join(model, "adapter_config.json"), encoding="utf-8") as f:
-            base = str(json.load(f).get("base_model_name_or_path") or "").strip()
+            adapter_config = json.load(f)
+        if str(adapter_config.get("peft_type", "")).upper() != "LORA":
+            raise ValueError(
+                "vLLM serves LoRA adapters only. Merge this adapter first: "
+                f"python main.py merge --adapter {model} --output <folder>"
+            )
+        base = str(adapter_config.get("base_model_name_or_path") or "").strip()
         if not base or validate_path_traversal(base):
             raise ValueError("adapter_config.json does not name a usable base model.")
         cmd = [vllm, "serve", base, "--host", host, "--port", str(port),

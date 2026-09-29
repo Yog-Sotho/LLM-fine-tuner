@@ -149,7 +149,7 @@ pip install "trl>=0.29.1,<2" --upgrade
 ⚠️ Unsloth requires LoRA. Falling back to standard training.
 ```
 
-**This is not an error.** Unsloth only supports LoRA. If you selected Full Fine-tuning or Adapters, it falls back gracefully. Change the PEFT method to LoRA to use Unsloth.
+**This is not an error.** Unsloth only supports LoRA. If you selected Full Fine-tuning or IA3, it falls back gracefully. Change the PEFT method to LoRA to use Unsloth.
 
 ---
 

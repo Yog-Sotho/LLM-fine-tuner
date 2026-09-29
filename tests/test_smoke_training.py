@@ -85,8 +85,7 @@ def _train(model: str, dataset: Dataset, output_dir: pathlib.Path, mode: str) ->
         10,
         64,
         1,
-        10,
-        16,  # prefix/prompt-tuning/adapter settings (unused for LoRA)
+        10,  # prefix/prompt-tuning settings (unused for LoRA)
         False,
         0,
         "linear",
@@ -249,7 +248,7 @@ def test_sft_with_chat_template_trains(tiny_model, tmp_path):
     ds = Dataset.from_dict({"instruction": ["Say hi", "Say bye"], "output": ["Hi", "Bye"]})
     summary, _ = train_model(
         tiny_model, ds, str(tmp_path), _hyperparams(), "cpu", "LoRA",
-        True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+        True, 4, 8, 10, 64, 1, 10, False, 0, "linear", False,
         False, True, "You are a helpful assistant.",
         training_mode="sft", progress=None,
     )  # fmt: skip
@@ -264,7 +263,7 @@ def test_packing_is_skipped_without_flash_attention(tiny_model, tmp_path):
     ds = Dataset.from_dict({"text": ["alpha beta", "gamma delta", "epsilon zeta", "eta theta"]})
     summary, records = train_model(
         tiny_model, ds, str(tmp_path), {**_hyperparams(), "packing": True}, "cpu", "LoRA",
-        True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+        True, 4, 8, 10, 64, 1, 10, False, 0, "linear", False,
         False, False, "", training_mode="sft", progress=None,
     )  # fmt: skip
     assert summary.startswith("✅ Training complete")
@@ -409,7 +408,7 @@ def _train_seeded(model: str, out: pathlib.Path, seed: int) -> None:
     )
     train_model(
         model, ds, str(out), _hyperparams(), "cpu", "LoRA",
-        True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+        True, 4, 8, 10, 64, 1, 10, False, 0, "linear", False,
         False, False, "", training_mode="sft", progress=None, seed=seed,
     )  # fmt: skip
 
@@ -504,7 +503,7 @@ def _ui_train(model: str, data: pathlib.Path, run_name: str, resume: bool) -> st
         name = str(data)
 
     msg, _zip, _dir, _records = on_train_click(
-        _File(), "gpt2", model, "Advanced", "LoRA", True, 4, 8, 30, 512, 2, 20, 16,
+        _File(), "gpt2", model, "Advanced", "LoRA", True, 4, 8, 30, 512, 2, 20,
         1e-3, 1, 2, 1, 64, 0, 0, "linear", False, resume, None, None, None,
         False, False, "", "SFT (Supervised Fine-Tuning)", 0.1, False,
         run_name=run_name, progress=None,
@@ -576,7 +575,7 @@ def test_chat_sft_trains_end_to_end_with_token_report(tiny_model, tmp_path):
 
     summary, _ = train_model(
         tiny_model, Dataset.from_dict({"messages": CHAT}), str(tmp_path), _hyperparams(),
-        "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+        "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, False, 0, "linear", False,
         False, True, "", training_mode="sft", progress=None,
     )  # fmt: skip
     assert summary.startswith("✅ Training complete") and "📏 Tokens per example" in summary
@@ -590,7 +589,7 @@ def test_truncation_is_reported(tiny_model, tmp_path):
     ds = Dataset.from_dict({"text": ["word " * 60, "short text", "another short"]})
     summary, _ = train_model(
         tiny_model, ds, str(tmp_path), {**_hyperparams(), "max_length": 16}, "cpu", "LoRA",
-        True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+        True, 4, 8, 10, 64, 1, 10, False, 0, "linear", False,
         False, False, "", training_mode="sft", progress=None,
     )  # fmt: skip
     assert "⚠️ 1 (33.3%) exceed Max Sequence Length 16" in summary
@@ -614,7 +613,7 @@ def test_eval_split_zero_disables_evaluation(tiny_model, tmp_path, monkeypatch):
     ds = Dataset.from_dict({"text": [f"row {i}" for i in range(10)]})
     train_model(
         tiny_model, ds, str(tmp_path), {**_hyperparams(), "eval_split": 0.0}, "cpu", "LoRA",
-        True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+        True, 4, 8, 10, 64, 1, 10, False, 0, "linear", False,
         False, False, "", training_mode="sft", progress=None,
     )  # fmt: skip
     assert seen == {"eval": None, "train_rows": 10}
@@ -636,7 +635,7 @@ def train_model_positional(model, ds, out, hp):
     from training.sft import train_model
 
     return train_model(
-        model, ds, str(out), hp, "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16, False, 0,
+        model, ds, str(out), hp, "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, False, 0,
         "linear", False, False, False, "", training_mode="sft", progress=None,
     )  # fmt: skip
 
@@ -657,7 +656,7 @@ def test_dpo_uses_the_max_sequence_length(tiny_model, tmp_path, monkeypatch):
     monkeypatch.setattr(trl, "DPOTrainer", Spy)
     train_model(
         tiny_model, Dataset.from_dict(PREFS), str(tmp_path), {**_hyperparams(), "max_length": 48},
-        "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+        "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, False, 0, "linear", False,
         False, False, "", training_mode="dpo", progress=None,
     )  # fmt: skip
     assert seen["max_length"] == 48
@@ -679,7 +678,7 @@ def test_chat_data_without_chat_template_is_a_clear_error(tiny_model, tmp_path, 
     with pytest.raises(RuntimeError, match="no chat template"):
         train_model(
             tiny_model, Dataset.from_dict({"messages": CHAT}), str(tmp_path), _hyperparams(),
-            "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+            "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, False, 0, "linear", False,
             False, True, "", training_mode="sft", progress=None,
         )  # fmt: skip
 
@@ -721,7 +720,7 @@ def test_long_prompts_are_skipped_and_reported(tiny_model, tmp_path):
     ds = Dataset.from_dict({"messages": [long_chat, *CHAT]})
     summary, _ = train_model(
         tiny_model, ds, str(tmp_path), {**_hyperparams(), "max_length": 64}, "cpu", "LoRA",
-        True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False,
+        True, 4, 8, 10, 64, 1, 10, False, 0, "linear", False,
         False, True, "", training_mode="sft", progress=None,
     )  # fmt: skip
     assert "⚠️ 1 examples skipped" in summary
@@ -735,7 +734,7 @@ def test_all_prompts_too_long_is_a_clear_error(tiny_model, tmp_path):
     with pytest.raises(RuntimeError, match="Raise Max Sequence Length"):
         train_model(
             tiny_model, Dataset.from_dict({"messages": [long_chat] * 3}), str(tmp_path),
-            {**_hyperparams(), "max_length": 64}, "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16,
+            {**_hyperparams(), "max_length": 64}, "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10,
             False, 0, "linear", False, False, True, "", training_mode="sft", progress=None,
         )  # fmt: skip
 
@@ -840,6 +839,178 @@ def test_gguf_fallback_rejects_non_lora_adapters(tmp_path, monkeypatch):
     assert "PROMPT_TUNING adapters cannot be merged" in status
 
 
+# ── IA3 ────────────────────────────────────────────────────────────────────
+
+
+def test_ia3_trains_generates_and_merges(tiny_model, tmp_path):
+    import json
+
+    from export.gguf import merge_adapter_to_temp
+    from inference.generate import generate_text
+    from training.sft import train_model
+
+    ds = Dataset.from_dict({"text": ["alpha beta", "gamma delta", "epsilon zeta", "eta theta"]})
+    summary, records = train_model(
+        tiny_model, ds, str(tmp_path), {**_hyperparams(), "learning_rate": 3e-3}, "cpu", "IA3",
+        True, 4, 8, 10, 64, 1, 10, False, 0, "linear", False, False, False, "", progress=None,
+    )  # fmt: skip
+    assert summary.startswith("✅"), summary
+    config = json.loads((tmp_path / "adapter_config.json").read_text())
+    assert config["peft_type"] == "IA3"
+    assert config["target_modules"] and config["feedforward_modules"]  # PEFT's Llama defaults
+    _assert_safetensors_adapter(tmp_path)
+    cfg = _assert_run_config(tmp_path, "sft", tiny_model)
+    assert cfg["peft"]["method"] == "IA3"
+    assert not generate_text(tiny_model, str(tmp_path), "alpha", 4, 0.7, 0.9).startswith("❌")
+    merged, error = merge_adapter_to_temp(str(tmp_path))  # GGUF / quantized export path
+    try:
+        assert merged and not error and os.path.isfile(os.path.join(merged, "config.json"))
+        assert not os.path.exists(os.path.join(merged, "adapter_config.json"))
+    finally:
+        import shutil
+
+        shutil.rmtree(merged or "", ignore_errors=True)
+
+
+def test_ia3_on_an_architecture_without_defaults_is_a_clear_error(tiny_model, tmp_path,
+                                                                  monkeypatch):  # fmt: skip
+    import training.sft as sft
+
+    monkeypatch.setattr(sft, "IA3_DEFAULT_TARGETS", {})
+    ds = Dataset.from_dict({"text": ["alpha beta", "gamma delta"]})
+    with pytest.raises(RuntimeError, match="IA3 has no default layers for model type 'llama'"):
+        sft.train_model(
+            tiny_model, ds, str(tmp_path), _hyperparams(), "cpu", "IA3", True, 4, 8, 10, 64, 1,
+            10, False, 0, "linear", False, False, False, "", progress=None,
+        )  # fmt: skip
+
+
+# ── Knowledge distillation (GKD) ───────────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def tiny_teacher(tiny_chat_model, tmp_path_factory):
+    """A teacher that differs from the student: the tiny chat model, weights perturbed."""
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    out = tmp_path_factory.mktemp("teacher")
+    torch.manual_seed(0)
+    model = AutoModelForCausalLM.from_pretrained(tiny_chat_model)
+    with torch.no_grad():
+        for param in model.parameters():
+            param.add_(torch.randn_like(param) * 0.05)
+    model.save_pretrained(out)
+    AutoTokenizer.from_pretrained(tiny_chat_model).save_pretrained(out)
+    return str(out)
+
+
+def _distill_data(tmp_path) -> "_Upload":
+    import json
+
+    path = tmp_path / "distill.jsonl"
+    rows = [
+        {
+            "messages": [
+                {"role": "user", "content": f"What is {i}+{i}?"},
+                {"role": "assistant", "content": str(2 * i)},
+            ]
+        }
+        for i in range(4)
+    ]
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    return _Upload(path)  # fmt: skip
+
+
+def test_distillation_trains_the_student_toward_the_teacher(tiny_chat_model, tiny_teacher,
+                                                            tmp_path):  # fmt: skip
+    from safetensors.torch import load_file
+
+    from training.distill import train_distill
+
+    out = tmp_path / "student"
+    status = train_distill(tiny_chat_model, tiny_teacher, _distill_data(tmp_path), str(out),
+                           learning_rate=1e-3, epochs=2, batch_size=2, max_length=64,
+                           max_new_tokens=8, progress=None)  # fmt: skip
+    assert status.startswith("✅ Distillation complete"), status
+    loss = float(status.split("Final train loss: ")[1].split("\n")[0])
+    assert loss > 0  # the teacher differs, so the divergence is not zero
+    _assert_safetensors_adapter(out)
+    weights = load_file(str(out / "adapter_model.safetensors"))
+    assert any(w.abs().sum() > 0 for k, w in weights.items() if "lora_B" in k)  # trained
+    cfg = _assert_run_config(out, "distill", tiny_chat_model)
+    assert cfg["teacher"] == tiny_teacher and cfg["hyperparams"]["lmbda"] == 0.5
+
+
+def test_distillation_needs_a_shared_vocabulary(tiny_chat_model, tiny_model, tmp_path):
+    from training.distill import train_distill
+
+    status = train_distill(tiny_chat_model, tiny_model, _distill_data(tmp_path),
+                           str(tmp_path / "out"), progress=None)  # fmt: skip
+    assert status.startswith("❌ Student and teacher must share a vocabulary"), status
+
+
+# ── Merging LoRA adapters ──────────────────────────────────────────────────
+
+
+def _lora(model_name, path, seed, r=4, **extra):
+    import torch
+    from peft import LoraConfig, get_peft_model
+    from transformers import AutoModelForCausalLM
+
+    torch.manual_seed(seed)
+    config = LoraConfig(r=r, lora_alpha=16, target_modules="all-linear",
+                        init_lora_weights=False, **extra)  # fmt: skip
+    get_peft_model(AutoModelForCausalLM.from_pretrained(model_name), config).save_pretrained(path)
+    return str(path)
+
+
+@pytest.mark.parametrize(("method", "rank"), [("ties", 4), ("dare_linear", 4), ("cat", 8)])
+def test_merged_adapter_loads_and_generates(tiny_model, tmp_path, method, rank):
+    import json
+
+    from export.merge import merge_lora_adapters
+    from inference.generate import generate_text
+
+    a, b = _lora(tiny_model, tmp_path / "a", 1), _lora(tiny_model, tmp_path / "b", 2)
+    out = tmp_path / "merged"
+    status = merge_lora_adapters([a, b], str(out), [1.0, 0.5], method, 0.5)
+    assert status.startswith(f"✅ Merged 2 adapters with {method} (rank {rank})"), status
+    _assert_safetensors_adapter(out)
+    assert json.loads((out / "adapter_config.json").read_text())["r"] == rank
+    from core.run_config import load_run_config
+
+    cfg = load_run_config(str(out / "run_config.yaml"))
+    assert cfg["mode"] == "merge" and cfg["dataset"] is None
+    assert [s["weight"] for s in cfg["sources"]] == [1.0, 0.5]
+    assert "Merged from:" in (out / "README.md").read_text()
+    assert not generate_text(tiny_model, str(out), "alpha", 4, 0.7, 0.9).startswith("❌")
+
+
+def test_merge_refuses_what_it_cannot_merge(tiny_model, tmp_path):
+    import json
+
+    from export.merge import merge_lora_adapters
+
+    a = _lora(tiny_model, tmp_path / "a", 1)
+    wide = _lora(tiny_model, tmp_path / "wide", 2, r=8)
+    dora = _lora(tiny_model, tmp_path / "dora", 3, use_dora=True)
+    status = merge_lora_adapters([a, wide], str(tmp_path / "o"), method="ties")
+    assert status.startswith("❌ ties needs adapters of the same rank (found [4, 8])")
+    assert merge_lora_adapters([a, wide], str(tmp_path / "o"), method="svd").startswith("✅")
+    assert "DoRA adapters can't be merged" in merge_lora_adapters([a, dora], str(tmp_path / "o"))
+    other = tmp_path / "other"
+    other.mkdir()
+    config = json.loads((tmp_path / "a" / "adapter_config.json").read_text())
+    (other / "adapter_config.json").write_text(
+        json.dumps({**config, "base_model_name_or_path": "org/another-base"})
+    )
+    (other / "adapter_model.safetensors").write_bytes(
+        (tmp_path / "a" / "adapter_model.safetensors").read_bytes()
+    )
+    assert "same base model" in merge_lora_adapters([a, str(other)], str(tmp_path / "o"))
+
+
 # ── GRPO / KTO checkpoints and resume ──────────────────────────────────────
 
 
@@ -907,7 +1078,7 @@ def test_heretic_result_follows_its_exit_code(tiny_model, tmp_path, monkeypatch,
     ds = Dataset.from_dict({"text": ["alpha beta", "gamma delta", "epsilon zeta", "eta theta"]})
     summary, _ = sft.train_model(
         tiny_model, ds, str(tmp_path / "out"), _hyperparams(), "cpu", "LoRA", True, 4, 8,
-        10, 64, 1, 10, 16, False, 0, "linear", False, False, False, "",
+        10, 64, 1, 10, False, 0, "linear", False, False, False, "",
         heretic_mode=True, progress=None,
     )  # fmt: skip
     assert expected in summary
@@ -929,7 +1100,7 @@ def test_lora_variants_train_on_every_linear_layer(tiny_model, tmp_path, variant
     ds = Dataset.from_dict({"text": ["alpha beta", "gamma delta", "epsilon zeta", "eta theta"]})
     summary, _ = train_model(
         tiny_model, ds, str(tmp_path), _hyperparams(), "cpu", "LoRA", True, 4, 8, 10, 64, 1,
-        10, 16, False, 0, "linear", False, False, False, "", progress=None,
+        10, False, 0, "linear", False, False, False, "", progress=None,
         lora_variant=variant,
     )  # fmt: skip
     assert summary.startswith("✅ Training complete"), summary
@@ -1094,7 +1265,7 @@ def test_tool_calling_sft_trains_end_to_end(tiny_chat_model, tmp_path):
     ds, _ = validate_and_clean_dataset(load_dataset_from_file(_Upload(data), "jsonl"))
     summary, _ = train_model(
         tiny_chat_model, ds, str(tmp_path / "out"), {**_hyperparams(), "max_length": 512},
-        "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False, False,
+        "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, False, 0, "linear", False, False,
         True, "", progress=None,
     )  # fmt: skip
     assert summary.startswith("✅ Training complete"), summary
@@ -1165,7 +1336,7 @@ def test_vision_sft_trains_end_to_end_with_card(tiny_vlm, tmp_path):
     )
     out = tmp_path / "vlm"
     summary, _ = train_model(
-        tiny_vlm, ds, str(out), _hyperparams(), "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16,
+        tiny_vlm, ds, str(out), _hyperparams(), "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10,
         False, 0, "linear", False, False, True, "", progress=None, lora_variant="rsLoRA",
     )  # fmt: skip
     assert summary.startswith("✅ Training complete") and "Vision-language" in summary, summary
@@ -1186,7 +1357,7 @@ def test_vision_rejects_dpo_and_prompt_tuning(tiny_vlm, tmp_path):
         load_dataset_from_file(_Upload(_vision_file(tmp_path)), "jsonl")
     )
     args = (tiny_vlm, ds, str(tmp_path / "x"), _hyperparams(), "cpu")
-    rest = (True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False, False, True, "")
+    rest = (True, 4, 8, 10, 64, 1, 10, False, 0, "linear", False, False, True, "")
     with pytest.raises(RuntimeError, match="DPO on image"):
         train_model(*args, "LoRA", *rest, training_mode="dpo", progress=None)
     with pytest.raises(RuntimeError, match="not supported for vision"):
@@ -1220,7 +1391,7 @@ ds = Dataset.from_dict({{"instruction": [f"Say {{i}}" for i in range(8)],
                         "output": [str(i) for i in range(8)]}})
 hp = {{"learning_rate": 1e-2, "epochs": 1, "batch_size": 2, "grad_accum": 1,
       "max_length": 64, "warmup_steps": 0, "eval_split": 0.0}}
-train_model({model!r}, ds, {out!r}, hp, "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16,
+train_model({model!r}, ds, {out!r}, hp, "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10,
             False, 0, "linear", False, False, False, "", progress=None)
 """
 

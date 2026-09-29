@@ -18,10 +18,10 @@ baseline: the app starts, CI runs ruff / mypy (all layers) / pytest on 3 Python 
 85 % coverage floor / pip-audit / hadolint / a wheel check, remote code is opt-in, adapters must be
 safetensors, state is per session, and the trainers are rebuilt on current TRL (SFT, DPO, ORPO,
 KTO, GRPO, reward, vision). The code-quality score is now **7.3/10**. What remains is
-MEDIUM/LOW: a string-blacklist path check, a still-broken "Adapters" PEFT option, optional
+MEDIUM/LOW: a string-blacklist path check, a broken "Adapters" PEFT option (replaced with IA3 in Tier 13), optional
 packages hard-listed in `requirements.txt`, an oversized `train_model()`, and GPU code paths that
 have tests (`tests/test_gpu.py`) but have **not yet been run on a GPU**.
-**Top priority:** run `.github/workflows/gpu.yml` on a GPU runner, then decide on the "Adapters" option.
+**Top priority:** run `.github/workflows/gpu.yml` on a GPU runner.
 
 ## Overall Score: 7.3 / 10 (baseline 3.8)
 
@@ -50,7 +50,7 @@ persistent job queue, and the GPU paths have not been exercised by an automated 
 
 | Area | Score | Notes |
 |---|---|---|
-| Training coverage | 8 | Core 2026 set; missing distillation, merging, async/agentic RL |
+| Training coverage | 8.5 (T13) | Core 2026 set + distillation (GKD), LoRA adapter merging (TIES/DARE/SVD), IA3; missing async/agentic RL, full-model merges |
 | Export & deploy | 8 | GGUF, FP8/W4A16, Hub card, llama-server / vLLM serving, remote client |
 | Reproducibility | 9 | run_config.yaml, dataset SHA-256, early seeding, resume, tracking, one version |
 | Security | 8 | See Security below |
@@ -161,7 +161,7 @@ New findings from this audit are marked **NEW**.
 |---|---|---|---|---|
 | MEDIUM | FIXED (T2) | SFT data | EOS never trained, pads masked | TRL prompt-completion format; EOS appended by SFTTrainer |
 | MEDIUM | FIXED (T2) | precision | `fp16=True` forced with bf16 weights | `select_precision` / `compute_dtype` |
-| MEDIUM | OPEN | `training/sft.py:435`, `ui/tabs/train_tab.py:117` | "Adapters" PEFT option always fails: PEFT 0.21 has no `AdapterConfig`; the error message suggests a fix (`adapter-transformers`) that does not add it | Remove the option (UI + plumbing) or replace it with a PEFT method that exists (e.g. IA³) — **needs a product decision** |
+| MEDIUM | FIXED (T13) | `training/sft.py`, `ui/tabs/train_tab.py` | "Adapters" PEFT option always failed: PEFT has no `AdapterConfig` | Replaced with IA3 (`IA3Config`, PEFT default layers per architecture); mergeable for export; `adapter_reduction_factor` removed end to end |
 | **NEW** HIGH | FIXED (T12) | `ui/handlers.py:on_file_upload` | A CSV/Excel with non-standard column names raised an error before the column-mapping dropdowns were shown, so such files could not be mapped at all (regression from the "in-memory refresh" optimisation) | Columns checked before conversion; raw rows + dropdowns shown; covered by tests |
 | MEDIUM | OPEN | `data/augmentation.py:122` | Data without `text`/`instruction` (DPO) is silently duplicated N× and reported as augmented; augment/filter re-read the file and ignore the column mapping | Say "not supported for preference data"; operate on the prepared dataset |
 | LOW | OPEN | `data/loader.py` JSON/JSONL branch | `column_mapping` ignored for JSON | Load through pandas like CSV |
@@ -175,7 +175,7 @@ New findings from this audit are marked **NEW**.
 | LOW | FIXED | `load_qlora_model_v27`, duplicate handler block | Dead code | Removed |
 | LOW | FIXED (T11) | `archive/`, `gradio.log`, 17 benchmark scripts, `test_batch_size.py`, verify scripts | Dead files | Removed |
 | LOW | FIXED | remote branches | ~80 stale bot branches | 2 heads remain |
-| LOW | OPEN | `config/constants.py:222` `HAS_ADAPTER_CONFIG` | Always `False` on real PEFT (see "Adapters") | Goes with the Adapters decision |
+| LOW | FIXED (T13) | `config/constants.py` `HAS_ADAPTER_CONFIG` | Always `False` on real PEFT | Removed with the Adapters option |
 
 ---
 
@@ -199,6 +199,7 @@ New findings from this audit are marked **NEW**.
 |---|---|---|---|
 | 2026-09-27 | `origin/main@7491ca6` | 3.8 | Baseline: app could not start, CI never ran, unauthenticated RCE |
 | 2026-09-29 | Tier 12 branch | 7.3 | All CRITICAL/HIGH fixed; SOTA 7/10; open items are MEDIUM/LOW |
+| 2026-09-29 | Tier 13 branch | 7.3 | Adapters → IA3 (finding fixed); distillation + adapter merging added; SOTA 7.5/10 |
 
 Work between the two audits (all verified with the CI workflow replayed locally, floor and
 ceiling library versions, live UI and Docker CPU checks before each push):
@@ -216,7 +217,7 @@ suite + workflow, two bugs fixed (column mapping on upload, eval loss in the cha
 
 1. **[MEDIUM]** Run `.github/workflows/gpu.yml` on a GPU runner (GitHub T4 larger runner or
    self-hosted); set the `GPU_RUNNER` variable for the weekly run. Fix whatever it finds.
-2. **[MEDIUM]** Decide on the "Adapters" option: remove it, or replace it with IA³.
+2. ~~**[MEDIUM]** Decide on the "Adapters" option~~ — done in Tier 13: replaced with IA3.
 3. **[MEDIUM]** Path allow-list in `validate_path_traversal` (temp / upload / runs directories).
 4. **[MEDIUM]** Move `vllm`, `auto-gptq`, `exllamav2` out of `requirements.txt` into extras.
 5. **[MEDIUM]** Exclude `checkpoint-*` from Hub push and the download ZIP.
@@ -226,8 +227,9 @@ suite + workflow, two bugs fixed (column mapping on upload, eval loss in the cha
 8. **[LOW]** Redact all UI error text; vLLM `bnb → bitsandbytes`; registry version sort; JSON
    column mapping; DPO augmentation message; drop deprecated `TRANSFORMERS_CACHE` /
    `HF_HUB_ENABLE_HF_TRANSFER`; `vllm_cache` lock.
-9. **[Roadmap]** Tier 13 — distillation (TRL GKD/GOLD) and model merging; Tier 14 — DeepSpeed/FSDP
-   presets, long context, MoE.
+9. **[Roadmap]** ~~Tier 13 — distillation and model merging~~ (done: GKD distillation, LoRA
+   adapter merging; full-model merges wait for a mergekit release that works with current
+   Transformers); Tier 14 — DeepSpeed/FSDP presets, long context, MoE.
 
 ---
 

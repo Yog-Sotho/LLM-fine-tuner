@@ -1,4 +1,4 @@
-"""ui/tabs/rlhf_tab.py — Reward model, GRPO, ORPO and KTO sub-tabs (layout only)."""
+"""ui/tabs/rlhf_tab.py — Reward model, GRPO, ORPO, KTO and distillation sub-tabs (layout only)."""
 
 import gradio as gr
 
@@ -6,10 +6,15 @@ from config.constants import (
     DEFAULT_GRPO_LOSS_TYPE,
     DEFAULT_GRPO_REWARDS,
     DEFAULT_LORA_VARIANT,
+    DISTILL_BETA,
+    DISTILL_LMBDA,
+    DISTILL_MAX_NEW_TOKENS,
+    DISTILL_TEMPERATURE,
     GRPO_LORA_ALPHA,
     GRPO_LORA_RANK,
     GRPO_LOSS_TYPES,
     GRPO_REWARDS,
+    HAS_GKD,
     HAS_GRPO,
     HAS_KTO,
     HAS_MATH_VERIFY,
@@ -32,13 +37,13 @@ def build_rlhf_tab() -> dict:
         gr.HTML(
             '<div id="rlhf-banner">'
             '<h3 style="color:#34d399;margin:0">'
-            "🤖 Alignment — Reward Model · GRPO · ORPO · KTO"
+            "🤖 Alignment — Reward Model · GRPO · ORPO · KTO · Distillation"
             "</h3></div>"
         )
         gr.Markdown(
             f"Reward model {_ok(HAS_REWARD_TRAINER)} | GRPO {_ok(HAS_GRPO)} | "
-            f"ORPO {_ok(HAS_ORPO)} | KTO {_ok(HAS_KTO)}\n"
-            '_All four use TRL. If one shows ❌, install: `pip install "trl>=0.29.1,<2"`._'
+            f"ORPO {_ok(HAS_ORPO)} | KTO {_ok(HAS_KTO)} | Distillation {_ok(HAS_GKD)}\n"
+            '_All five use TRL. If one shows ❌, install: `pip install "trl>=0.29.1,<2"`._'
         )
 
         with gr.Tabs():
@@ -246,6 +251,66 @@ def build_rlhf_tab() -> dict:
                             label="KTO Training Status", lines=12, interactive=False
                         )
 
+            # ── E. Distillation ──────────────────────────────────────────
+            with gr.Tab("🎓 E. Distillation"):
+                gr.Markdown(
+                    "**Knowledge distillation (GKD)**: a small *student* learns the next-token "
+                    "distribution of a larger *teacher*, partly on its own answers, so it "
+                    "learns from its own mistakes. Both must be from the same model family "
+                    "(shared vocabulary), e.g. Qwen3-0.6B ← Qwen3-8B. The student is trained "
+                    "as a LoRA adapter.\n"
+                    "Dataset: chats (`messages`), `instruction`/`output` or "
+                    "`prompt`/`completion` — the last answer is what the teacher grades."
+                )
+                with gr.Row():
+                    with gr.Column():
+                        distill_student = gr.Textbox(
+                            label="Student model (small)", value=recommended_model, max_length=512
+                        )
+                        distill_teacher = gr.Textbox(
+                            label="Teacher model (larger, same family)", max_length=512
+                        )
+                        distill_file = gr.File(
+                            label="Dataset (CSV/JSONL)", file_types=[".csv", ".jsonl", ".json"]
+                        )
+                        distill_output_dir = gr.Textbox(
+                            label="Output Directory", value="./distilled_model", max_length=512
+                        )
+                        with gr.Row():
+                            distill_lr = gr.Number(value=5e-5, label="Learning Rate", precision=8)
+                            distill_epochs = gr.Slider(1, 10, value=1, step=1, label="Epochs")
+                            distill_batch = gr.Slider(1, 16, value=2, step=1, label="Batch Size")
+                        with gr.Row():
+                            distill_max_length = gr.Slider(
+                                64, 4096, value=512, step=64, label="Max Length"
+                            )
+                            distill_max_new_tokens = gr.Slider(
+                                8, 1024, value=DISTILL_MAX_NEW_TOKENS, step=8,
+                                label="Student answer length",
+                            )  # fmt: skip
+                        with gr.Row():
+                            distill_lmbda = gr.Slider(
+                                0.0, 1.0, value=DISTILL_LMBDA, step=0.05, label="On-policy share",
+                                info="0 = learn on the dataset answers, 1 = only on its own",
+                            )  # fmt: skip
+                            distill_beta = gr.Slider(
+                                0.0, 1.0, value=DISTILL_BETA, step=0.05, label="Divergence (β)",
+                                info="0 ≈ forward KL (cover the teacher), 1 ≈ reverse KL (focus)",
+                            )  # fmt: skip
+                            distill_temperature = gr.Slider(
+                                0.1, 2.0, value=DISTILL_TEMPERATURE, step=0.05, label="Temperature"
+                            )
+                        distill_resume = gr.Checkbox(
+                            label="Resume from last checkpoint",
+                            value=False,
+                            info="Continue from the newest checkpoint in the output directory.",
+                        )
+                        distill_train_btn = gr.Button("🎓 Run Distillation", variant="primary")
+                    with gr.Column():
+                        distill_status = gr.Textbox(
+                            label="Distillation Status", lines=12, interactive=False
+                        )
+
     return dict(
         rm_model_choice=rm_model_choice,
         rm_file=rm_file,
@@ -298,4 +363,19 @@ def build_rlhf_tab() -> dict:
         kto_resume=kto_resume,
         kto_train_btn=kto_train_btn,
         kto_status=kto_status,
+        distill_student=distill_student,
+        distill_teacher=distill_teacher,
+        distill_file=distill_file,
+        distill_output_dir=distill_output_dir,
+        distill_lr=distill_lr,
+        distill_epochs=distill_epochs,
+        distill_batch=distill_batch,
+        distill_max_length=distill_max_length,
+        distill_lmbda=distill_lmbda,
+        distill_beta=distill_beta,
+        distill_temperature=distill_temperature,
+        distill_max_new_tokens=distill_max_new_tokens,
+        distill_resume=distill_resume,
+        distill_train_btn=distill_train_btn,
+        distill_status=distill_status,
     )

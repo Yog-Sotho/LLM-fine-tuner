@@ -114,7 +114,7 @@ def build_train_tab() -> dict:
                         "QLoRA Enhanced",
                         "Prefix Tuning",
                         "Prompt Tuning",
-                        "Adapters",
+                        "IA3",
                     ],
                     value="Auto",
                     label="PEFT Adapter Method",
@@ -162,9 +162,11 @@ def build_train_tab() -> dict:
                             )
                             # Minor Fix 2: PromptTuningConfig has no num_layers — use gr.State.
                             prompt_tuning_num_layers = gr.State(None)
-                        with gr.Tab("Adapters"):
-                            adapter_reduction_factor = gr.Slider(
-                                2, 64, value=16, step=2, label="Reduction Factor"
+                        with gr.Tab("IA3"):
+                            gr.Markdown(
+                                "(IA)³ learns one scaling vector per attention key/value and "
+                                "MLP output — far fewer weights than LoRA, no size to set. "
+                                "It usually needs a higher learning rate (about 1e-3–3e-3)."
                             )
                     lr = gr.Number(value=2e-4, label="Learning Rate", precision=6)
                     epochs = gr.Slider(1, 20, value=3, step=1, label="Epochs")
@@ -266,7 +268,6 @@ def build_train_tab() -> dict:
         prefix_tuning_num_layers=prefix_tuning_num_layers,
         prompt_tuning_num_virtual_tokens=prompt_tuning_num_virtual_tokens,
         prompt_tuning_num_layers=prompt_tuning_num_layers,
-        adapter_reduction_factor=adapter_reduction_factor,
         lr=lr,
         epochs=epochs,
         bs=bs,

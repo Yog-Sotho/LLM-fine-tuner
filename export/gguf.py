@@ -21,7 +21,7 @@ import tempfile
 
 import gradio as gr
 
-from config.constants import HAS_UNSLOTH
+from config.constants import HAS_UNSLOTH, MERGEABLE_PEFT_TYPES
 from core.state import app_state, validate_path_traversal
 from inference.vllm_runner import merge_adapter_for_inference
 
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 def merge_adapter_to_temp(adapter_dir: str) -> tuple[str | None, str]:
-    """Merge a LoRA adapter into its base model in a temporary folder.
+    """Merge a LoRA / IA3 adapter into its base model in a temporary folder.
 
     Exporters (llama.cpp GGUF, llm-compressor) need a full model; an adapter folder
     has no config.json or base weights. Returns (merged_dir, "") or (None, error);
@@ -37,9 +37,9 @@ def merge_adapter_to_temp(adapter_dir: str) -> tuple[str | None, str]:
     """
     with open(os.path.join(adapter_dir, "adapter_config.json"), encoding="utf-8") as f:
         adapter_config = json.load(f)
-    if str(adapter_config.get("peft_type", "")).upper() != "LORA":
+    if str(adapter_config.get("peft_type", "")).upper() not in MERGEABLE_PEFT_TYPES:
         return None, (
-            f"❌ GGUF export needs a LoRA adapter or a full model; "
+            f"❌ Export needs a LoRA or IA3 adapter, or a full model; "
             f"{adapter_config.get('peft_type')} adapters cannot be merged into the weights."
         )
     base_model = str(adapter_config.get("base_model_name_or_path") or "").strip()

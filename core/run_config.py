@@ -76,7 +76,7 @@ def save_run_config(output_dir: str, *, mode: str, model: str, dataset, **settin
         "model": model,
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         **settings,
-        "dataset": dataset_fingerprint(dataset),
+        "dataset": dataset_fingerprint(dataset) if dataset is not None else None,
         "libraries": library_versions(),
     }
     path = os.path.join(output_dir, RUN_CONFIG_FILENAME)

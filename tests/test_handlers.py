@@ -57,7 +57,7 @@ def _train(file, **overrides):
         peft_method="LoRA", use_lora=True, lora_rank=8, lora_alpha=16,
         prefix_tuning_num_virtual_tokens=30, prefix_tuning_token_dim=512,
         prefix_tuning_num_layers=2, prompt_tuning_num_virtual_tokens=20,
-        adapter_reduction_factor=16, lr=2e-4, epochs=1.0, bs=4.0, grad_accum=1.0,
+        lr=2e-4, epochs=1.0, bs=4.0, grad_accum=1.0,
         max_len=128.0, warmup=0.0, early_stop=3, lr_sched="cosine", grad_ckpt=False,
         resume=False, col_inst=None, col_out=None, col_text=None, use_unsloth=False,
         use_chat_template=False, system_prompt="", training_mode="SFT (Supervised Fine-Tuning)",
