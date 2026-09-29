@@ -21,7 +21,12 @@ from config.constants import (
     DEFAULT_EVAL_SPLIT,
     HAS_TORCHVISION,
 )
-from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback
+from core.callbacks import (
+    ETAProgressCallback,
+    LoggingCallback,
+    StopCallback,
+    final_train_loss,
+)
 from core.hardware import (
     compute_dtype,
     full_finetune_dtype,
@@ -208,5 +213,5 @@ def train_vision_sft(
         f"📁 Model saved to: {output_dir}\n"
     )
     if log_callback.records:
-        summary += f"📉 Final train loss: {log_callback.records[-1]['train_loss']}"
+        summary += f"📉 Final train loss: {final_train_loss(log_callback.records)}"
     return summary, log_callback.records

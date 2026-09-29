@@ -620,6 +620,27 @@ def test_eval_split_zero_disables_evaluation(tiny_model, tmp_path, monkeypatch):
     assert seen == {"eval": None, "train_rows": 10}
 
 
+def test_eval_loss_reaches_the_loss_chart(tiny_model, tmp_path):
+    # Transformers logs evaluation separately from the training loss. Train past step 50
+    # (eval_steps): older Transformers does not evaluate again at the end of training.
+    ds = Dataset.from_dict({"instruction": [f"Say {i}" for i in range(12)],
+                            "output": [f"Word {i} here" for i in range(12)]})  # fmt: skip
+    hp = {**_hyperparams(), "epochs": 10, "eval_split": 0.25}  # 9 rows / batch 2 → 50 steps
+    summary, records = train_model_positional(tiny_model, ds, tmp_path, hp)
+    evals = [r["eval_loss"] for r in records if r["eval_loss"] == r["eval_loss"]]
+    assert evals and all(e > 0 for e in evals)
+    assert "Final train loss: nan" not in summary and "Final train loss: N/A" not in summary
+
+
+def train_model_positional(model, ds, out, hp):
+    from training.sft import train_model
+
+    return train_model(
+        model, ds, str(out), hp, "cpu", "LoRA", True, 4, 8, 10, 64, 1, 10, 16, False, 0,
+        "linear", False, False, False, "", training_mode="sft", progress=None,
+    )  # fmt: skip
+
+
 def test_dpo_uses_the_max_sequence_length(tiny_model, tmp_path, monkeypatch):
     import trl
 

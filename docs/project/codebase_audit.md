@@ -1,182 +1,252 @@
 # Codebase Audit Report
 
-**Date:** 2026-09-27
-**Project:** llm-fine-tuner v3.2.0
-**Audited revision:** `origin/main` @ `7491ca6` (latest; includes PRs up to #165)
-**Language / Framework:** Python 3.10–3.12 · Gradio 5 · Transformers · TRL · PEFT · Typer
-**Project Type:** Web service (Gradio UI on `0.0.0.0:7860`) + CLI — all 9 dimensions applicable
+**Date:** 2026-09-29 (supersedes the 2026-09-27 baseline, merged in below)
+**Project:** llm-fine-tuner 3.2.0 (`APP_VERSION`)
+**Audited revision:** branch `claude/project-audit-report-qsOS1` — `main` after PR #175 (Tier 10) + Tier 11 (PR #176) + Tier 12
+**Language / Framework:** Python 3.10–3.12 · Gradio 6 · Transformers 4.56–5.x · TRL 0.29–1.x · PEFT 0.17–0.21 · Typer
+**Project Type:** Web service (Gradio UI, `127.0.0.1` by default) + CLI — all 9 dimensions applicable
 **Audit Mode:** Global (flat layered packages: `config → core → data → training → inference → export → ui/cli`)
-
-> Line numbers below refer to `origin/main` @ `7491ca6`. The branch
-> `claude/project-audit-report-qsOS1` is 84 commits behind `main` and its
-> fix commit `f20f80b` was **never merged** (see §"Status of previous audit").
 
 ---
 
 ## Executive Summary
 
-The architecture is clean and well documented, but **the shipped application cannot currently start**: `main.py` imports `app` and `commands` as top-level modules that do not exist (`ui/app.py`, `cli/commands.py`), and this has gone unnoticed because the CI file sits at the repo root instead of `.github/workflows/` and has never run. Beneath that, the RLHF layer (Reward/PPO/ORPO) and DPO are written against TRL/Transformers APIs that have since been removed, and with no upper version bounds, a fresh install gets TRL 1.x / Transformers 5.x and breaks them. Security hardening has focused heavily on string-level path checks (dozens of bot PRs), while the real exposure — an unauthenticated server bound to all interfaces that runs `trust_remote_code=True` on any user-typed Hub model ID — is unaddressed. **Top priority: fix the entry point, move CI into place, pin compatible dependency ranges, and gate remote code execution behind auth + an explicit opt-in.**
+Two days ago the application could not start (broken `main.py` imports), CI had never run,
+any visitor could execute remote code, and the RLHF stack targeted removed TRL APIs (baseline
+score **3.8/10**). Twelve tiers of work since then fixed every CRITICAL and HIGH finding of that
+baseline: the app starts, CI runs ruff / mypy (all layers) / pytest on 3 Python versions with an
+85 % coverage floor / pip-audit / hadolint / a wheel check, remote code is opt-in, adapters must be
+safetensors, state is per session, and the trainers are rebuilt on current TRL (SFT, DPO, ORPO,
+KTO, GRPO, reward, vision). The code-quality score is now **7.3/10**. What remains is
+MEDIUM/LOW: a string-blacklist path check, a still-broken "Adapters" PEFT option, optional
+packages hard-listed in `requirements.txt`, an oversized `train_model()`, and GPU code paths that
+have tests (`tests/test_gpu.py`) but have **not yet been run on a GPU**.
+**Top priority:** run `.github/workflows/gpu.yml` on a GPU runner, then decide on the "Adapters" option.
 
-## Overall Score: 3.8 / 10
+## Overall Score: 7.3 / 10 (baseline 3.8)
 
-| Dimension | Score | Priority | Status |
-|---|---|---|---|
-| Security | 3/10 | CRITICAL | FAIL |
-| Build & Types | 2/10 | CRITICAL | FAIL |
-| Concurrency | 4/10 | HIGH | FAIL |
-| Code Principles | 5/10 | HIGH | WARN |
-| Dependencies | 3/10 | MEDIUM | FAIL |
-| Observability | 3/10 | MEDIUM | FAIL |
-| Lifecycle | 4/10 | MEDIUM | WARN |
-| Code Quality | 5/10 | MEDIUM | WARN |
-| Dead Code | 5/10 | LOW | WARN |
+| Dimension | Score | Baseline | Priority | Status |
+|---|---|---|---|---|
+| Security | 8/10 | 3 | CRITICAL | PASS |
+| Build & Types | 8/10 | 2 | CRITICAL | PASS |
+| Concurrency | 7/10 | 4 | HIGH | PASS |
+| Code Principles | 6/10 | 5 | HIGH | WARN |
+| Dependencies | 7/10 | 3 | MEDIUM | WARN |
+| Observability | 8/10 | 3 | MEDIUM | PASS |
+| Lifecycle | 7/10 | 4 | MEDIUM | WARN |
+| Code Quality | 7/10 | 5 | MEDIUM | WARN |
+| Dead Code | 8/10 | 5 | LOW | PASS |
 
-Raw average 3.78 → hard caps: Security CRITICAL (≤4.0), Build CRITICAL (≤5.0) → **3.8**.
+Average 7.33; no CRITICAL findings remain, so no hard caps apply → **7.3**.
+
+### SOTA position (separate from code quality): 7 / 10 (baseline 3)
+
+Feature parity with Unsloth / Axolotl / LlamaFactory on the 2026 core set (SFT, DPO, ORPO, KTO,
+GRPO with built-in rewards and vLLM, reward models, vision SFT, tool-calling and reasoning chats,
+LoRA / rsLoRA / DoRA / QLoRA / full fine-tuning, GGUF + FP8/W4A16 export, OpenAI-compatible
+serving, reproducible runs). Not yet at 8: no DeepSpeed / sequence parallelism / efficient MoE
+training, no distillation (TRL GKD/GOLD) or model merging, no embedding-model training, no
+persistent job queue, and the GPU paths have not been exercised by an automated run.
+
+| Area | Score | Notes |
+|---|---|---|
+| Training coverage | 8 | Core 2026 set; missing distillation, merging, async/agentic RL |
+| Export & deploy | 8 | GGUF, FP8/W4A16, Hub card, llama-server / vLLM serving, remote client |
+| Reproducibility | 9 | run_config.yaml, dataset SHA-256, early seeding, resume, tracking, one version |
+| Security | 8 | See Security below |
+| Scale | 5 | DDP/FSDP via CLI; UI runs one GPU job at a time; no DeepSpeed/SP/MoE |
+| Code quality | 7 | mypy on all layers; `train_model()` still ~580 lines |
+| Test depth | 8 (was 6) | 88 % coverage, 505 tests; GPU suite written, not yet run on a GPU |
 
 ---
 
 ## Strengths
 
-1. **Clear layered architecture.** Unidirectional imports (`config → core → data → training → inference → export → ui/cli`) are respected in practice, and every Gradio event is wired in one place (`ui/app.py:build_demo`). This makes the fixes below local and low-risk.
-2. **Robust archive handling.** `data/loader.py:safe_extract_zip` combines `realpath` containment (with the `os.sep` prefix-collision guard) and zip-bomb limits (file count, total size, ratio) — genuinely correct.
-3. **Consistent optional-dependency gating.** `HAS_*` flags are centralised in `config/constants.py`; the Heretic check correctly uses `shutil.which` instead of spawning a subprocess.
-4. **Good defensive touches in output paths.** HTML escaping in the evaluation preview (`_esc`), token redaction on Hub/registry errors (`redact_sensitive_info`), non-root `USER llmuser` in the Docker image, and the heredoc-based `HF_TOKEN` login that keeps the token off the process command line.
-5. **Solid user documentation** (13 docs chapters) and vectorised data paths (PyArrow stats, pandas dedup).
+1. **Clear layered architecture, enforced by habit and review.** Unidirectional imports; every
+   Gradio event wired in `ui/app.py:build_demo`; constants and `HAS_*` flags in one module.
+2. **Tests that train for real.** `tests/test_smoke_training.py` trains tiny Llama/Qwen3/Qwen2.5-VL
+   models end to end (SFT, DPO, ORPO, KTO, GRPO, reward, vision, tools, DDP with 2 processes) on
+   both the oldest and newest supported library versions; CI requires the models (no silent skip).
+3. **Security defaults.** Remote code off unless `ALLOW_REMOTE_CODE`; login via `GRADIO_AUTH` with a
+   warning when exposed; safetensors-only adapters; zip-bomb limits; token redaction; API keys via
+   environment, never argv; torch ≥ 2.6 (CVE-2025-32434).
+4. **Reproducibility.** Every trainer writes `run_config.yaml` and a Hub-valid model card; runs can
+   be replayed (`train --config`) and resumed; seeds are set before the model is built.
+5. **One source of truth** for the version (`APP_VERSION`), logging (`LFT_LOG_LEVEL`), run folders
+   (`LFT_RUNS_DIR`) and the GPU queue (`LFT_GPU_JOBS`).
 
 ---
 
 ## Findings by Dimension
 
-### Security [3/10]
+Status of every baseline finding: **FIXED** (with the tier that fixed it) or **OPEN**.
+New findings from this audit are marked **NEW**.
 
-| Severity | Location | Issue | Recommendation |
-|---|---|---|---|
-| **CRITICAL** | `main.py:59-66`, `Dockerfile:123,171`, `docker-compose.yml` ports, 12× `trust_remote_code=True` (e.g. `inference/generate.py:90`, `training/sft.py:223,301`) | The UI binds `0.0.0.0` with **no authentication**, and any visitor can type an arbitrary Hub repo ID into "custom model" fields. Every load path passes `trust_remote_code=True`, which **executes Python code from that repo on the server** → unauthenticated remote code execution. (Latent today only because `main.py` cannot launch — it becomes live the moment the import bug is fixed.) | Default `trust_remote_code=False`; expose an explicit, off-by-default "Allow remote code" setting. Bind to `127.0.0.1` by default; wire `auth=` (env `GRADIO_AUTH`) into `demo.launch`. |
-| **HIGH** | `Dockerfile` (`torch==2.5.1+cu126`), `ci.yml` (`torch==2.5.1`) + `export/utils.py:on_peft_zip_upload` → `inference/generate.py:93` | PyTorch ≤ 2.5.1 is affected by **CVE-2025-32434** (CVSS 9.3): `torch.load(weights_only=True)` can be bypassed for RCE. A user can upload a PEFT ZIP containing a crafted `adapter_model.bin`; the extracted path auto-populates `lora_path`, and `PeftModel.from_pretrained` loads it via `torch.load`. | Pin `torch>=2.6.0` everywhere (Dockerfiles, CI, requirements floor). Prefer safetensors-only adapters (reject `.bin` in uploaded ZIPs). |
-| **HIGH** | `docker-entrypoint.sh:93-110` + `main.py:25` | The entrypoint's advertised `SHARE=true` and `EXTRA_ARGS="--auth user:pass"` append flags to `python3 main.py`; `main.py` routes **any** argument to the Typer CLI, which rejects them. The only documented way to add auth therefore cannot work. | Read `SHARE`/`GRADIO_AUTH` from env inside `main.py` and pass them to `demo.launch(share=..., auth=...)`; stop passing them as argv. |
-| MEDIUM | `core/state.py:49-58` | `validate_path_traversal` is a string blacklist (`..`, `\`, NUL); it does not constrain *where* paths point. User-editable path fields (`gguf_tab export_model_path`, `merge_adapter_path_in`, `lora_path`) accept any absolute server path. Note: simply blocking absolute paths is **wrong** here — Gradio uploads and `tempfile.mkdtemp()` outputs are absolute. | Replace with an allow-list: resolve with `realpath` and require the result to be under the temp dir, the Gradio upload dir, or a configured workspace root. |
-| MEDIUM | `constants.py` `gradio>=5.0.0`, `transformers>=4.48.0` | Version floors permit releases with published advisories (e.g. Gradio file-access/ACL-bypass advisories). | Raise floors to current patched versions and add `pip-audit` to a CI that actually runs (see Build). |
-| LOW | `inference/generate.py:147`, `inference/vllm_runner.py:85,235`, training error returns | Exception text is shown raw in the UI; only Hub/registry paths use `redact_sensitive_info`. | Route all user-facing error strings through `redact_sensitive_info`. |
+### Security [8/10]
 
-### Build & Types [2/10]
+| Severity | Status | Location | Issue | Recommendation / fix |
+|---|---|---|---|---|
+| CRITICAL | FIXED (T1) | `main.py`, loaders | Unauthenticated UI on `0.0.0.0` + `trust_remote_code=True` everywhere → RCE | `trust_remote_code=ALLOW_REMOTE_CODE` (off); bind `127.0.0.1`; `GRADIO_AUTH`; exposure warning |
+| HIGH | FIXED (T1) | Docker, CI, adapter upload | torch ≤ 2.5.1 (CVE-2025-32434) + `.bin` adapters | torch ≥ 2.6 (images: 2.14); `validate_adapter_dir()` rejects pickle weights |
+| HIGH | FIXED (T1) | entrypoint / `main.py` | `SHARE` / auth passed as argv to the CLI | `GRADIO_SHARE`/`SHARE`/`GRADIO_AUTH` read from env in `main.py` |
+| MEDIUM | FIXED (T1+) | dependency floors | Gradio/Transformers floors with advisories | gradio ≥ 6, transformers ≥ 4.56.2; pip-audit in CI (3 documented waivers) |
+| MEDIUM | OPEN | `core/state.py:46` `validate_path_traversal` | Still a string blacklist (`..`, `\`, NUL). Absolute server paths in path fields are accepted — mitigated by auth + localhost default, not by the check | Allow-list: `realpath` must be under the temp dir, Gradio upload dir or `LFT_RUNS_DIR` (absolute paths are legitimate, so do not simply block them) |
+| LOW | OPEN | `ui/handlers.py:129,424,497,561`, `inference/vllm_runner.py:95,249`, `inference/generate.py:162`, trainers' failure returns | Raw exception text shown in the UI without `redact_sensitive_info` | Route every user-facing error through `redact_sensitive_info` |
 
-| Severity | Location | Issue | Recommendation |
-|---|---|---|---|
-| **CRITICAL** | `main.py:31,46` | `from commands import app` / `from app import build_demo` — no root-level `app.py` or `commands.py` exists (verified: `importlib.util.find_spec` returns `None` for both). Both UI mode and CLI mode raise `ModuleNotFoundError`; Docker's `exec python3 main.py` fails on start. Broken since commit `9bbf4d8`. | `from cli.commands import app as cli_app` and `from ui.app import build_demo`. Add a smoke test that imports `main` and calls `build_demo()`. |
-| **CRITICAL** | `ci.yml` (repo root); no `.github/` directory | GitHub Actions only reads `.github/workflows/*.yml`. The lint/test/pip-audit/hadolint pipeline has **never executed**, which is how the entry-point break shipped. | `git mv ci.yml .github/workflows/ci.yml`. |
-| **HIGH** | `training/sft.py:451,466,490`; `training/reward.py:168`; `training/orpo.py:177` | Trainers are constructed with `tokenizer=`. Current TRL (1.x) and Transformers 5 require `processing_class=` (confirmed via current docs). DPO's `except TypeError` fallback (`sft.py:457-472`) passes `tokenizer=` *and* `beta=` again, so it fails too. | Pass `processing_class=tokenizer`; drop the TypeError fallback and pin a supported TRL range. |
-| **HIGH** | `training/ppo.py:148-232` | Uses the legacy PPO API (`PPOTrainer(config=...)`, `.generate()`, `.step()`) removed in TRL 0.12. In TRL 1.x, `PPOTrainer`/`ORPOTrainer` live under `trl.experimental.*`, so `HAS_PPO`/`HAS_ORPO` become `False` and PPO, ORPO **and Reward training** (which also checks `HAS_PPO`, `reward.py:66`) are disabled with a misleading "pip install trl" hint. | Rewrite PPO against the current `trl.experimental.ppo` API, or pin `trl<0.12` explicitly and document it. Import ORPO from its new location with a fallback. |
-| **HIGH** | `training/ppo.py:225-226` | `AutoModelForCausalLMWithValueHead.forward` returns a tuple `(logits, loss, value)`; `outputs.values` is `tuple.values` → `AttributeError`. Reward computation cannot run on any TRL version. | Unpack `_, _, values = reward_model(**inputs)`. Better: train/load the reward model as `AutoModelForSequenceClassification(num_labels=1)`. |
-| **HIGH** | `training/reward.py:98-170` | `RewardTrainer` expects a sequence-classification model whose output has `["logits"]`; it's given a value-head causal LM (tuple output). `tokenize_reward_function` also drops the `prompt`, so the reward model never sees the question. | Use `AutoModelForSequenceClassification(..., num_labels=1)`; build chosen/rejected texts as `prompt + response` (or pass raw columns to current `RewardTrainer`). |
-| MEDIUM | `pyproject.toml` `[tool.setuptools.packages.find] where=["."]`, scripts `main:main` | `main.py` is a module, not a package, so it isn't installed → the `llm-finetune` console script fails on import. `find` also installs generic top-level packages named `config`, `core`, `data`, `ui`, `tests`… into site-packages (name collisions). | Move to a `src/llm_fine_tuner/` layout or declare `py-modules = ["main"]` and an explicit package include list. |
-| MEDIUM | Tests | 22 of the 41 files in `tests/` are `benchmark_*`/`verify_*` scripts; no test imports `main.py`, constructs a real trainer, or exercises `ui.app.build_demo()`. | Add import/smoke tests (tiny model, `max_steps=1`) and a `build_demo()` test. |
+### Build & Types [8/10]
 
-### Concurrency [4/10]
+| Severity | Status | Location | Issue | Recommendation / fix |
+|---|---|---|---|---|
+| CRITICAL | FIXED (T1) | `main.py` | Imports of non-existent top-level modules — app could not start | `ui.app` / `cli.commands`; import + `build_demo()` smoke test |
+| CRITICAL | FIXED (T1) | CI | `ci.yml` at repo root never ran | `.github/workflows/ci.yml`; replayed locally before every push |
+| HIGH | FIXED (T1/T2) | trainers | `tokenizer=` instead of `processing_class=`; legacy PPO; value-head reward model | Rebuilt on current TRL: PPO → GRPO, reward model = sequence classifier |
+| MEDIUM | FIXED (T6) | packaging | `main.py` not installed; generic top-level packages | `py-modules = ["main"]`, explicit package list, CI wheel check |
+| MEDIUM | FIXED (T11/T12) | tests | 22 uncollected benchmark/verify scripts | Deleted; their unique checks moved into real tests |
+| **NEW** MEDIUM | FIXED (T12) | CI mypy | mypy skipped `training/`, `inference/`, `ui/`, `main.py` | All layers checked |
+| **NEW** MEDIUM | OPEN | GPU paths | QLoRA 4-bit, half-precision full FT, Flash Attention + packing, vLLM GRPO, NCCL have never run in automation | `tests/test_gpu.py` + `.github/workflows/gpu.yml` (manual, or weekly when `GPU_RUNNER` is set) — **run it** |
 
-| Severity | Location | Issue | Recommendation |
-|---|---|---|---|
-| **HIGH** | `core/state.py:74-125` | A single process-global `AppState` is shared by **all browser sessions**: one user's Stop button stops everyone's training; `cleanup_resource("_last_model_dir")` in user B's run deletes user A's freshly trained model, ZIP, GGUF, merged model and batch CSV. | Key state by `gr.Request.session_hash` (per-session `gr.State` for stop events and owned paths), or document single-user use and enforce `concurrency_limit=1` globally. |
-| MEDIUM | `training/ppo.py` (no `stop_event.clear()`), `inference/evaluation.py:611` | `stop_event` is only cleared when SFT/Reward/ORPO start. After any Stop, PPO exits its loop immediately and reports "✅ PPO fine-tuning complete!" for an untrained model; evaluation silently produces **zero predictions** and metrics of 0.0. | Clear the event at the start of every long-running job; give evaluation its own cancel event. |
-| MEDIUM | `inference/generate.py:63-111` | Loads happen outside the lock with no per-key guard: two concurrent requests (same or different models) load in parallel, briefly holding 2–3 models in VRAM → OOM. The old model is also still resident while the new one loads. | Per-key load lock with double-checked cache read; evict + `torch.cuda.empty_cache()` *before* loading a different model. |
-| MEDIUM | `inference/vllm_runner.py:165-184` | `app_state.vllm_cache` is read/evicted/written with no lock; `del` on a vLLM `LLM` does not reliably release GPU memory. | Guard with a lock; on eviction call the engine's shutdown / `destroy_model_parallel` + `gc.collect()` + `empty_cache()`. |
-| MEDIUM | `inference/evaluation.py:152-174` | Forces the `fork` start method inside a multi-threaded Gradio server that has initialised CUDA. Forking a threaded process can deadlock (Python 3.12+ warns about exactly this). | Use `forkserver`/`spawn` for the pool, or run BLEU/ROUGE sequentially (it's cheap relative to generation). |
+### Concurrency [7/10]
 
-### Code Principles [5/10]
+| Severity | Status | Location | Issue | Recommendation / fix |
+|---|---|---|---|---|
+| HIGH | FIXED (T1) | `core/state.py` | Global state shared by all sessions (Stop / cleanup crossed users) | `SessionState` per browser session (`app_state.session_for(request)`) |
+| MEDIUM | FIXED (T1/T5) | Stop / evaluation | Stop event not cleared; evaluation silently empty after Stop | Cleared at the start of every job; evaluation takes the session's event |
+| MEDIUM | FIXED (T1) | `inference/generate.py` | Parallel loads of the same model | Per-key load lock + `_cache_lock` |
+| MEDIUM | FIXED (T5) | `inference/evaluation.py` | `fork` in a threaded server | Metrics computed in-process |
+| MEDIUM | OPEN (mitigated) | `inference/vllm_runner.py:179-197` | `app_state.vllm_cache` read/evicted without a lock | UI calls are serialised by the GPU queue (`GPU_JOB`); add a lock for other callers |
 
-| Severity | Location | Issue | Recommendation |
-|---|---|---|---|
-| MEDIUM | `training/sft.py:86-113` | `train_model` takes 25 positional-capable parameters and spans ~490 lines (tokenise, 3 load paths, 5 PEFT variants, 2 trainers, save, Heretic). | Introduce a `TrainConfig` dataclass; split into `load_model()`, `apply_peft()`, `build_trainer()`. |
-| MEDIUM | `sft.py:212-307`, `orpo.py:90-108`, `ppo.py:99-104`, `generate.py:86-91`, `vllm_runner.py:63-68` | Model-loading/quantisation config duplicated 5×, with drift (fp16 compute in one path, bf16 in another, `trust_remote_code` inconsistent). | One `core/model_loading.py:load_causal_lm(name, quant, flash_attn, allow_remote_code)` helper. |
-| MEDIUM | `sft.py:185-194`, `reward.py:124-133`, `orpo.py:121-130` | Tiny-dataset train/eval split guard copied 3×. | `data/splits.py:safe_train_eval_split(ds)`. |
-| MEDIUM | `generate.py:199-224`, `evaluation.py:312-348`, `evaluation.py:610-639`, `cli/commands.py:434-452` | Batched generate + prompt-strip loop copied 4×. | Single `inference.generate.generate_batch(model, tok, prompts, **gen_kwargs)`. |
-| LOW | `export/hub.py:57-67`, `export/registry.py:205-213,246-254` | HF token validation copied 3×. | `core.state.validate_hf_token()`. |
+### Code Principles [6/10]
 
-### Dependencies [3/10]
+| Severity | Status | Location | Issue | Recommendation |
+|---|---|---|---|---|
+| MEDIUM | OPEN | `training/sft.py:118` | `train_model()` is ~580 lines with ~35 parameters, 21 of them positional (called positionally from ~20 places) | `TrainConfig` dataclass; split into load / apply PEFT / build trainer |
+| MEDIUM | OPEN | `training/sft.py:279,351`, `orpo.py:112`, `vision.py:109` | 4-bit `BitsAndBytesConfig` built in 3 files | One `core` helper for quantised loading |
+| MEDIUM | OPEN | `cli/commands.py` (893 lines) | All commands in one module | One module per command group |
+| MEDIUM | FIXED (T2/T5) | split guard, batched generation | Copied 3–4× | Shared helpers (`generate_predictions`, dataset split helpers) |
+| LOW | OPEN | `export/hub.py`, `export/registry.py` | HF-token validation duplicated | `validate_hf_token()` in `core/state.py` |
 
-| Severity | Location | Issue | Recommendation |
-|---|---|---|---|
-| **HIGH** | `requirements.txt`, `pyproject.toml` | Only lower bounds (`trl>=0.8.0`, `transformers>=4.48.0`, `peft>=0.14.0`, `gradio>=5.0.0`). A fresh install resolves to TRL 1.x / Transformers 5.x, which break DPO, Reward, PPO and ORPO (see Build). | Declare tested ranges (e.g. `trl>=0.x,<0.y`) and ship a lock/constraints file; CI should test the upper bound. |
-| **HIGH** | `Dockerfile`, `ci.yml` | `torch==2.5.1` pinned — vulnerable to CVE-2025-32434 (fixed in 2.6.0). Recent Transformers also refuse `.bin` loads on torch < 2.6. | `torch>=2.6` in both images and CI. |
-| MEDIUM | `requirements.txt` | Declares `vllm`, `auto-gptq`, `exllamav2`, `bert-score`, `nlpaug` as **hard** requirements while the code and `pyproject.toml` treat them as optional. `vllm` drags its own torch pin; `auto-gptq` is no longer maintained and fails to build on many platforms → `pip install -r requirements.txt` fails on CPU/macOS. | Keep `requirements.txt` to core deps; reference extras (`.[vllm]`, `.[quant]`). Replace `auto-gptq` with `gptqmodel`/Transformers-native GPTQ. |
-| LOW | `requirements.txt` | `PyPDF2` is deprecated in favour of `pypdf`. `vllm>=0.2.0` floor is meaningless. | Migrate to `pypdf`; set a realistic vLLM floor. |
-| LOW | `inference/vllm_runner.py:177`, `constants.py:83` | UI offers quantization `"bnb"`; vLLM expects `"bitsandbytes"` → engine creation fails. | Map `"bnb" → "bitsandbytes"` or change the option label/value. |
+### Dependencies [7/10]
 
-### Observability [3/10]
+| Severity | Status | Location | Issue | Recommendation / fix |
+|---|---|---|---|---|
+| HIGH | FIXED (T1) | ranges | Floors only → incompatible TRL/Transformers | Tested ranges, CI on floor and ceiling |
+| HIGH | FIXED (T1) | torch pin | CVE-2025-32434 | torch ≥ 2.6 |
+| MEDIUM | OPEN | `requirements.txt:50-51,74` | `auto-gptq`, `exllamav2`, `vllm` still hard requirements (Dockerfiles filter them out; `pip install -r` fails on CPU/macOS) | Move them to extras only (`.[quant]`, `.[vllm]`); `auto-gptq` is unmaintained |
+| LOW | FIXED | PyPDF2 | Deprecated | `pypdf>=6.16.1` |
+| LOW | OPEN | `config/constants.py:155` | vLLM quantisation option `"bnb"`; vLLM expects `"bitsandbytes"` | Map `bnb → bitsandbytes` |
 
-| Severity | Location | Issue | Recommendation |
-|---|---|---|---|
-| MEDIUM | Whole codebase | Zero modules use `logging`; diagnostics are `print()` and user-facing strings. Server operators get no timestamps, levels, or tracebacks. | Add a module logger per file; `logger.exception()` in every broad `except`. |
-| MEDIUM | `sft.py:573`, `loader.py:121,221`, `ppo.py:132` | `raise RuntimeError(f"...: {e}")` without `from e` discards the original traceback (ruff B904 — enabled in config, but lint never runs). | `raise RuntimeError(...) from e`. |
-| MEDIUM | `training/sft.py:543-552` | Heretic subprocess return code/stderr ignored; UI reports "🔓 Heretic Mode applied!" even when the tool failed. | Check `returncode`, surface stderr. |
-| LOW | `ui/handlers.py:223-229`, `inference_tab.py:46` | `batch_generate` returns error *strings* into a `gr.File` output, so users see a generic "file not found" instead of the message. | Return `(file_or_None, status_str)` to two components. |
+### Observability [8/10]
 
-### Lifecycle [4/10]
+| Severity | Status | Location | Issue | Recommendation / fix |
+|---|---|---|---|---|
+| MEDIUM | FIXED (T11) | whole codebase | No logging, `print()` diagnostics | Module loggers; `main.py` configures `LFT_LOG_LEVEL`; a test forbids `print()` |
+| MEDIUM | FIXED | `raise … from e` | Lost tracebacks | ruff B904 clean |
+| MEDIUM | FIXED (T6) | Heretic | Return code ignored | Checked |
+| **NEW** MEDIUM | FIXED (T12) | `core/callbacks.py` `LoggingCallback` | Evaluation logs separately from training, so **eval loss never reached the loss chart** (always NaN) | Eval results attach to the record of their step; `final_train_loss()` skips eval-only records; covered by a real training test |
+| LOW | OPEN | `ui/tabs/inference_tab.py:53` | Batch test returns error strings into a `gr.File` output | Separate status text component |
 
-| Severity | Location | Issue | Recommendation |
-|---|---|---|---|
-| **HIGH** | `training/sft.py:511-573`, `reward.py:175-196`, `ppo.py:187-257`, `orpo.py:188-211` | GPU cleanup (`del model`, `empty_cache`, `gc.collect`) only runs on success. Any exception during training (OOM, bad data, API mismatch) leaves the model in VRAM until process restart. | `try/finally` around each training body. |
-| MEDIUM | `ui/handlers.py:79-80,149`, `sft.py:497-505` | UI "Resume from checkpoint" can never work: each run uses a fresh `mkdtemp()` and the previous run's directory is deleted first. | Persist runs under a stable workspace (`/app/models/<run-name>`) and resume from there. |
-| MEDIUM | `export/hub.py:75`, `export/utils.py:36` | Hub push and ZIP include `checkpoint-*` dirs (optimizer states, RNG state), multiplying upload size. `upload_folder` on a **new** repo fails — `create_repo` is never called (contrary to CLAUDE.md). | `create_repo(exist_ok=True)` first; `ignore_patterns=["checkpoint-*"]` (and skip them in the ZIP). |
-| MEDIUM | `config/constants.py:147-244` | Import-time side effects: importing `unsloth` (which monkey-patches Transformers globally even when not selected), `vllm`, `exllamav2`, and a network `nltk.download("punkt")` on every cold start. `sentence_bleu` doesn't need punkt at all. | Probe with `importlib.util.find_spec` and import lazily at call sites; drop the punkt download. |
-| LOW | `docker-compose.yml` | `HF_HUB_ENABLE_HF_TRANSFER=1` is set but `hf_transfer` is not installed; on `huggingface_hub` versions that honour it, downloads fail. `TRANSFORMERS_CACHE` is deprecated in favour of `HF_HOME`. | Install `hf_transfer` (or drop the flag); remove `TRANSFORMERS_CACHE`. |
+### Lifecycle [7/10]
 
-### Code Quality [5/10]
+| Severity | Status | Location | Issue | Recommendation / fix |
+|---|---|---|---|---|
+| HIGH | PARTLY FIXED | trainers | GPU memory not freed on failure | `try/finally` cleanup in SFT, reward, ORPO, KTO, GRPO; **`training/vision.py` has none** — add the same `finally` |
+| MEDIUM | FIXED (T3) | UI runs | Resume impossible (fresh temp dir per run) | Persistent `<LFT_RUNS_DIR>/<run name>/` |
+| MEDIUM | PARTLY FIXED | `export/hub.py:113`, `export/utils.py` | `create_repo(exist_ok=True)` added; Hub push and ZIP still include `checkpoint-*` (optimizer states) | `ignore_patterns=["checkpoint-*"]`, skip them in the ZIP |
+| MEDIUM | OPEN | `config/constants.py:233,344` | Import-time `import unsloth` (patches Transformers globally) and `nltk.download("punkt")` | `find_spec` probe + lazy import at call sites (as done for Liger, lm-eval, llm-compressor) |
+| LOW | OPEN | `docker-compose.yml:61-63,110-111`, Dockerfiles | `TRANSFORMERS_CACHE` deprecated; `HF_HUB_ENABLE_HF_TRANSFER` is deprecated in huggingface_hub 1.33 (hf_transfer no longer used — warns) | Drop both; keep `HF_HOME` |
 
-| Severity | Location | Issue | Recommendation |
-|---|---|---|---|
-| MEDIUM | `data/preprocessing.py:216-273` + `sft.py:152,475` | `pad_token = eos_token` plus `DataCollatorForLanguageModeling` masks every pad **and EOS** position to `-100`; the non-chat path never appends EOS anyway. Fine-tuned models don't learn to stop generating. | Append `tokenizer.eos_token` to each text; use a distinct pad token or a completion-only collator. |
-| MEDIUM | `sft.py:421`, `orpo.py:147`, `reward.py:150` | `fp16=True` is forced on CUDA even when weights/compute are bf16 (QLoRA Enhanced, flash-attn paths) — mixed AMP modes can error ("unscale FP16 gradients") or degrade. | `bf16=is_bf16_supported()`, `fp16=not bf16`. |
-| MEDIUM | `sft.py:366-381`, `constants.py:141-145` | The UI's "Adapters" PEFT option can never work: `peft` has no `AdapterConfig` (it belongs to the separate `adapters` library), so `HAS_ADAPTER_CONFIG` is always `False`. | Remove the option or implement it with the `adapters` package. |
-| MEDIUM | `data/augmentation.py:77-125`, `ui/handlers.py:97-99` | For DPO data (no `text`/`instruction` column), "augmentation" silently duplicates rows N× and reports success. Augmented/filtered datasets bypass `validate_and_clean_dataset` and the column mapping; augment and filter don't chain (each re-reads the original file). | Return an explicit "not supported for DPO" message; run validation on state datasets; chain operations on the current state. |
-| LOW | `data/loader.py:154-161` | JSON/JSONL ignore `column_mapping` and don't select/enforce columns; nulls become the literal string `"None"` after `astype(str)` in cleaning. | Load via pandas for mapping parity; `fillna("")` before casting. |
-| LOW | `export/registry.py:148` | Versions sorted lexicographically (`v10` before `v2`). | Sort with `packaging.version.parse`. |
-| LOW | `ui/app.py:68-69`, `main.py`, `requirements.txt` header | "PRODUCTION READY" banners conflict with the current state; UI header lists changelog items instead of guidance. | Replace with version + concise status. |
+### Code Quality [7/10]
 
-### Dead Code [5/10]
+| Severity | Status | Location | Issue | Recommendation / fix |
+|---|---|---|---|---|
+| MEDIUM | FIXED (T2) | SFT data | EOS never trained, pads masked | TRL prompt-completion format; EOS appended by SFTTrainer |
+| MEDIUM | FIXED (T2) | precision | `fp16=True` forced with bf16 weights | `select_precision` / `compute_dtype` |
+| MEDIUM | OPEN | `training/sft.py:435`, `ui/tabs/train_tab.py:117` | "Adapters" PEFT option always fails: PEFT 0.21 has no `AdapterConfig`; the error message suggests a fix (`adapter-transformers`) that does not add it | Remove the option (UI + plumbing) or replace it with a PEFT method that exists (e.g. IA³) — **needs a product decision** |
+| **NEW** HIGH | FIXED (T12) | `ui/handlers.py:on_file_upload` | A CSV/Excel with non-standard column names raised an error before the column-mapping dropdowns were shown, so such files could not be mapped at all (regression from the "in-memory refresh" optimisation) | Columns checked before conversion; raw rows + dropdowns shown; covered by tests |
+| MEDIUM | OPEN | `data/augmentation.py:122` | Data without `text`/`instruction` (DPO) is silently duplicated N× and reported as augmented; augment/filter re-read the file and ignore the column mapping | Say "not supported for preference data"; operate on the prepared dataset |
+| LOW | OPEN | `data/loader.py` JSON/JSONL branch | `column_mapping` ignored for JSON | Load through pandas like CSV |
+| LOW | OPEN | `export/registry.py:150` | Versions sorted as strings (`v10` before `v2`) | `packaging.version.parse` |
+| LOW | FIXED (T11) | banners | "PRODUCTION READY" / stale version strings | Removed; version from `APP_VERSION` |
 
-| Severity | Location | Issue | Recommendation |
-|---|---|---|---|
-| LOW | `training/sft.py:576-620` | `load_qlora_model_v27` — self-described dead code. | Delete. |
-| LOW | `ui/handlers.py:230-240` | Unreachable duplicate block after `return result`. | Delete. |
-| LOW | `tests/benchmark_*.py` (19), `tests/verify_*.py` (3) | Not collected by pytest; ad-hoc scripts left by automated PRs. | Move to `benchmarks/` or delete. |
-| INFO | Remote branches | ~80 stale `bolt-*`, `sentinel-*`, `palette-*` branches. | Prune merged/abandoned branches. |
+### Dead Code [8/10]
+
+| Severity | Status | Location | Issue | Recommendation / fix |
+|---|---|---|---|---|
+| LOW | FIXED | `load_qlora_model_v27`, duplicate handler block | Dead code | Removed |
+| LOW | FIXED (T11) | `archive/`, `gradio.log`, 17 benchmark scripts, `test_batch_size.py`, verify scripts | Dead files | Removed |
+| LOW | FIXED | remote branches | ~80 stale bot branches | 2 heads remain |
+| LOW | OPEN | `config/constants.py:222` `HAS_ADAPTER_CONFIG` | Always `False` on real PEFT (see "Adapters") | Goes with the Adapters decision |
 
 ---
 
 ## Advisory Findings
 
-- **Rule 3 (single consumer):** duplicated HF-token validation in `export/registry.py` is consumed only by the Share tab — kept as LOW rather than MEDIUM.
-- **Rule 4 (cohesion):** `inference/evaluation.py` (696 LOC) has a single responsibility, a unified data model (prompt/reference/prediction), and a clear domain boundary → `[High cohesion module]`; the inline CSS block could still move to `ui/css.py`.
+- **Rule 4 (cohesion):** `inference/evaluation.py` (710 LOC) and `data/preprocessing.py` (642 LOC)
+  have single responsibilities and unified data models → `[High cohesion module]`, not split.
+- **Rule 3 (single consumer):** HF-token validation duplication is consumed only by the Share tab —
+  kept LOW.
+- **mypy with the real libraries installed** reports ~190 errors, almost all library-typing noise
+  (`LoraConfig(**kwargs)` overloads, PEFT model variance, guarded `try/except` imports). CI types
+  torch/transformers/peft/trl as `Any`; that run is clean. The one real bug it surfaced is the
+  "Adapters" finding above.
 - No ADR directory exists, so no findings were downgraded under Rule 1.
 
 ---
 
-## Status of previous audit (branch `claude/project-audit-report-qsOS1`, commit `f20f80b`)
+## Audit history
 
-That commit is **not merged** and is based on a `main` that is now 84 commits old. Most of its fixes remain valid against current `main` (GPU `finally` blocks, per-key inference lock, `MAX_VLLM_ENGINES` clamp, DPO identical-pair warning, early-stop guard, progress 100 %, hyperparameter coercion, CSV quoting). **One change must not be applied:** BUG-02 (rejecting absolute paths in `validate_path_traversal`) would break every Gradio upload (`/tmp/gradio/...`), every `mkdtemp()` output directory, GGUF export and batch inference. The correct fix is the allow-list approach described under Security. Recommendation: restart the branch from current `main` and re-apply the valid subset.
+| Date | Revision | Score | Notes |
+|---|---|---|---|
+| 2026-09-27 | `origin/main@7491ca6` | 3.8 | Baseline: app could not start, CI never ran, unauthenticated RCE |
+| 2026-09-29 | Tier 12 branch | 7.3 | All CRITICAL/HIGH fixed; SOTA 7/10; open items are MEDIUM/LOW |
+
+Work between the two audits (all verified with the CI workflow replayed locally, floor and
+ceiling library versions, live UI and Docker CPU checks before each push):
+T1 entry point, security, per-session state, CI · T2 trainers on current TRL (GRPO replaces PPO,
+KTO, reward model) · T3 run config, persistent runs, tracking, seeds · T4 Hub datasets, chat data ·
+T5 evaluation (judge, base comparison, lm-eval benchmarks) · T6 packaging, full FT, GGUF merge,
+model card · T7 all-linear LoRA, DoRA/rsLoRA, GRPO options · T8 tool calling, reasoning, vision ·
+T9 multi-GPU via accelerate, GPU queue · T10 FP8/W4A16 export, serving · T11 logging, single
+version, dead code · T12 mypy on all layers, coverage 76 % → 88 % with an 85 % floor, GPU test
+suite + workflow, two bugs fixed (column mapping on upload, eval loss in the chart).
 
 ---
 
 ## Recommended Actions (Priority Order)
 
-1. **[CRITICAL]** Fix `main.py` imports (`ui.app`, `cli.commands`) and add an import smoke test.
-2. **[CRITICAL]** Move `ci.yml` → `.github/workflows/ci.yml` so lint, tests and `pip-audit` actually run.
-3. **[CRITICAL]** Default `trust_remote_code=False` with an explicit opt-in; bind to `127.0.0.1` by default; implement `auth`/`share` from env in `main.py` (and stop passing them as argv from the entrypoint).
-4. **[HIGH]** Pin `torch>=2.6` (CVE-2025-32434) in Docker and CI; reject `.bin` files in uploaded adapter ZIPs.
-5. **[HIGH]** Declare tested upper bounds for TRL/Transformers/PEFT; migrate trainer calls to `processing_class=`.
-6. **[HIGH]** Rebuild the RLHF path: reward model as sequence classifier with prompt-aware inputs; PPO on the current TRL API (or pin and document the legacy range); fix `outputs.values`.
-7. **[HIGH]** `try/finally` GPU cleanup in all four trainers; clear `stop_event` at the start of every job; scope state per session.
-8. **[MEDIUM]** Hub push: `create_repo(exist_ok=True)` + ignore `checkpoint-*`; fix EOS/label masking; `bf16`/`fp16` selection; remove the "Adapters" option; vLLM `bitsandbytes` value.
-9. **[MEDIUM]** Split `requirements.txt` into core vs extras; lazy-import heavy optional deps; replace `print` with `logging`; `raise ... from e`.
-10. **[LOW]** Delete dead code and benchmark scripts from `tests/`; prune stale branches; tone down "PRODUCTION READY" banners.
+1. **[MEDIUM]** Run `.github/workflows/gpu.yml` on a GPU runner (GitHub T4 larger runner or
+   self-hosted); set the `GPU_RUNNER` variable for the weekly run. Fix whatever it finds.
+2. **[MEDIUM]** Decide on the "Adapters" option: remove it, or replace it with IA³.
+3. **[MEDIUM]** Path allow-list in `validate_path_traversal` (temp / upload / runs directories).
+4. **[MEDIUM]** Move `vllm`, `auto-gptq`, `exllamav2` out of `requirements.txt` into extras.
+5. **[MEDIUM]** Exclude `checkpoint-*` from Hub push and the download ZIP.
+6. **[MEDIUM]** Lazy `unsloth` import; drop the import-time `nltk.download`; `finally` GPU cleanup in `training/vision.py`.
+7. **[MEDIUM]** Split `train_model()` behind a `TrainConfig`; one quantised-loading helper; split
+   `cli/commands.py`.
+8. **[LOW]** Redact all UI error text; vLLM `bnb → bitsandbytes`; registry version sort; JSON
+   column mapping; DPO augmentation message; drop deprecated `TRANSFORMERS_CACHE` /
+   `HF_HUB_ENABLE_HF_TRANSFER`; `vllm_cache` lock.
+9. **[Roadmap]** Tier 13 — distillation (TRL GKD/GOLD) and model merging; Tier 14 — DeepSpeed/FSDP
+   presets, long context, MoE.
 
 ---
 
 ## Sources Consulted
 
-- Context7 — TRL v1.0.0 docs: `ORPOTrainer`/`PPOTrainer` under `trl.experimental`, `processing_class` in trainer signatures.
-- Context7 — Transformers v5.0.0 migration guide: `processing_class`, `use_fast` ignored, `dtype` argument.
-- [GitHub Advisory GHSA-53q9-r3pm-6pq6 / CVE-2025-32434](https://github.com/advisories/GHSA-53q9-r3pm-6pq6) — PyTorch ≤ 2.5.1 `torch.load(weights_only=True)` RCE, fixed in 2.6.0.
-- [Gradio security advisories](https://github.com/gradio-app/gradio/security) and [A Security Review of Gradio 5](https://huggingface.co/blog/gradio-5-security).
-- [vLLM BitsAndBytes documentation](https://docs.vllm.ai/en/stable/features/quantization/bnb/) — `quantization="bitsandbytes"`.
-- Direct inspection of every non-archive Python module, Dockerfiles, entrypoint, compose file, and CI config at `origin/main@7491ca6`.
+- Direct inspection of every module on the audited branch; coverage from
+  `pytest --cov=.` (88 %, 498 passed, 7 GPU tests skipped on CPU); mypy 2.3 in the CI setup and with
+  the real libraries installed.
+- [GitHub Docs — Larger runners reference](https://docs.github.com/en/actions/reference/runners/larger-runners)
+  (GPU runner: 4 vCPU, Tesla T4, 16 GB VRAM) and
+  [Choosing the runner for a job](https://docs.github.com/en/actions/writing-workflows/choosing-where-your-workflow-runs/choosing-the-runner-for-a-job)
+  (expressions in `runs-on`).
+- [TRL releases](https://github.com/huggingface/trl/releases), [Async GRPO docs](https://huggingface.co/docs/trl/async_grpo_trainer),
+  [GKD trainer](https://github.com/huggingface/trl/blob/main/docs/source/gkd_trainer.md),
+  [GOLD trainer](https://huggingface.co/docs/trl/main/en/gold_trainer).
+- [Unsloth vs Axolotl vs TRL vs LLaMA-Factory (MarkTechPost, Jul 2026)](https://www.marktechpost.com/2026/07/22/unsloth-vs-axolotl-vs-trl-vs-llama-factory-a-fine-tuning-framework-comparison-on-speed-vram-and-multi-gpu/),
+  [Fine-Tuning in 2026 (DEV)](https://dev.to/ultraduneai/eval-003-fine-tuning-in-2026-axolotl-vs-unsloth-vs-trl-vs-llama-factory-2ohg).
+- huggingface_hub 1.33 source (`constants.py`: `HF_HUB_ENABLE_HF_TRANSFER` deprecated).
+- Baseline sources (2026-09-27): TRL 1.0 / Transformers 5 docs via Context7,
+  [CVE-2025-32434 / GHSA-53q9-r3pm-6pq6](https://github.com/advisories/GHSA-53q9-r3pm-6pq6),
+  [Gradio security advisories](https://github.com/gradio-app/gradio/security),
+  [vLLM BitsAndBytes docs](https://docs.vllm.ai/en/stable/features/quantization/bnb/).

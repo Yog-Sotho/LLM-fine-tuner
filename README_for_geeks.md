@@ -657,6 +657,7 @@ pytest tests/test_cli.py -v                # CLI commands and guards
 pytest tests/test_data_loader.py -v        # loader, ZIP security
 pytest tests/test_preprocessing.py -v      # validate, duplicate detection
 pytest tests/test_smoke_training.py -v     # real training on a tiny model
+pytest -m gpu -rs                          # GPU-only paths (needs CUDA; skipped otherwise)
 ```
 
 No GPU is needed: heavy functions are mocked, and the smoke tests train tiny models on CPU.

@@ -132,6 +132,7 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+markers = ["gpu: needs a CUDA GPU (skipped without one; run with -m gpu)"]
 
 
 # pytest-cov has no --cov-omit flag; coverage.py reads its settings from here.

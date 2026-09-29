@@ -81,6 +81,7 @@ from core.callbacks import (
     ETAProgressCallback,
     LoggingCallback,
     StopCallback,
+    final_train_loss,
 )  # F-2: ETAProgressCallback added
 from core.hardware import (
     compute_dtype,
@@ -671,7 +672,7 @@ def train_model(
             )
 
         if log_callback.records:
-            summary += f"📉 Final train loss: {log_callback.records[-1]['train_loss']}"
+            summary += f"📉 Final train loss: {final_train_loss(log_callback.records)}"
         summary += "\n" + format_token_report(token_report)
         if dropped_long_prompts:
             summary += (

@@ -216,7 +216,9 @@ pytest tests/test_cli.py -v
 pytest tests/test_cli.py::test_help_flag_exits_zero -v
 ```
 
-`tests/test_smoke_training.py` trains `hf-internal-testing/tiny-random-LlamaForCausalLM` for real (SFT, DPO, ORPO, CLI, inference). It is skipped when the model can't be downloaded, unless `REQUIRE_SMOKE_MODELS=1` (set in CI). CI lives in `.github/workflows/ci.yml` and runs ruff, mypy, pytest (3.10–3.12), pip-audit, hadolint and a packaging check.
+`tests/test_smoke_training.py` trains `hf-internal-testing/tiny-random-LlamaForCausalLM` for real (SFT, DPO, ORPO, CLI, inference). It is skipped when the model can't be downloaded, unless `REQUIRE_SMOKE_MODELS=1` (set in CI). CI lives in `.github/workflows/ci.yml` and runs ruff, mypy (every layer), pytest (3.10–3.12, coverage must stay ≥ 85 %), pip-audit, hadolint and a packaging check.
+
+`tests/test_gpu.py` (marker `gpu`) covers what CPU CI can't: 4-bit QLoRA, half-precision full fine-tuning, Flash Attention + packing, vLLM GRPO, NCCL. It skips without CUDA; `.github/workflows/gpu.yml` runs it on a GPU runner (manual, or weekly when the `GPU_RUNNER` repository variable is set). New GPU-only code gets a test there.
 
 Tests use `CliRunner` (no subprocess spawning) and patch heavy functions so they run without a GPU or downloaded models. `conftest.py` inserts the repo root into `sys.path[0]` — **do not remove this**.
 

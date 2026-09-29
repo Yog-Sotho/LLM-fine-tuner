@@ -1,0 +1,97 @@
+# =============================================================================
+# .github/workflows/gpu.yml
+# LLM Fine-Tuner — GPU tests (tests/test_gpu.py, `pytest -m gpu`)
+#
+# The CPU CI cannot run 4-bit QLoRA, half-precision full fine-tuning, Flash
+# Attention, vLLM or NCCL. This workflow runs those tests on a GPU runner:
+#   • a GitHub GPU larger runner (Tesla T4, 16 GB — create it with the
+#     "NVIDIA GPU-Optimized" image so the driver is installed), or
+#   • a self-hosted runner with an NVIDIA GPU and driver.
+#
+# Triggers
+#   • Manual (Actions → GPU tests → Run workflow): give the runner label.
+#   • Weekly, only when the repository variable GPU_RUNNER names a runner label
+#     (Settings → Secrets and variables → Actions → Variables). Without it the
+#     scheduled run is skipped, so no job waits for a runner that doesn't exist.
+#
+# Tests skip what the hardware can't do: a T4 has no bf16 and no Flash
+# Attention 2 (needs compute capability 8.0+); NCCL needs two GPUs.
+# =============================================================================
+
+name: GPU tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Runner label of a GPU runner (GitHub larger runner or self-hosted)"
+        required: true
+        type: string
+      vllm:
+        description: "Also install vLLM and run the vLLM GRPO test"
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: "17 3 * * 1"  # Mondays 03:17 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  gpu-tests:
+    name: "GPU tests"
+    if: github.event_name == 'workflow_dispatch' || vars.GPU_RUNNER != ''
+    runs-on: "${{ inputs.runner || vars.GPU_RUNNER }}"
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: "Show the GPU"
+        run: nvidia-smi
+
+      # The default PyPI torch wheel for Linux is the CUDA build.
+      - name: "Install PyTorch (CUDA)"
+        run: pip install --quiet "torch>=2.6.0,<3" torchvision
+
+      - name: "Install vLLM"
+        if: inputs.vllm
+        run: pip install --quiet "trl[vllm]"
+
+      - name: "Install package and test tools"
+        run: |
+          pip install --quiet -e ".[eval]"
+          pip install --quiet "pytest>=8.0.0" "pytest-timeout>=2.3.0"
+
+      - name: "Check CUDA from Python"
+        run: |
+          python -c "
+          import torch
+          assert torch.cuda.is_available(), 'CUDA not available to PyTorch'
+          print(torch.__version__, torch.version.cuda, torch.cuda.get_device_name(0),
+                'capability', torch.cuda.get_device_capability(0),
+                'bf16', torch.cuda.is_bf16_supported(), 'GPUs', torch.cuda.device_count())
+          "
+
+      - name: "Pre-fetch test models"
+        run: |
+          python -c "
+          from huggingface_hub import snapshot_download
+          snapshot_download('hf-internal-testing/tiny-random-LlamaForCausalLM')
+          snapshot_download('trl-internal-testing/tiny-Qwen3ForCausalLM')
+          "
+
+      - name: "Run GPU tests"
+        env:
+          REQUIRE_SMOKE_MODELS: "1"
+          HF_HUB_OFFLINE: "1"
+        run: pytest tests/test_gpu.py -m gpu -rs --timeout=900 --timeout-method=thread -p no:warnings
