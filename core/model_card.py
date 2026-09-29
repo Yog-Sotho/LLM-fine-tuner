@@ -23,6 +23,8 @@ _MODE_NAMES = {
     "kto": "Kahneman-Tversky Optimization (KTO)",
     "grpo": "Group Relative Policy Optimization (GRPO)",
     "reward": "reward modelling",
+    "distill": "knowledge distillation (GKD)",
+    "merge": "adapter merging",
 }
 
 
@@ -105,6 +107,16 @@ def build_model_card(record: dict, is_adapter: bool) -> ModelCard:
         "a local file"
     )  # fmt: skip
     libraries = ", ".join(f"{k} {v}" for k, v in (record.get("libraries") or {}).items())
+    teacher_line = f"- **Teacher:** `{record['teacher']}`\n" if record.get("teacher") else ""
+    data_line = (
+        f"- **Data:** {dataset.get('rows', '?')} examples from {source} "
+        f"(SHA-256 `{dataset.get('sha256', '?')}`)\n"
+        if dataset
+        else ""
+    )
+    if record.get("sources"):  # adapter merge
+        merged = ", ".join(f"`{s['adapter']}` × {s['weight']}" for s in record["sources"])
+        data_line = f"- **Merged from:** {merged} ({(record.get('merge') or {}).get('method')})\n"
     body = f"""
 # {model.rstrip("/").split("/")[-1] or "Model"} — {mode.upper()}
 
@@ -124,8 +136,7 @@ Trained from `{model}` with {_MODE_NAMES.get(mode, mode)} using
 {rows}
 | seed | {record.get("seed")} |
 
-- **Data:** {dataset.get("rows", "?")} examples from {source} (SHA-256 `{dataset.get("sha256", "?")}`)
-- **Libraries:** {libraries}
+{data_line}{teacher_line}- **Libraries:** {libraries}
 - **Trained:** {record.get("created_at", "?")}
 
 `run_config.yaml` in this repository records every setting needed to repeat the run.

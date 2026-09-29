@@ -220,11 +220,12 @@ PromptTuningConfig(
 )
 ```
 
-### Adapters
+### IA3
 
 ```python
-# Requires adapter-transformers fork of peft (HAS_ADAPTER_CONFIG)
-AdapterConfig(reduction_factor=16)  # UI-configurable
+# (IA)³: one learned scaling vector per attention key/value and MLP output.
+# PEFT picks the layers for the architecture (Llama: k_proj, v_proj, down_proj).
+IA3Config(task_type=TaskType.CAUSAL_LM)
 ```
 
 ---
@@ -248,7 +249,6 @@ def train_model(
     prefix_tuning_token_dim: int,            # default 512
     prefix_tuning_num_layers: int,           # default 2
     prompt_tuning_num_virtual_tokens: int,   # default 20
-    adapter_reduction_factor: int,           # default 16
     resume_from_checkpoint: bool,
     early_stop: int,            # patience; 0 = disabled
     lr_scheduler_type: str,     # "cosine" | "linear" | "constant" | ...

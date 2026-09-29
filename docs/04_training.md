@@ -72,7 +72,7 @@ Use this when:
 When the chat data has images (see [03 — Data Preparation](03_data_preparation.md)), SFT switches to vision-language fine-tuning automatically — no extra setting. Use a vision-language model such as `Qwen/Qwen2.5-VL-3B-Instruct` (Custom model field / `--model`).
 
 - The model's processor turns images into image tokens; the loss covers the assistant's answer only.
-- LoRA (any variant), QLoRA on a GPU and Full fine-tuning are supported; Prefix/Prompt Tuning, Adapters, Unsloth, packing and DPO are not.
+- LoRA (any variant), QLoRA on a GPU and Full fine-tuning are supported; Prefix/Prompt Tuning, IA3, Unsloth, packing and DPO are not.
 - Sequences are not truncated (cutting image tokens would break the batch), so Max Sequence Length doesn't apply — keep conversations reasonably short.
 - The processor is saved next to the adapter and the model card is tagged `image-text-to-text`.
 - Needs `torchvision` matching your `torch` (see [01 — Installation](01_installation.md)).
@@ -105,7 +105,7 @@ Fine-tuning a large model means updating billions of parameters — which requir
 | **Full Fine-tuning** | Very high | Slow | Best possible | You have a lot of VRAM (> 40 GB) |
 | **Prefix Tuning** | Very low | Fast | Good | Extremely limited hardware |
 | **Prompt Tuning** | Minimal | Very fast | Moderate | Fastest possible training |
-| **Adapters** | Low | Fast | Good | Alternative to LoRA |
+| **IA3** | Very low | Fast | Good | Smallest adapter (~0.01% of the weights, ≈600k for a 7B Llama); use a higher learning rate (1e-3–3e-3) |
 
 ### LoRA — The Recommended Choice
 

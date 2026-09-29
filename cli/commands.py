@@ -12,6 +12,8 @@ reward    — train a reward model from preference data
 orpo      — ORPO alignment training
 grpo      — GRPO fine-tuning with a reward model and/or reference answers
 kto       — KTO alignment from desirable / undesirable examples
+distill   — knowledge distillation (GKD): a small student learns from a larger teacher
+merge-adapters — combine LoRA adapters of one base model (TIES, DARE, SVD, …)
 evaluate  — batched BLEU / ROUGE / BERTScore evaluation (optionally vs the base model)
 benchmark — standard benchmarks through lm-evaluation-harness
 
@@ -36,6 +38,7 @@ import typer
 import yaml
 
 from config.constants import (
+    ADAPTER_MERGE_METHODS,
     APP_NAME,
     APP_VERSION,
     BENCHMARK_DEFAULT_LIMIT,
@@ -43,16 +46,23 @@ from config.constants import (
     COL_CHOSEN,
     COL_PROMPT,
     COL_REJECTED,
+    DEFAULT_ADAPTER_MERGE_DENSITY,
+    DEFAULT_ADAPTER_MERGE_METHOD,
     DEFAULT_EVAL_SPLIT,
     DEFAULT_GRPO_LOSS_TYPE,
     DEFAULT_LORA_VARIANT,
     DEFAULT_REPORT_TO,
     DEFAULT_SEED,
+    DISTILL_BETA,
+    DISTILL_LMBDA,
+    DISTILL_MAX_NEW_TOKENS,
+    DISTILL_TEMPERATURE,
     GGUF_QUANT_PRESETS,
     GRPO_LORA_ALPHA,
     GRPO_LORA_RANK,
     GRPO_LOSS_TYPES,
     GRPO_REWARDS,
+    HAS_GKD,
     HAS_GRPO,
     HAS_KTO,
     HAS_ORPO,
@@ -69,6 +79,7 @@ from data.loader import load_dataset_from_file, load_hub_dataset
 from data.preprocessing import validate_and_clean_dataset
 from export.gguf import export_to_gguf
 from export.hub import push_to_hub
+from export.merge import merge_lora_adapters
 from export.quantize import calibration_texts, quantize_model
 from export.serve import serve
 from inference.benchmarks import run_benchmarks
@@ -79,6 +90,7 @@ from inference.evaluation import (
 )
 from inference.generate import _load_for_inference
 from inference.vllm_runner import merge_adapter_for_inference
+from training.distill import train_distill
 from training.grpo import train_grpo
 from training.kto import train_kto
 from training.orpo import train_orpo_v27
@@ -143,7 +155,7 @@ def train(
     max_length: int = typer.Option(256, "--max-length", help="Maximum sequence length"),
     learning_rate: float = typer.Option(2e-4, "--lr", help="Learning rate"),
     peft_method: str = typer.Option(
-        "LoRA", "--peft", help="PEFT method: LoRA | QLoRA Enhanced | Full Fine-tuning | Auto"
+        "LoRA", "--peft", help="PEFT method: LoRA | QLoRA Enhanced | IA3 | Full Fine-tuning | Auto"
     ),
     lora_rank: int = typer.Option(8, "--lora-rank", help="LoRA rank"),
     lora_variant: str = typer.Option(
@@ -268,7 +280,6 @@ def train(
                 prefix_tuning_token_dim=512,
                 prefix_tuning_num_layers=2,
                 prompt_tuning_num_virtual_tokens=20,
-                adapter_reduction_factor=16,
                 resume_from_checkpoint=False,
                 early_stop=replay.get("early_stop", 0),
                 lr_scheduler_type=replay.get("lr_scheduler_type", "cosine"),
@@ -316,7 +327,6 @@ def train(
             prefix_tuning_token_dim=512,
             prefix_tuning_num_layers=2,
             prompt_tuning_num_virtual_tokens=20,
-            adapter_reduction_factor=16,
             resume_from_checkpoint=False,
             early_stop=3,
             lr_scheduler_type="cosine",
@@ -625,6 +635,76 @@ def kto(
     typer.echo(f"\n{result}")
 
 
+# ── distill ────────────────────────────────────────────────────────────────
+
+
+@app.command()
+def distill(
+    student: str = typer.Option(..., "--student", help="Small model to train (ID or path)"),
+    teacher: str = typer.Option(
+        ..., "--teacher", help="Larger model of the same family (shared vocabulary)"
+    ),
+    data: str = typer.Option(
+        ..., "--data", help="Chats (messages), instruction/output or prompt/completion"
+    ),
+    output: str = typer.Option("./distilled_model", "--output", help="Output directory"),
+    epochs: int = typer.Option(1, "--epochs"),
+    lr: float = typer.Option(5e-5, "--lr"),
+    batch_size: int = typer.Option(2, "--batch-size"),
+    max_length: int = typer.Option(512, "--max-length"),
+    lmbda: float = typer.Option(
+        DISTILL_LMBDA, "--lmbda", help="Share of batches on the student's own answers (0–1)"
+    ),
+    beta: float = typer.Option(
+        DISTILL_BETA, "--beta", help="Divergence: 0 ≈ forward KL, 1 ≈ reverse KL"
+    ),
+    temperature: float = typer.Option(DISTILL_TEMPERATURE, "--temperature"),
+    max_new_tokens: int = typer.Option(
+        DISTILL_MAX_NEW_TOKENS, "--max-new-tokens", help="Length of the student's own answers"
+    ),
+    resume: bool = typer.Option(
+        False, "--resume", help="Continue from the newest checkpoint in --output"
+    ),
+):
+    """Knowledge distillation (GKD): train a small student on a larger teacher's outputs."""
+    if err := (
+        validate_path_traversal(student)
+        or validate_path_traversal(teacher)
+        or validate_path_traversal(data)
+        or validate_path_traversal(output)
+    ):
+        typer.echo(err, err=True)
+        raise typer.Exit(code=1)
+    if not HAS_GKD:
+        typer.echo('❌ GKD not available. Install: pip install "trl>=0.29.1,<2"', err=True)
+        raise typer.Exit(code=1)
+    if not os.path.exists(data):
+        typer.echo(f"❌ Dataset not found: {data}", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"🎓 Distillation: {teacher} → {student} | lmbda {lmbda} | beta {beta}")
+    result = train_distill(
+        student_model_name=student,
+        teacher_model_name=teacher,
+        distill_file=DummyFile(data),
+        output_dir=output,
+        learning_rate=lr,
+        epochs=epochs,
+        batch_size=batch_size,
+        max_length=max_length,
+        lmbda=lmbda,
+        beta=beta,
+        temperature=temperature,
+        max_new_tokens=max_new_tokens,
+        resume=resume,
+        progress=None,
+    )
+    if "✅" not in result:
+        typer.echo(result, err=True)
+        raise typer.Exit(code=1)
+    typer.echo(f"\n{result}")
+
+
 # ── evaluate ───────────────────────────────────────────────────────────────
 
 
@@ -769,13 +849,15 @@ def benchmark(
 
 @app.command()
 def merge(
-    adapter: str = typer.Option(..., "--adapter", help="LoRA adapter folder (training output)"),
+    adapter: str = typer.Option(
+        ..., "--adapter", help="LoRA or IA3 adapter folder (training output)"
+    ),
     output: str = typer.Option(..., "--output", help="Folder for the merged full model"),
     base: str | None = typer.Option(
         None, "--base", help="Base model (default: the one named in adapter_config.json)"
     ),
 ):
-    """Merge a LoRA adapter into its base model (a standalone full model)."""
+    """Merge a LoRA or IA3 adapter into its base model (a standalone full model)."""
     import json
 
     if err := (validate_path_traversal(adapter) or validate_path_traversal(output)
@@ -787,6 +869,29 @@ def merge(
         with open(config, encoding="utf-8") as f:
             base = json.load(f).get("base_model_name_or_path")
     result = merge_adapter_for_inference(base or "", adapter, output)
+    typer.echo(result, err=not result.startswith("✅"))
+    if not result.startswith("✅"):
+        raise typer.Exit(code=1)
+
+
+@app.command("merge-adapters")
+def merge_adapters(
+    adapter: list[str] = typer.Option(
+        ..., "--adapter", help="LoRA adapter folder (repeat; all on the same base model)"
+    ),
+    output: str = typer.Option(..., "--output", help="Folder for the merged adapter"),
+    weight: list[float] | None = typer.Option(
+        None, "--weight", help="Weight per adapter, in order (default: 1 each)"
+    ),
+    method: str = typer.Option(
+        DEFAULT_ADAPTER_MERGE_METHOD, "--method", help=f"{' | '.join(ADAPTER_MERGE_METHODS)}"
+    ),
+    density: float = typer.Option(
+        DEFAULT_ADAPTER_MERGE_DENSITY, "--density", help="ties / dare_*: share of changes kept"
+    ),
+):
+    """Combine LoRA adapters trained on the same base model into one (TIES, DARE, SVD, …)."""
+    result = merge_lora_adapters(adapter, output, weight or None, method, density)
     typer.echo(result, err=not result.startswith("✅"))
     if not result.startswith("✅"):
         raise typer.Exit(code=1)

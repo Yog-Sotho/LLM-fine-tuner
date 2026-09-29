@@ -42,6 +42,7 @@ LLM-fine-tuner/
 │   ├── reward.py            # train_reward_model_v27() — sequence-classifier reward model
 │   ├── grpo.py              # train_grpo() — GRPO (reward model and/or reference answers)
 │   ├── kto.py               # train_kto() — KTO from desirable/undesirable examples
+│   ├── distill.py           # train_distill() — knowledge distillation (TRL GKD, student ← teacher)
 │   └── orpo.py              # train_orpo_v27() — ORPO alignment
 │
 ├── inference/
@@ -56,6 +57,7 @@ LLM-fine-tuner/
 │   ├── hub.py               # push_to_hub() — HuggingFace Hub publishing
 │   ├── quantize.py          # quantize_model() — FP8 / W4A16 safetensors via llm-compressor (vLLM)
 │   ├── serve.py             # build_serve_command() / serve() — llama-server (GGUF) or vllm serve
+│   ├── merge.py             # merge_lora_adapters() — combine LoRA adapters (PEFT TIES/DARE/SVD/cat)
 │   ├── registry.py          # Model registry reader
 │   └── utils.py             # ZIP creation, model card generation
 │
@@ -73,7 +75,7 @@ LLM-fine-tuner/
 │       └── share_tab.py     # Hub push & download layout
 │
 ├── cli/
-│   └── commands.py          # Typer CLI (train … benchmark, merge, export, push, serve)
+│   └── commands.py          # Typer CLI (train … distill, benchmark, merge, merge-adapters, export, push, serve)
 │
 ├── tests/
 │   ├── conftest.py          # pytest setup (inserts repo root into sys.path)
@@ -324,7 +326,11 @@ Trained model → push_to_hub()
 
 ## Training Modes & PEFT Methods
 
-**Training modes:** SFT, DPO (via `training/sft.py`), ORPO (`training/orpo.py`), KTO (`training/kto.py`), GRPO (`training/grpo.py`), Reward modeling (`training/reward.py`)
+**Training modes:** SFT, DPO (via `training/sft.py`), ORPO (`training/orpo.py`), KTO (`training/kto.py`), GRPO (`training/grpo.py`), Reward modeling (`training/reward.py`), Distillation (`training/distill.py`)
+
+**Distillation** uses `trl.experimental.gkd.GKDTrainer` (same API in TRL 0.29 and 1.x): chat data only (`to_distill_dataset()` turns instruction/output and prompt/completion into chats), the student gets LoRA, the teacher only runs forward. Check the vocab sizes match before training — TRL 0.29 doesn't.
+
+**Adapter merging** (`export/merge.py`) uses PEFT `add_weighted_adapter`: LoRA only, one base model, no DoRA (magnitudes are dropped); linear/ties/dare_* need equal ranks. Make merged weights contiguous before saving (older PEFT leaves SVD views). mergekit is not used: 0.1.4 pins accelerate~=1.6 / pydantic~=2.10 and fails with current Transformers.
 
 **Data formats:** `messages` (chat), `text`, `instruction`/`output`, and `prompt`/`chosen`/`rejected` (DPO). `load_hub_dataset()` streams Hub datasets (IDs must be `owner/name` and must not exist locally — `load_dataset` would read a local directory). Duplicates are detected ignoring case/whitespace.
 
@@ -334,7 +340,7 @@ Trained model → push_to_hub()
 
 **Reward models** are saved merged (full sequence classifier) because `GRPOTrainer` loads a reward-model path as `AutoModelForSequenceClassification(num_labels=1)`.
 
-**PEFT methods:** LoRA, QLoRA Enhanced (NF4 + double quantization), Prefix Tuning, Prompt Tuning, Adapters, Full fine-tuning
+**PEFT methods:** LoRA, QLoRA Enhanced (NF4 + double quantization), Prefix Tuning, Prompt Tuning, IA3 (PEFT's default layers per architecture; mergeable like LoRA, but `vllm serve` takes LoRA only — merge first), Full fine-tuning
 
 **LoRA targets and variants:** every LoRA config uses `get_lora_targets()` (`"all-linear"`: all attention + MLP projections, never the output head) — don't hard-code module names; Unsloth alone gets `UNSLOTH_LORA_TARGETS`. Variants come from `LORA_VARIANTS` via `lora_variant_kwargs()` (LoRA, rsLoRA, DoRA). DoRA can't be switched off per request (`adapter_names`), so `is_lora_model()` excludes it from base-model comparison. PiSSA isn't offered: PEFT can't initialise it on 4-bit weights, which the GPU LoRA path uses.
 

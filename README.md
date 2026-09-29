@@ -186,6 +186,7 @@ You don't need to understand all of these to get started — the defaults work g
 | **Reward model + GRPO** | Reinforcement learning against a scoring model or checkable answers | When you want the strongest alignment, or your task has verifiable answers |
 | **ORPO** | Modern single-step alignment from ranked pairs | Faster alternative to reward + RL |
 | **KTO** | Alignment from thumbs-up / thumbs-down feedback | When you have good/bad labels but no ranked pairs |
+| **Distillation** | A small model learns from a larger one of the same family | When you want a big model's quality at a small model's cost |
 
 ---
 

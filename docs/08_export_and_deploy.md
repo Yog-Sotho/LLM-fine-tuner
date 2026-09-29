@@ -14,6 +14,7 @@ Once your model is trained, you have several ways to share it and put it to use.
 | **Quantized safetensors** | Serving on NVIDIA GPUs with vLLM | FP8 / W4A16 model folder |
 | **Serve** | An OpenAI-compatible API for apps and clients | `/v1/chat/completions` |
 | **Model Registry** | Tracking multiple models within the tool | Internal catalogue |
+| **Merge LoRA adapters** | Combining adapters of one base model (e.g. one per skill) | LoRA adapter folder |
 
 ---
 
@@ -214,6 +215,19 @@ You can then:
 - Browse all registered models
 - Filter by base model or training type
 - See training metadata at a glance
+
+---
+
+## Merging LoRA Adapters
+
+**📦 Export → 🧬 Merge LoRA adapters** (or `python main.py merge-adapters`) combines several
+LoRA adapters trained on the same base model into one adapter — for example a "maths" and a
+"code" adapter. Enter one adapter folder per line, optional weights (`1, 0.7`), a method and
+an output folder. **TIES** (default) and **DARE** keep each adapter's strongest changes and
+resolve conflicts between them; they need adapters of the same rank. **cat** and **svd**
+accept different ranks. The result is a normal LoRA adapter with its own `run_config.yaml`
+(sources, weights, method) and model card, so it can be evaluated, exported to GGUF or
+served like any other. DoRA adapters can't be merged.
 
 ---
 

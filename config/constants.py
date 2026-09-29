@@ -182,6 +182,9 @@ LORA_VARIANTS: dict[str, dict[str, bool]] = {
     "DoRA": {"use_dora": True},
 }
 DEFAULT_LORA_VARIANT = "LoRA"
+# Adapter types (adapter_config.json "peft_type") whose weights can be merged into the
+# base model for GGUF / quantized export. Prefix/prompt tuning add tokens, not weights.
+MERGEABLE_PEFT_TYPES = ("LORA", "IA3")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Optional dependency guards — ALL HAS_* flags defined here.
@@ -219,14 +222,6 @@ try:
     HAS_HUB = True
 except ImportError:
     HAS_HUB = False
-
-# ── peft AdapterConfig (optional fork) ────────────────────────────────────
-try:
-    from peft import AdapterConfig  # noqa: F401
-
-    HAS_ADAPTER_CONFIG = True
-except ImportError:
-    HAS_ADAPTER_CONFIG = False
 
 # ── Unsloth (2-5× faster training + GGUF export) ──────────────────────────
 try:
@@ -275,6 +270,14 @@ except ImportError:
         HAS_KTO = True
     except ImportError:
         HAS_KTO = False
+
+# ── TRL GKD (knowledge distillation; trl.experimental.gkd in TRL 0.29 and 1.x) ──
+try:
+    from trl.experimental.gkd import GKDConfig, GKDTrainer  # noqa: F401
+
+    HAS_GKD = True
+except ImportError:
+    HAS_GKD = False
 
 # ── Liger kernels (fused Triton kernels; CUDA only) ───────────────────────
 # find_spec, not import: importing liger_kernel initialises Triton at startup.
@@ -415,6 +418,29 @@ GRPO_LORA_RANK = 16
 GRPO_LORA_ALPHA = 32
 # vLLM generation during GRPO (colocate: shares the training GPU).
 GRPO_VLLM_GPU_MEMORY = 0.3  # TRL's default share of GPU memory for vLLM
+# Knowledge distillation (GKD: the student learns the teacher's next-token distribution).
+# lmbda: share of batches on the student's own generations (on-policy; 0 = teacher-forced
+# on the dataset answers). beta: 0 ≈ forward KL, 1 ≈ reverse KL (generalised JSD).
+# TRL's defaults.
+DISTILL_LMBDA = 0.5
+DISTILL_BETA = 0.5
+DISTILL_TEMPERATURE = 0.9
+DISTILL_MAX_NEW_TOKENS = 128
+DISTILL_LORA_RANK = 16
+DISTILL_LORA_ALPHA = 32
+# Combining LoRA adapters trained on the same base (PEFT add_weighted_adapter).
+# linear / ties / dare_* need equal ranks; cat and svd accept any. density: share kept.
+ADAPTER_MERGE_METHODS: dict[str, str] = {
+    "ties": "TIES — trim small changes, resolve sign conflicts (same rank)",
+    "dare_ties": "DARE + TIES — random drop and rescale, then TIES (same rank)",
+    "dare_linear": "DARE + weighted sum (same rank)",
+    "linear": "Weighted sum of the adapters (same rank)",
+    "cat": "Concatenate (exact; rank = sum of ranks)",
+    "svd": "Exact sum compressed back with SVD (any ranks)",
+}
+ADAPTER_MERGE_DENSITY_METHODS = ("ties", "dare_ties", "dare_linear")
+DEFAULT_ADAPTER_MERGE_METHOD = "ties"
+DEFAULT_ADAPTER_MERGE_DENSITY = 0.5
 HAS_MATH_VERIFY: bool = importlib.util.find_spec("math_verify") is not None
 # Vision-language fine-tuning: VLM processors need torchvision (must match torch).
 HAS_TORCHVISION: bool = importlib.util.find_spec("torchvision") is not None

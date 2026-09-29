@@ -38,7 +38,8 @@ def test_gguf_is_served_by_llama_server_with_the_key_in_the_environment(fake_bin
 def test_adapter_is_served_on_its_base_with_vllm(fake_bins, tmp_path):
     adapter = tmp_path / "run"
     adapter.mkdir()
-    (adapter / "adapter_config.json").write_text(json.dumps({"base_model_name_or_path": "o/b"}))
+    config = {"peft_type": "LORA", "base_model_name_or_path": "o/b"}
+    (adapter / "adapter_config.json").write_text(json.dumps(config))
     (adapter / "adapter_model.safetensors").write_bytes(b"")
     cmd, env = serve.build_serve_command(str(adapter), "0.0.0.0", 8000, "k", "bot")
     assert cmd[1:3] == ["serve", "o/b"]
@@ -46,6 +47,10 @@ def test_adapter_is_served_on_its_base_with_vllm(fake_bins, tmp_path):
     assert env == {"VLLM_API_KEY": "k"}
     hub_cmd, env = serve.build_serve_command("owner/model", port=9000)
     assert hub_cmd[1:3] == ["serve", "owner/model"] and env == {}
+    # vLLM serves LoRA adapters only; others must be merged first.
+    (adapter / "adapter_config.json").write_text(json.dumps({**config, "peft_type": "IA3"}))
+    with pytest.raises(ValueError, match="vLLM serves LoRA adapters only. Merge this adapter"):
+        serve.build_serve_command(str(adapter))
 
 
 @pytest.mark.parametrize(

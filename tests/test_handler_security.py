@@ -56,5 +56,5 @@ def test_train_model_rejects_model_name_traversal():
     with pytest.raises(ValueError, match="Path traversal attempt detected"):
         train_model(
             "../unsafe", MagicMock(), "./ok", {}, "cpu", "LoRA", True, 8, 16, 30, 512, 2,
-            20, 16, False, 3, "cosine", True, False, False, "test",
+            20, False, 3, "cosine", True, False, False, "test",
         )  # fmt: skip

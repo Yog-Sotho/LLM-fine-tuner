@@ -39,9 +39,11 @@ Commands:
   orpo      ORPO alignment training
   grpo      GRPO fine-tuning with a reward model and/or reference answers
   kto       KTO alignment from desirable / undesirable examples
+  distill   Knowledge distillation (GKD): train a small student on a larger teacher's outputs
   evaluate  Batched BLEU / ROUGE / BERTScore evaluation (greedy decoding)
   benchmark Standard benchmarks with lm-evaluation-harness (ARC, HellaSwag, GSM8K, …)
-  merge     Merge a LoRA adapter into its base model
+  merge     Merge a LoRA or IA3 adapter into its base model
+  merge-adapters  Combine LoRA adapters trained on the same base model into one (TIES, DARE, SVD, …)
   export    Export for deployment: GGUF or FP8/W4A16 safetensors (vLLM)
   push      Upload a model folder to the Hugging Face Hub
   serve     Serve a model behind an OpenAI-compatible API
@@ -278,6 +280,34 @@ prompt,completion,label
 
 ---
 
+### `distill` — Knowledge Distillation
+
+A small student learns a larger teacher's next-token distribution (TRL GKD), partly on its
+own answers. Teacher and student must share a vocabulary (same model family).
+
+```bash
+python main.py distill \
+    --student Qwen/Qwen3-0.6B \
+    --teacher Qwen/Qwen3-8B \
+    --data chats.jsonl \
+    --output ./distilled_model
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--student` | *(required)* | Small model to train (as a LoRA adapter) |
+| `--teacher` | *(required)* | Larger model of the same family |
+| `--data` | *(required)* | Chats (`messages`), `instruction`/`output` or `prompt`/`completion` |
+| `--output` | `./distilled_model` | Where the student adapter is saved |
+| `--epochs` / `--lr` / `--batch-size` / `--max-length` | `1` / `5e-5` / `2` / `512` | |
+| `--lmbda` | `0.5` | Share of batches on the student's own answers (0–1) |
+| `--beta` | `0.5` | Divergence: 0 ≈ forward KL, 1 ≈ reverse KL |
+| `--temperature` | `0.9` | Sampling temperature for the student's answers |
+| `--max-new-tokens` | `128` | Length of the student's own answers |
+| `--resume` | off | Continue from the newest checkpoint in `--output` |
+
+---
+
 ### `evaluate` — Batch Evaluation
 
 Runs BLEU, ROUGE, and optionally BERTScore on your model. Generation is greedy
@@ -358,7 +388,33 @@ Hugging Face Hub on first use.
 python main.py merge --adapter ./runs/my-run --output ./runs/my-run-merged
 ```
 
-`--base` overrides the base model named in `adapter_config.json`.
+`--base` overrides the base model named in `adapter_config.json`. Works for LoRA and IA3
+adapters.
+
+---
+
+### `merge-adapters` — Combine LoRA Adapters
+
+Merges several LoRA adapters trained on the **same base model** (e.g. one per skill) into
+one adapter, with PEFT's merge methods:
+
+```bash
+python main.py merge-adapters \
+    --adapter ./runs/math --adapter ./runs/code \
+    --weight 1 --weight 0.7 \
+    --method ties --density 0.5 \
+    --output ./runs/math-code
+```
+
+| `--method` | What it does |
+|---|---|
+| `ties` (default) | Keeps each adapter's largest changes (`--density`), resolves sign conflicts — same rank |
+| `dare_ties` / `dare_linear` | Randomly drops and rescales changes, then TIES / weighted sum — same rank |
+| `linear` | Weighted sum — same rank |
+| `cat` | Exact concatenation; rank = sum of ranks |
+| `svd` | Exact sum compressed back with SVD — any ranks |
+
+DoRA adapters can't be merged (the merge would drop their magnitude vectors).
 
 ---
 

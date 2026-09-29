@@ -36,7 +36,7 @@ def _load(peft_method: str, use_lora: bool = True, flash_attn: bool = False) -> 
     with pytest.raises(RuntimeError, match="Training failed"):
         sft.train_model(
             "some/model", ds, "out", hyper, "cuda", peft_method, use_lora, 4, 8, 10, 64, 1,
-            10, 16, False, 0, "linear", False, False, False, "", use_flash_attn=flash_attn,
+            10, False, 0, "linear", False, False, False, "", use_flash_attn=flash_attn,
         )  # fmt: skip
 
 
@@ -119,6 +119,7 @@ def test_heavy_gpu_jobs_share_one_queue():
     assert set(gpu) >= {
         "_on_train_and_chart", "train_grpo", "train_kto", "train_orpo_v27",
         "train_reward_model_v27", "on_evaluate_click", "on_benchmark_click", "on_export_gguf",
+        "train_distill", "on_merge_adapters_click",
     }  # fmt: skip
     assert set(gpu.values()) == {1}
     assert "on_stop" not in gpu  # Stop must run while a job holds the queue

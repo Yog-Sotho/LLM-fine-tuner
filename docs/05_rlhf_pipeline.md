@@ -186,6 +186,44 @@ crashed run can be resumed with the same output directory.
 
 ---
 
+## Tab E — Distillation
+
+### What is knowledge distillation?
+
+A small **student** model learns from a larger **teacher**: not just the teacher's final
+answer, but its whole next-token distribution. This uses TRL's GKD trainer (Generalized
+Knowledge Distillation), which also trains on the student's *own* answers, graded by the
+teacher, so the student learns from its own mistakes. You get a model that is much cheaper
+to run and keeps much of the teacher's quality on your task.
+
+Teacher and student must come from **the same model family** (one shared vocabulary), e.g.
+`Qwen/Qwen3-0.6B` ← `Qwen/Qwen3-8B`. The student is trained as a LoRA adapter.
+
+### Data Format
+
+Chats (JSONL, `messages`), `instruction`/`output`, or `prompt`/`completion`. The last
+assistant answer of each example is the part the teacher grades:
+
+```json
+{"messages": [{"role": "user", "content": "What is 12×7?"}, {"role": "assistant", "content": "84"}]}
+```
+
+### Settings
+
+| Setting | Default | Notes |
+|---|---|---|
+| Student model | Auto | The small model you want to keep |
+| Teacher model | — | Larger model of the same family |
+| On-policy share (λ) | 0.5 | 0 = learn only on the dataset's answers; 1 = only on the student's own answers (the paper found high values work best) |
+| Divergence (β) | 0.5 | 0 ≈ forward KL (cover everything the teacher might say), 1 ≈ reverse KL (focus on its main answer) |
+| Temperature | 0.9 | Sampling temperature for the student's own answers |
+| Student answer length | 128 | Tokens the student generates per example |
+| Learning Rate / Epochs / Batch / Max Length | 5×10⁻⁵ / 1 / 2 / 512 | |
+
+Both models are loaded at once, so you need memory for the teacher and the student.
+
+---
+
 ## Which Should I Use?
 
 | Scenario | Recommendation |
@@ -194,6 +232,7 @@ crashed run can be resumed with the same output directory.
 | I only have thumbs-up / thumbs-down feedback | **KTO** |
 | My task has a checkable answer (maths, extraction) | **GRPO** with a `reference` column |
 | I want a reusable judge to optimise against | **Reward model → GRPO** |
+| I want a small, cheap model that behaves like a big one | **Distillation** |
 | I'm just starting out | **SFT only** is fine for most use cases |
 
 ---

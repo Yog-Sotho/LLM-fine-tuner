@@ -48,7 +48,7 @@ def _train(model, out, peft_method="LoRA", mode="sft", data=SFT_ROWS, **kwargs):
 
     return train_model(
         model, data, str(out), {**_hyperparams(), **kwargs.pop("hp", {})}, "cuda", peft_method,
-        True, 4, 8, 10, 64, 1, 10, 16, False, 0, "linear", False, False, False, "",
+        True, 4, 8, 10, 64, 1, 10, False, 0, "linear", False, False, False, "",
         training_mode=mode, progress=None, **kwargs,
     )  # fmt: skip
 
@@ -77,6 +77,12 @@ def test_qlora_trains_a_4bit_model(tiny_model, tmp_path, monkeypatch):
     assert math.isfinite(_final_loss(records)), summary
     _assert_safetensors_adapter(tmp_path)
     _assert_run_config(tmp_path, "sft", tiny_model)
+
+
+def test_ia3_on_a_4bit_model(tiny_model, tmp_path):
+    summary, records = _train(tiny_model, tmp_path, peft_method="IA3", hp={"learning_rate": 3e-3})
+    assert math.isfinite(_final_loss(records)), summary
+    assert json.loads((tmp_path / "adapter_config.json").read_text())["peft_type"] == "IA3"
 
 
 def test_full_finetuning_in_half_precision(tiny_model, tmp_path):
@@ -114,6 +120,24 @@ def test_flash_attention_with_packing(tiny_model, tmp_path):
     summary, records = _train(tiny_model, tmp_path, use_flash_attn=True, hp={"packing": True})
     assert not any("Packing skipped" in r.get("note", "") for r in records), records
     assert math.isfinite(_final_loss(records)), summary
+
+
+def test_distillation_on_gpu(tmp_path):
+    from training.distill import train_distill
+
+    model = _cached_model(TINY_CHAT_MODEL)
+    data = tmp_path / "chats.jsonl"
+    data.write_text("".join(json.dumps({"messages": [
+        {"role": "user", "content": f"What is {i}+{i}?"},
+        {"role": "assistant", "content": str(2 * i)}]}) + "\n" for i in range(4)))  # fmt: skip
+
+    class File:
+        name = str(data)
+
+    status = train_distill(model, model, File(), str(tmp_path / "out"), max_length=64,
+                           max_new_tokens=8, progress=None)  # fmt: skip
+    assert status.startswith("✅"), status
+    _assert_safetensors_adapter(tmp_path / "out")
 
 
 @pytest.mark.skipif(importlib.util.find_spec("vllm") is None, reason="vLLM not installed")

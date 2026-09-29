@@ -42,6 +42,7 @@ LLM-fine-tuner/
 │   ├── __init__.py
 │   ├── gguf.py
 │   ├── hub.py
+│   ├── merge.py
 │   ├── quantize.py
 │   ├── registry.py
 │   ├── serve.py
@@ -65,21 +66,28 @@ LLM-fine-tuner/
 │   ├── __init__.py
 │   ├── conftest.py
 │   ├── test_augmentation_batching.py
+│   ├── test_callbacks_and_augmentation.py
 │   ├── test_cli.py
+│   ├── test_cli_commands.py
 │   ├── test_cli_path_traversal.py
 │   ├── test_data_formats.py
 │   ├── test_data_loader.py
 │   ├── test_deploy.py
+│   ├── test_distill_and_merge.py
 │   ├── test_evaluation_batching.py
 │   ├── test_evaluation_suite.py
+│   ├── test_export_and_vllm.py
+│   ├── test_gpu.py
 │   ├── test_grpo_rewards.py
 │   ├── test_handler_security.py
+│   ├── test_handlers.py
 │   ├── test_logging_and_version.py
 │   ├── test_model_card.py
 │   ├── test_model_loading.py
 │   ├── test_path_traversal_hardened.py
 │   ├── test_preprocessing.py
 │   ├── test_redact_sensitive_info.py
+│   ├── test_registry.py
 │   ├── test_run_config.py
 │   ├── test_security_guards_new.py
 │   ├── test_sentinel_fixes.py
@@ -91,6 +99,7 @@ LLM-fine-tuner/
 │   └── test_training_guards.py
 ├── training/
 │   ├── __init__.py
+│   ├── distill.py
 │   ├── grpo.py
 │   ├── kto.py
 │   ├── orpo.py
