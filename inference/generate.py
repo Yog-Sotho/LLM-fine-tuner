@@ -85,7 +85,7 @@ def _load_for_inference(model_name: str, lora_path: str | None):
             if key in app_state.inference_cache:
                 return app_state.inference_cache[key]
 
-        # BOLT OPTIMIZATION: Force fast tokenizer for significantly faster text processing and encoding.
+        # Force fast tokenizer for significantly faster text processing and encoding.
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
         # Ensure eos/pad tokens are set
         if tokenizer.eos_token is None:
@@ -97,7 +97,7 @@ def _load_for_inference(model_name: str, lora_path: str | None):
                 tokenizer.add_special_tokens({"eos_token": "</s>"})
                 tokenizer.eos_token = "</s>"
         tokenizer.pad_token = tokenizer.eos_token
-        # BOLT OPTIMIZATION: Use left-padding for inference to enable more
+        # Use left-padding for inference to enable more
         # efficient and reliable batch generation with decoder-only models.
         tokenizer.padding_side = "left"
 
@@ -141,7 +141,7 @@ def generate_text(
     """
     try:
         model, tokenizer = _load_for_inference(model_name, lora_path)
-        # Sentinel: Added truncation and max_length to prevent memory exhaustion DoS
+        # Added truncation and max_length to prevent memory exhaustion DoS
         inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048)
         if torch.cuda.is_available():
             inputs = {k: v.cuda() for k, v in inputs.items()}
@@ -154,7 +154,7 @@ def generate_text(
                 top_p=top_p,
                 pad_token_id=tokenizer.eos_token_id,
             )
-        # BOLT OPTIMIZATION: Left-padding ensures the generated response starts
+        # Left-padding ensures the generated response starts
         # exactly at the end of the input tokens (input_ids.shape[1]).
         input_len = inputs["input_ids"].shape[1]
         return tokenizer.decode(out[0][input_len:], skip_special_tokens=True)
@@ -191,7 +191,7 @@ def batch_generate(
                 return err
 
         if prompts_file.name.endswith(FILE_EXT_CSV):
-            # BOLT OPTIMIZATION: Only read the 'prompt' column to avoid loading other large
+            # Only read the 'prompt' column to avoid loading other large
             # unused columns in wide or heavy CSV files, saving memory and processing time.
             header_cols = pd.read_csv(prompts_file.name, nrows=0).columns.tolist()
             if "prompt" not in header_cols:
@@ -232,7 +232,7 @@ def batch_generate(
                     top_p=0.9,
                     pad_token_id=tokenizer.eos_token_id,
                 )
-            # BOLT OPTIMIZATION: Left-padding ensures all responses in the batch
+            # Left-padding ensures all responses in the batch
             # start at the same offset (input_ids.shape[1]), simplifying logic.
             # Using batch_decode instead of serial decode for ~1.4x speedup.
             input_len = inputs["input_ids"].shape[1]

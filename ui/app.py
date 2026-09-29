@@ -22,7 +22,7 @@ Patch log
 
 import gradio as gr
 
-from config.constants import GPU_JOB_CONCURRENCY, GPU_QUEUE_ID
+from config.constants import APP_NAME, GPU_JOB_CONCURRENCY, GPU_QUEUE_ID
 from core.hardware import get_hardware_summary, get_model_info
 from core.state import app_state
 from data.augmentation import on_augment_click, on_quality_filter_click
@@ -75,11 +75,11 @@ GPU_JOB = {"concurrency_id": GPU_QUEUE_ID, "concurrency_limit": GPU_JOB_CONCURRE
 def build_demo() -> gr.Blocks:
     """Build and return the fully-wired Gradio Blocks demo."""
 
-    with gr.Blocks(title="🧠 LLM Fine-Tuner v3.2") as demo:
+    with gr.Blocks(title=f"🧠 {APP_NAME}") as demo:
         # ── Header ─────────────────────────────────────────────────────────
-        gr.HTML("""
+        gr.HTML(f"""
         <div id="header-banner">
-            <h1>🧠 LLM Fine-Tuner v3.2</h1>
+            <h1>🧠 {APP_NAME}</h1>
             <p>SFT · DPO · ORPO · KTO · Reward model · GRPO — LoRA / QLoRA · GGUF export · vLLM inference</p>
         </div>
         """)

@@ -1,6 +1,6 @@
 # =============================================================================
 # .github/workflows/ci.yml
-# LLM Fine-Tuner v3.2 — Continuous Integration
+# LLM Fine-Tuner — Continuous Integration
 #
 # Triggers
 # --------
@@ -102,9 +102,9 @@ jobs:
 
   # =========================================================================
   # JOB 2 — TYPE CHECK
-  # mypy on the pure-Python layers (config, core, data, export, cli).
-  # Training / inference layers import torch/peft at module scope and need
-  # full stub packages — excluded to keep CI fast and dependency-light.
+  # mypy on every layer. torch/transformers/peft/trl are not installed here, so
+  # --ignore-missing-imports types them as Any: the job stays fast and checks the
+  # project's own code (signatures, None handling, attribute use), not library stubs.
   # =========================================================================
   type-check:
     name: "Type check — mypy"
@@ -137,14 +137,18 @@ jobs:
             "pandas>=2.2.0" \
             "typer>=0.15.0"
 
-      - name: "Run mypy (pure-Python layers)"
+      - name: "Run mypy (all layers)"
         run: |
           mypy \
             config/ \
             core/ \
             data/ \
+            training/ \
+            inference/ \
             export/ \
+            ui/ \
             cli/ \
+            main.py \
             --ignore-missing-imports \
             --no-strict-optional \
             --show-error-codes \
@@ -159,7 +163,9 @@ jobs:
   # are patched via monkeypatch in the existing test suite.
   #
   # pyproject.toml testpaths = ["tests"], addopts = "-v --tb=short".
-  # CI appends --cov flags so local dev runs stay clean.
+  # CI appends --cov flags so local dev runs stay clean; coverage below 85% fails
+  # the job (measured 88% when the floor was set). tests/test_gpu.py skips here
+  # (no CUDA) — .github/workflows/gpu.yml runs it on a GPU runner.
   #
   # Codecov upload: 3.11 leg only (avoids duplicate reports).
   # =========================================================================
@@ -245,6 +251,7 @@ jobs:
             --cov=. \
             --cov-report=xml:coverage.xml \
             --cov-report=term-missing \
+            --cov-fail-under=85 \
             --timeout=120 \
             --timeout-method=thread \
             -p no:warnings
@@ -377,16 +384,26 @@ jobs:
         run: twine check --strict dist/*
 
       # A plain (non-editable) install must ship main.py — the console scripts
-      # point at main:main — and must not install tests/, archive/ or docs/ as
+      # point at main:main — and must not install tests/ or docs/ as
       # top-level packages. --no-deps keeps this job fast; the test job covers
       # the runtime dependencies.
       - name: "Check wheel contents and entry points"
         run: |
           python -m venv /tmp/wheel-venv
           /tmp/wheel-venv/bin/pip install --quiet --no-deps dist/*.whl
+          export REPO_DIR="$PWD"
           cd /tmp && /tmp/wheel-venv/bin/python - << 'EOF'
+          import ast
           import importlib.util
-          from importlib.metadata import distribution, entry_points
+          import os
+          from importlib.metadata import distribution, entry_points, version
+
+          # The version is written once, in config/constants.py (APP_VERSION).
+          source = open(os.path.join(os.environ["REPO_DIR"], "config", "constants.py")).read()
+          (app_version,) = [n.value.value for n in ast.parse(source).body
+                            if isinstance(n, ast.Assign)
+                            and getattr(n.targets[0], "id", None) == "APP_VERSION"]
+          assert version("llm-fine-tuner") == app_version, (version("llm-fine-tuner"), app_version)
 
           top = {f.parts[0] for f in distribution("llm-fine-tuner").files}
           stray = top & {"tests", "archive", "docs", "build"}
@@ -395,7 +412,7 @@ jobs:
           for name in ("llm-finetune", "app"):
               (ep,) = [e for e in scripts if e.name == name]
               assert importlib.util.find_spec(ep.module), f"{name}: module {ep.module} missing"
-          print("wheel OK:", sorted(top))
+          print("wheel OK:", app_version, sorted(top))
           EOF
 
   # =========================================================================

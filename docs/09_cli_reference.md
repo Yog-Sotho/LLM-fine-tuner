@@ -11,6 +11,7 @@ Any time you launch `main.py` with arguments, it runs in CLI mode. With no argum
 ```bash
 python main.py            # → opens the Gradio UI in your browser
 python main.py --help     # → shows CLI help
+python main.py --version  # → prints the version
 python main.py train ...  # → runs headless training
 ```
 
@@ -26,7 +27,11 @@ Output:
 ```
 Usage: main.py [OPTIONS] COMMAND [ARGS]...
 
-  🧠 LLM Fine-Tuner v3.2 — headless CLI for every training mode.
+  🧠 LLM Fine-Tuner v3.2.0 — headless CLI for every training mode.
+
+Options:
+  --version  Show the version and exit.
+  --help     Show this message and exit.
 
 Commands:
   train     Headless SFT training
@@ -46,6 +51,9 @@ Each command also has its own `--help`:
 ```bash
 python main.py train --help
 ```
+
+The app logs to the console. `LFT_LOG_LEVEL=DEBUG` (or `WARNING`, `ERROR`; default `INFO`) sets how
+much its own modules report; other libraries only show warnings.
 
 ---
 

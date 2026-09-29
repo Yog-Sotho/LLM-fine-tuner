@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# 🧠 LLM Fine-Tuner v3.2 — Docker Entrypoint
+# 🧠 LLM Fine-Tuner — Docker Entrypoint
 # =============================================================================
 #
 # Behaviour:
@@ -29,7 +29,7 @@ warn() { echo -e "${YELLOW}[entrypoint] ⚠️ ${RESET} $*"; }
 # ── Banner ────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════════════════╗${RESET}"
-echo -e "${GREEN}║        🧠  LLM Fine-Tuner v3.2 — Docker Container        ║${RESET}"
+echo -e "${GREEN}║           🧠  LLM Fine-Tuner — Docker Container          ║${RESET}"
 echo -e "${GREEN}╚══════════════════════════════════════════════════════════╝${RESET}"
 echo ""
 

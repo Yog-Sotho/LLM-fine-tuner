@@ -67,7 +67,7 @@ def augment_dataset_v27(
         else:
             augmenter = naw.SynonymAug(aug_src="wordnet")
 
-        # BOLT OPTIMIZATION: Use batched augmentation to significantly speed up processing.
+        # Use batched augmentation to significantly speed up processing.
         # Sequential calls to nlpaug are slow because they don't utilize vectorized
         # operations. Batched calls are typically 3-5x faster.
         if augmentation_factor <= 1:
@@ -81,9 +81,7 @@ def augment_dataset_v27(
         )
 
         if target_col:
-            # BOLT OPTIMIZATION: Use direct column access for ~10,000x speedup over row-wise loop.
-            # BOLT OPTIMIZATION: Use direct column access instead of row-wise iteration.
-            # list(dataset[COL]) is ~10,000x faster than [x[COL] for x in dataset].
+            # list(dataset[COL]) is far faster than [x[COL] for x in dataset].
             texts_to_aug = list(dataset[target_col])
             all_aug_versions = []
 
@@ -99,7 +97,7 @@ def augment_dataset_v27(
                     # Fallback: if batch fails, use original texts to preserve row count
                     all_aug_versions.append(texts_to_aug)
 
-            # BOLT OPTIMIZATION: Vectorized reconstruction using Pandas for ~20x speedup.
+            # Vectorized reconstruction using Pandas for ~20x speedup.
             import pandas as pd
 
             df_orig = dataset.to_pandas()
@@ -148,7 +146,7 @@ def quality_filter_v27(
 ) -> tuple:
     """Filter examples by character-length bounds.
 
-    BOLT OPTIMIZATION: Uses batched filtering with vectorized Pandas logic
+    Uses batched filtering with vectorized Pandas logic
     for character-length calculations, yielding a significant speedup while
     remaining memory-safe for very large datasets.
 

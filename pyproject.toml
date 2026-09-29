@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-fine-tuner"
-version = "3.2.0"
+dynamic = ["version"]  # from config.constants.APP_VERSION
 description = "Advanced LLM Fine-Tuner — SFT, DPO, ORPO, KTO, GRPO, reward modelling and evaluation"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -114,32 +114,35 @@ py-modules = ["main"]
 
 [tool.setuptools.packages.find]
 # The modular repo keeps all modules flat at the project root. List the
-# application packages explicitly so tests/, archive/ and docs/ are never
+# application packages explicitly so tests/ and docs/ are never
 # installed as top-level packages.
 where = ["."]
 include = ["cli*", "config*", "core*", "data*", "export*", "inference*", "training*", "ui*"]
 
+[tool.setuptools.dynamic]
+# Single source of the version. A literal, so it is read without importing the module.
+version = { attr = "config.constants.APP_VERSION" }
+
 
 [tool.pytest.ini_options]
-# M-8 FIX: was "." which caused pytest to scan the entire repo including archive/.
+# M-8 FIX: was "." which caused pytest to scan the entire repo.
 # Setting to "tests" scopes discovery to the dedicated test directory only.
 testpaths   = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+markers = ["gpu: needs a CUDA GPU (skipped without one; run with -m gpu)"]
 
 
 # pytest-cov has no --cov-omit flag; coverage.py reads its settings from here.
 [tool.coverage.run]
-omit = ["archive/*", "docs/*", "tests/*", "setup.py"]
+omit = ["docs/*", "tests/*", "setup.py"]
 
 
 [tool.ruff]
 target-version = "py310"
 line-length = 100
-# archive/ holds deprecated code kept for reference only (never imported).
-extend-exclude = ["archive"]
 
 
 [tool.ruff.lint]

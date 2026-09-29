@@ -31,6 +31,7 @@ from core.callbacks import (
     ETAProgressCallback,
     LoggingCallback,
     StopCallback,
+    final_train_loss,
 )  # F-2: ETAProgressCallback added
 from core.hardware import (
     compute_dtype,
@@ -64,7 +65,7 @@ def train_orpo_v27(
 
     Returns a status string for display in the UI.
     """
-    # Sentinel: strip whitespace and validate against path traversal.
+    # Strip whitespace and validate against path traversal.
     model_name = model_name.strip() if model_name else ""
     output_dir = output_dir.strip() if output_dir else ""
 
@@ -237,7 +238,7 @@ def train_orpo_v27(
             torch.cuda.empty_cache()
             gc.collect()
 
-        final_loss = log_cb.records[-1]["train_loss"] if log_cb.records else "N/A"
+        final_loss = final_train_loss(log_cb.records)
         if progress is not None:
             progress(1.0, desc="✅ Complete!")
         return (

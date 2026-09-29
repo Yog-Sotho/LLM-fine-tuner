@@ -52,8 +52,9 @@ coverage.xml
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# Gradio & temp files
+# Gradio, logs & temp files
 gradio_cached_examples/
+*.log
 tmp/
 *.tmp
 *.temp

@@ -32,7 +32,12 @@ from config.constants import (
     DEFAULT_SEED,
     HAS_KTO,
 )
-from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback
+from core.callbacks import (
+    ETAProgressCallback,
+    LoggingCallback,
+    StopCallback,
+    final_train_loss,
+)
 from core.hardware import compute_dtype, get_lora_targets, is_main_process, training_device_args
 from core.run_config import latest_checkpoint, save_run_config
 from core.state import app_state, validate_path_traversal
@@ -203,7 +208,7 @@ def train_kto(
                 peft={"method": "LoRA", "lora_rank": 16, "lora_alpha": 32},
             )
 
-        final_loss = log_cb.records[-1]["train_loss"] if log_cb.records else "N/A"
+        final_loss = final_train_loss(log_cb.records)
         if progress is not None:
             progress(1.0, desc="✅ Complete!")
         return (

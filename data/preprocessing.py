@@ -242,7 +242,7 @@ def _dedup_key(frame: pd.DataFrame, columns: list[str]) -> pd.Series:
 def get_dataset_stats(dataset: Dataset, is_dpo: bool = False) -> dict:
     """Calculate dataset statistics (count and average length) efficiently.
 
-    BOLT OPTIMIZATION: Uses native PyArrow compute functions on the underlying
+    Uses native PyArrow compute functions on the underlying
     Arrow Table instead of converting the dataset to a Pandas DataFrame.
     This completely bypasses Python object translation and memory copies,
     yielding a ~1.7x to 2.3x speedup and significant memory savings.
@@ -293,7 +293,7 @@ def validate_and_clean_dataset(
     """Validate and clean a Dataset efficiently.
 
     Removes empty examples, deduplicates, and reports long ones (> 2048 chars).
-    BOLT OPTIMIZATION: Uses vectorized Pandas operations for string stripping,
+    Uses vectorized Pandas operations for string stripping,
     empty row detection, and deduplication, yielding a ~250x speedup compared
     to sequential Python loops.
 
@@ -316,7 +316,7 @@ def validate_and_clean_dataset(
     original_len = len(df)
 
     # ── Single-pass validation and filtering ──────────────────────────────
-    # BOLT OPTIMIZATION: In-place string stripping and casting avoids redundant
+    # In-place string stripping and casting avoids redundant
     # string copies, multiple casts to `.astype(str)`, and extra `.str.strip()`
     # operations, improving performance by ~11% and ensuring training data hygiene.
     if is_dpo:
@@ -357,7 +357,7 @@ def validate_and_clean_dataset(
         issues.append(f"⚠️ {empty} {what} removed. ")
 
     # ── Duplicate detection AND removal (M4 FIX) ──────────────────────────
-    # BOLT OPTIMIZATION: Use Pandas drop_duplicates for efficient O(N) deduplication.
+    # Use Pandas drop_duplicates for efficient O(N) deduplication.
     # Near-duplicates too: rows differing only in case or whitespace count as duplicates.
     pre_dup_len = len(df)
     if is_dpo or (
@@ -380,7 +380,7 @@ def validate_and_clean_dataset(
         issues.append(f"⚠️ {n_dups} duplicate examples removed (incl. case/whitespace variants). ")
 
     # ── Report long examples (will be truncated by tokeniser) ─────────────
-    # BOLT OPTIMIZATION: Calculate character lengths ONLY on clean, unique, final rows to avoid redundant computation and slow index realignment.
+    # Calculate character lengths ONLY on clean, unique, final rows to avoid redundant computation and slow index realignment.
     # By using already stripped/cast columns in df, we bypass redundant .astype(str) and .str.strip() calls.
     if len(df) > 0:
         if is_dpo or (
@@ -433,18 +433,18 @@ def validate_and_clean_dataset(
 def preview_dataset(dataset: Dataset, is_dpo: bool = False) -> pd.DataFrame:
     """Return a small preview of the dataset as a pandas DataFrame for the UI.
 
-    BOLT OPTIMIZATION: Uses the efficient `dataset[:N][COL]` slicing pattern
+    Uses the efficient `dataset[:N][COL]` slicing pattern
     to avoid loading full columns into memory. This provides a verified
     ~6x-40x speedup for large datasets.
     """
     if len(dataset) == 0:
         return pd.DataFrame({"Status": ["⚠️ Dataset is empty after cleaning."]})
 
-    # BOLT OPTIMIZATION: Use dataset[:N][COL] slicing instead of dataset[COL][:N].
+    # Use dataset[:N][COL] slicing instead of dataset[COL][:N].
     # Slicing before column access avoids loading the entire column into memory,
     # providing a ~5-15x speedup for large datasets.
     if is_dpo:
-        # BOLT OPTIMIZATION: Slice first, then access columns from the dict subset.
+        # Slice first, then access columns from the dict subset.
         # We slice exactly ONCE (avoiding redundant dataset[:5] calls) and use direct
         # dict lookup conditional on the column name presence to avoid multiple .get() calls.
         subset = dataset[:5]
@@ -476,10 +476,10 @@ def preview_dataset(dataset: Dataset, is_dpo: bool = False) -> pd.DataFrame:
             rows = [f"🖼️ {n} image(s)\n{text}" for n, text in zip(counts, rows, strict=True)]
         return pd.DataFrame({COL_MESSAGES: rows})
     elif COL_TEXT in dataset.column_names:
-        # BOLT OPTIMIZATION: Efficient slicing pattern
+        # Efficient slicing pattern
         return pd.DataFrame({COL_TEXT: dataset[:10][COL_TEXT]})
     else:
-        # BOLT OPTIMIZATION: Slice first, then access columns
+        # Slice first, then access columns
         # We slice exactly ONCE (avoiding redundant dataset[:5] calls) and retrieve
         # columns via direct dict key access with a column_names check.
         subset = dataset[:5]

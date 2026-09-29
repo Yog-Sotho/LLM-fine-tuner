@@ -36,6 +36,8 @@ import typer
 import yaml
 
 from config.constants import (
+    APP_NAME,
+    APP_VERSION,
     BENCHMARK_DEFAULT_LIMIT,
     BENCHMARK_TASKS,
     COL_CHOSEN,
@@ -85,9 +87,28 @@ from training.sft import train_model
 
 app = typer.Typer(
     name="llm-fine-tuner",
-    help="🧠 LLM Fine-Tuner v3.2 — headless CLI for every training mode.",
+    help=f"🧠 {APP_NAME} — headless CLI for every training mode.",
     add_completion=False,
 )
+
+
+def _print_version(value: bool) -> None:
+    if value:
+        typer.echo(APP_VERSION)
+        raise typer.Exit()
+
+
+@app.callback()
+def _main(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_print_version,
+        is_eager=True,
+        help="Show the version and exit.",
+    ),
+) -> None:
+    """Options that apply to every command."""
 
 
 class DummyFile:
@@ -613,9 +634,7 @@ def evaluate(
     data: str = typer.Option(..., "--data", help="Test dataset (prompt / reference columns)"),
     lora: str | None = typer.Option(None, "--lora", help="PEFT adapter path"),
     bertscore: bool = typer.Option(False, "--bertscore", help="Compute BERTScore"),
-    batch_size: int = typer.Option(
-        8, "--batch-size", help="Generation batch size (BOLT OPTIMIZED)"
-    ),
+    batch_size: int = typer.Option(8, "--batch-size", help="Generation batch size"),
     max_new_tokens: int = typer.Option(150, "--max-new-tokens", help="Tokens to generate"),
     compare_base: bool = typer.Option(
         False, "--compare-base", help="Also score the base model (adapter off; needs --lora)"
@@ -643,7 +662,7 @@ def evaluate(
         import pandas as pd
 
         if data.endswith(".csv"):
-            # BOLT OPTIMIZATION: Only read the required 'prompt' and 'reference' columns
+            # Only read the required 'prompt' and 'reference' columns
             # to save memory and parsing overhead, especially with large datasets.
             header_cols = pd.read_csv(data, nrows=0).columns.tolist()
             if "prompt" not in header_cols:

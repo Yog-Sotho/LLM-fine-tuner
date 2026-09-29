@@ -49,6 +49,17 @@ class LoggingCallback(TrainerCallback):
         self._t0 = time.time()
 
     def on_log(self, args, state, control, logs=None, **kwargs) -> None:
+        if logs and "loss" not in logs and "eval_loss" in logs:
+            # Evaluation logs separately from training: attach it to the record of the
+            # same step, or add an eval-only record (train loss NaN).
+            last = self.records[-1] if self.records else None
+            if last is not None and last["step"] == state.global_step and "note" not in last:
+                last["eval_loss"] = round(logs["eval_loss"], 4)
+            else:
+                self.records.append({"step": state.global_step, "train_loss": float("nan"),
+                                     "eval_loss": round(logs["eval_loss"], 4),
+                                     "elapsed_s": round(time.time() - self._t0, 1), "eta_s": 0.0})  # fmt: skip
+            return
         if not (logs and "loss" in logs):
             return
 
@@ -73,6 +84,15 @@ class LoggingCallback(TrainerCallback):
                 "eta_s": round(eta_s, 1),
             }
         )
+
+
+def final_train_loss(records: list):
+    """Last training loss in the records (skips eval-only and note records), or "N/A"."""
+    for record in reversed(records):
+        loss = record.get("train_loss")
+        if "note" not in record and loss is not None and loss == loss:  # not NaN
+            return loss
+    return "N/A"
 
 
 class ETAProgressCallback(TrainerCallback):

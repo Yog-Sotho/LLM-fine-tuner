@@ -1,10 +1,6 @@
-# ╔═════════════════════════════════════════╗
-# ║              🧠 Advanced LLM Fine-Tuner  —  v3.2 (PRODUCTION READY) ║
-# ║    Updated requirements (March 2026) — includes CLI, RLHF,          ║
-# ║    ORPO, PPO, Reward Training, vLLM (cached), evaluation            ║
-# ║    (BLEU/ROUGE/BERTScore), data augmentation (nlpaug),              ║
-# ║    Flash Attention 2, QLoRA Enhanced, and all v3.2 bug fixes.       ║
-# ╚═════════════════════════════════════════╝
+# 🧠 LLM Fine-Tuner — pip requirements (the version is APP_VERSION in config/constants.py)
+# CLI, SFT/DPO/ORPO/KTO/GRPO/reward training, vLLM (cached), evaluation
+# (BLEU/ROUGE/BERTScore), data augmentation (nlpaug), Flash Attention 2, QLoRA.
 #
 # Install with: pip install -r requirements.txt
 # Then (highly recommended for 2‑5× speed and native GGUF export):
@@ -57,7 +53,7 @@ exllamav2                   # EXL2 inference backend  (optional, guarded by HAS_
 # pip install flash-attn --no-build-isolation
 # flash-attn>=2.5.0
 
-# ── v2.7 / v3.2 NEW OPTIONAL PACKAGES ────────────────────────────────
+# ── Optional packages ─────────────────────────────────────────────────
 
 # Evaluation metrics
 evaluate>=0.4.0             # HuggingFace evaluate hub (BLEU, perplexity, etc.) — optional

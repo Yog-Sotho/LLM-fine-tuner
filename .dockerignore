@@ -1,5 +1,5 @@
 # =============================================================================
-# .dockerignore — LLM Fine-Tuner v3.2
+# .dockerignore — LLM Fine-Tuner
 # Keeps the Docker build context lean and fast.
 # =============================================================================
 

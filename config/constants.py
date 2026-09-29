@@ -20,6 +20,16 @@ import warnings
 
 import torch
 
+# ── Version ────────────────────────────────────────────────────────────────
+# The only place the version is written: pyproject.toml reads it from here (a plain
+# string literal, so setuptools parses it without importing this module).
+APP_VERSION = "3.2.0"
+APP_NAME = f"LLM Fine-Tuner v{APP_VERSION}"
+
+# ── Logging ────────────────────────────────────────────────────────────────
+# Level for this app's own loggers (DEBUG, INFO, WARNING, ERROR); set by main.py.
+LOG_LEVEL = os.environ.get("LFT_LOG_LEVEL", "INFO").strip().upper() or "INFO"
+
 # H-2 FIX: Removed the previous global `warnings.filterwarnings("ignore")` call.
 # That line silenced ALL Python warnings for the entire process, hiding critical
 # deprecation notices from transformers/peft/trl that help users diagnose failures.

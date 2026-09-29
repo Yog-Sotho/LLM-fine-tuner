@@ -6,7 +6,7 @@ This file provides context for AI assistants (Claude, Copilot, etc.) working in 
 
 ## Repository Overview
 
-**LLM Fine-Tuner v3.2** is a production-ready application for fine-tuning large language models. It exposes two interfaces over the same core: a Gradio web UI and a Typer CLI. The application supports supervised fine-tuning (SFT), DPO, ORPO, KTO, GRPO, and reward model training, with optional acceleration via Unsloth and vLLM.
+**LLM Fine-Tuner** is a production-ready application for fine-tuning large language models. It exposes two interfaces over the same core: a Gradio web UI and a Typer CLI. The application supports supervised fine-tuning (SFT), DPO, ORPO, KTO, GRPO, and reward model training, with optional acceleration via Unsloth and vLLM.
 
 **Entry point:** `main.py` — if `sys.argv` has arguments, delegates to the Typer CLI; otherwise launches the Gradio UI on port 7860.
 
@@ -22,7 +22,7 @@ LLM-fine-tuner/
 ├── docker-compose.yml       # GPU and CPU Docker services
 │
 ├── config/
-│   └── constants.py         # ALL constants, HAS_* flags, LoRA presets — Layer 0
+│   └── constants.py         # APP_VERSION, ALL constants, HAS_* flags, LoRA presets — Layer 0
 │
 ├── core/
 │   ├── state.py             # AppState singleton (shared caches) + per-session SessionState
@@ -81,10 +81,10 @@ LLM-fine-tuner/
 │   ├── test_data_loader.py
 │   ├── test_preprocessing.py
 │   ├── test_training_data.py
-│   └── test_training_guards.py
+│   ├── test_training_guards.py
+│   └── …                    # one file per area (security, formats, deploy, smoke training…)
 │
-├── docs/                    # User-facing documentation (01_installation.md … 13_docker.md)
-└── archive/                 # Deprecated code — do not import from here
+└── docs/                    # User-facing documentation (01_installation.md … 13_docker.md)
 ```
 
 ---
@@ -160,6 +160,11 @@ Tab files (`ui/tabs/*.py`) define **layout only** — no `.click()`, `.change()`
 - UI runs go to `run_dir_for(run_name)` (`<LFT_RUNS_DIR>/<name>/`); never build run paths from raw user input.
 - Tracking backends come from `TRACKING_BACKENDS` (installed only); validate choices with `resolve_report_to()`.
 
+### Version and logging
+
+- The version is written once: `APP_VERSION` in `config/constants.py` (a plain literal — `pyproject.toml` reads it via `[tool.setuptools.dynamic]`, CI checks the wheel). Show it with `APP_NAME`; never write the version anywhere else.
+- Library modules log with `logger = logging.getLogger(__name__)`, never `print()`. `main.py` configures logging (`LFT_LOG_LEVEL`) and is the only module that prints.
+
 ### Optional dependencies
 
 Before using an optional package, check its `HAS_*` flag from `config/constants.py` and raise a user-friendly error if unavailable. Never let a missing optional package cause an unguarded `ImportError` at call time.
@@ -211,7 +216,9 @@ pytest tests/test_cli.py -v
 pytest tests/test_cli.py::test_help_flag_exits_zero -v
 ```
 
-`tests/test_smoke_training.py` trains `hf-internal-testing/tiny-random-LlamaForCausalLM` for real (SFT, DPO, ORPO, CLI, inference). It is skipped when the model can't be downloaded, unless `REQUIRE_SMOKE_MODELS=1` (set in CI). CI lives in `.github/workflows/ci.yml` and runs ruff, mypy, pytest (3.10–3.12), pip-audit, hadolint and a packaging check.
+`tests/test_smoke_training.py` trains `hf-internal-testing/tiny-random-LlamaForCausalLM` for real (SFT, DPO, ORPO, CLI, inference). It is skipped when the model can't be downloaded, unless `REQUIRE_SMOKE_MODELS=1` (set in CI). CI lives in `.github/workflows/ci.yml` and runs ruff, mypy (every layer), pytest (3.10–3.12, coverage must stay ≥ 85 %), pip-audit, hadolint and a packaging check.
+
+`tests/test_gpu.py` (marker `gpu`) covers what CPU CI can't: 4-bit QLoRA, half-precision full fine-tuning, Flash Attention + packing, vLLM GRPO, NCCL. It skips without CUDA; `.github/workflows/gpu.yml` runs it on a GPU runner (manual, or weekly when the `GPU_RUNNER` repository variable is set). New GPU-only code gets a test there.
 
 Tests use `CliRunner` (no subprocess spawning) and patch heavy functions so they run without a GPU or downloaded models. `conftest.py` inserts the repo root into `sys.path[0]` — **do not remove this**.
 
@@ -255,6 +262,7 @@ HF_TOKEN=hf_xxx docker compose up llm-fine-tuner-gpu
 | `LFT_RUNS_DIR` | `runs` (Docker: `/app/models`) | Where UI training runs are saved (`<dir>/<run name>/`) |
 | `LFT_GPU_JOBS` | `1` | Heavy GPU jobs (training, eval, benchmarks, export, merge, vLLM) the web UI runs at once (1–8) |
 | `LFT_SERVE_API_KEY` | — | API key required by `main.py serve` (passed to the server via its environment) |
+| `LFT_LOG_LEVEL` | `INFO` | Log level for the app's own modules (other libraries log warnings only) |
 | `LFT_REPORT_TO` | `none` | Default experiment tracker (`trackio`, `wandb`, `mlflow`, `tensorboard`) if installed |
 | `HF_TOKEN` | — | HuggingFace Hub auth (gated models, Hub push) |
 | `SHARE` | `false` | Enable public Gradio link |
@@ -340,7 +348,7 @@ Trained model → push_to_hub()
 
 ## Common Pitfalls
 
-1. **Do not import from `archive/`** — deprecated code, kept for historical reference only.
+1. **Do not `print()` outside `main.py`** — log with `logger = logging.getLogger(__name__)` (a test enforces it); warnings a user must see during training also go to the run log via `_warn()` in `training/sft.py`.
 2. **Do not wire Gradio events in tab files** — only `ui/app.py:build_demo()` does this.
 3. **Do not add constants outside `config/constants.py`** — column names, file extensions, and feature flags belong there.
 4. **Do not re-check `HAS_*` flags with `try/except`** — import from `config/constants.py`.
@@ -375,4 +383,4 @@ Example: `# C-1: Removed broken llm_fine_tuner.* package imports`
 - **Unsloth:** installed separately — not in `requirements.txt`. Provides 2–5× training speedup and native GGUF export.
 - **heretic-llm:** optional dep (moved out of required in v3.2 to avoid PyPI install failures).
 - **Python:** 3.10, 3.11, 3.12 supported.
-- **Packaging:** `pyproject.toml` is the only source of metadata (`setup.py` is an empty shim). Packages are listed in `[tool.setuptools.packages.find] include` — add any new top-level package there; `main.py` ships via `py-modules`. CI installs the built wheel and checks it.
+- **Packaging:** `pyproject.toml` is the only source of metadata (`setup.py` is an empty shim). Packages are listed in `[tool.setuptools.packages.find] include` — add any new top-level package there; `main.py` ships via `py-modules`. CI installs the built wheel and checks it (contents, entry points, version).

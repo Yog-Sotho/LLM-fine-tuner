@@ -1,4 +1,4 @@
-# 🧠 LLM Fine-Tuner v3.2 — Documentation
+# 🧠 LLM Fine-Tuner — Documentation
 
 Welcome! This documentation covers everything you need to go from zero to a fine-tuned, deployed AI model — no coding required.
 

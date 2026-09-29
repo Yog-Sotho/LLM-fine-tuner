@@ -142,7 +142,7 @@ def on_train_click(
     if file is None and augmented_ds is None:
         return "❌ Please upload a data file first.", None, None, []
 
-    # Sentinel: strip whitespace and validate against path traversal.
+    # Strip whitespace and validate against path traversal.
     custom_model = custom_model.strip() if custom_model else ""
     if err := validate_path_traversal(custom_model):
         return err, None, None, []
@@ -274,7 +274,7 @@ def on_stop(request: gr.Request | None = None) -> str:
 
 
 def on_generate(prompt, model_choice, custom_model, lora_path, max_tok, temp, top_p) -> str:
-    # Sentinel: strip whitespace and validate against path traversal.
+    # Strip whitespace and validate against path traversal.
     custom_model = custom_model.strip() if custom_model else ""
     lora_path = lora_path.strip() if lora_path else ""
     if err := (validate_path_traversal(custom_model) or validate_path_traversal(lora_path)):
@@ -287,7 +287,7 @@ def on_generate(prompt, model_choice, custom_model, lora_path, max_tok, temp, to
 def on_batch_test(
     f, model_choice, custom_model, lora_path, request: gr.Request | None = None
 ) -> str:
-    # Sentinel: strip whitespace and validate against path traversal.
+    # Strip whitespace and validate against path traversal.
     custom_model = custom_model.strip() if custom_model else ""
     lora_path = lora_path.strip() if lora_path else ""
     if err := (validate_path_traversal(custom_model) or validate_path_traversal(lora_path)):
@@ -341,7 +341,7 @@ def on_file_upload(file, training_mode="sft"):
             None,
         )
 
-    # Sentinel: validate path traversal on file upload
+    # Validate path traversal on file upload
     if file and hasattr(file, "name") and file.name:
         if err := validate_path_traversal(file.name):
             return (
@@ -369,20 +369,36 @@ def on_file_upload(file, training_mode="sft"):
         )
 
     try:
-        # BOLT OPTIMIZATION: Bypassing duplicate disk read/parsing for CSV and Excel files.
-        # We load raw_df from the file exactly once, and use direct in-memory conversion
-        # via load_dataset_from_dataframe instead of loading the dataset from the file again.
+        # CSV / Excel are read once; the DataFrame is kept for re-mapping columns.
         raw_df = None
         if ftype in ("csv", "excel"):
-            import pandas as _pd
-
-            raw_df = (
-                _pd.read_csv(file.name)
-                if ftype == "csv"
-                else _pd.read_excel(file.name, engine="openpyxl")
-            )
             from data.loader import load_dataset_from_dataframe
 
+            raw_df = (
+                pd.read_csv(file.name)
+                if ftype == "csv"
+                else pd.read_excel(file.name, engine="openpyxl")
+            )
+            cols = list(raw_df.columns)
+            if is_dpo:
+                need_map = not all(c in cols for c in [COL_PROMPT, COL_CHOSEN, COL_REJECTED])
+            else:
+                need_map = not (
+                    (COL_INSTRUCTION in cols and COL_OUTPUT in cols) or COL_TEXT in cols
+                )
+            if need_map:
+                # The columns can't be read as training data yet: show the raw rows and
+                # the mapping dropdowns (Refresh preview applies the mapping).
+                return (
+                    f"⚠️ Map columns below ({cols}). ",
+                    gr.update(visible=True, choices=cols),
+                    gr.update(visible=True, choices=cols),
+                    gr.update(visible=True, choices=cols),
+                    raw_df.head(10),
+                    f"**Rows in file:** {len(raw_df)}\n**Map the columns, then 🔄 Apply Mapping.**",
+                    raw_df,
+                    ftype,
+                )
             ds = load_dataset_from_dataframe(raw_df, is_dpo=is_dpo)
         else:
             ds = load_dataset_from_file(file, ftype, is_dpo=is_dpo)
@@ -390,29 +406,6 @@ def on_file_upload(file, training_mode="sft"):
         ds, issues = validate_and_clean_dataset(ds, is_dpo=is_dpo)
         preview_df = preview_dataset(ds, is_dpo=is_dpo)
         issues_txt = "\n".join(issues) if issues else "✅ No issues."
-
-        if ftype in ("csv", "excel"):
-            cols = list(raw_df.columns)
-
-            if is_dpo:
-                need_map = not all(c in cols for c in [COL_PROMPT, COL_CHOSEN, COL_REJECTED])
-            else:
-                need_map = not (
-                    (COL_INSTRUCTION in cols and COL_OUTPUT in cols) or COL_TEXT in cols
-                )
-
-            if need_map:
-                stats = f"**Total examples:** {len(ds)}\n**Preview ready**"
-                return (
-                    f"⚠️ Map columns below ({cols}). ",
-                    gr.update(visible=True, choices=cols),
-                    gr.update(visible=True, choices=cols),
-                    gr.update(visible=True, choices=cols),
-                    preview_df,
-                    stats + "\n" + issues_txt,
-                    raw_df,
-                    ftype,
-                )
 
         stats = f"**Total examples:** {len(ds)}"
         return (
@@ -487,7 +480,7 @@ def on_refresh_preview(
             col_map[col_text] = COL_TEXT
 
     try:
-        # BOLT OPTIMIZATION: Bypassing I/O by loading directly from raw_df_state
+        # Bypassing I/O by loading directly from raw_df_state
         # when available, avoiding redundant temporary file creation.
         if raw_df_state is not None:
             ds = load_dataset_from_dataframe(raw_df_state, col_map, is_dpo=is_dpo)
@@ -539,7 +532,7 @@ def build_loss_chart(log_records: list) -> pd.DataFrame:
 
     data: dict = {
         "Step": [r["step"] for r in log_records],
-        "Train Loss": [r["train_loss"] for r in log_records],
+        "Train Loss": [None if pd.isna(r["train_loss"]) else r["train_loss"] for r in log_records],
         # NaN (no eval split) renders as a gap rather than a "NaN" cell.
         "Eval Loss": [None if pd.isna(r["eval_loss"]) else r["eval_loss"] for r in log_records],
     }

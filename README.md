@@ -1,7 +1,7 @@
 <div align="center">
   <img src="Images/logo.jpg" alt="LLM Fine-Tuner" width="800"/>
 
-  <h1>🧠 LLM Fine-Tuner v3.2</h1>
+  <h1>🧠 LLM Fine-Tuner</h1>
 
   <p><strong>Your own custom AI — no coding, no PhD, no drama.</strong><br>
   Upload your data → click Train → get a ready-to-use model in minutes.</p>
@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/github/license/Yog-Sotho/LLM-fine-tuner?style=for-the-badge&color=10b981" alt="License">
   </a>
   <a href="https://github.com/Yog-Sotho/LLM-fine-tuner/releases">
-    <img src="https://img.shields.io/badge/version-v3.2-3b82f6?style=for-the-badge" alt="Release v3.2">
+    <img src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2FYog-Sotho%2FLLM-fine-tuner%2Fmain%2Fconfig%2Fconstants.py&search=APP_VERSION%20%3D%20%22(%5B%5E%22%5D%2B)%22&replace=v%241&label=version&style=for-the-badge&color=3b82f6" alt="Version">
   </a>
   <a href="https://huggingface.co/spaces?sort=trending">
     <img src="https://img.shields.io/badge/🤗-Try_on_HF_Spaces-8b5cf6?style=for-the-badge" alt="HF Spaces">
@@ -202,7 +202,7 @@ Once trained, your model can be:
 
 ## 🗺️ What's been built, what's coming
 
-**Already available in v3.2:**
+**Already available:**
 - ✅ Visual interface — no coding needed
 - ✅ All major training modes (SFT, DPO, RLHF, ORPO)
 - ✅ GGUF export for Ollama & LM Studio

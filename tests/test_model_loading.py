@@ -107,7 +107,7 @@ def test_ui_refuses_to_start_once_per_process(monkeypatch, capsys):
     monkeypatch.setenv("WORLD_SIZE", "2")
     with pytest.raises(SystemExit) as exc:
         entry.main()
-    assert exc.value.code == 2 and "Multi-GPU runs use the CLI" in capsys.readouterr().out
+    assert exc.value.code == 2 and "Multi-GPU runs use the CLI" in capsys.readouterr().err
 
 
 def test_heavy_gpu_jobs_share_one_queue():

@@ -1,7 +1,7 @@
 """
 tests/test_evaluation_batching.py
 ==================================
-Unit tests for Bolt optimization: Batched LLM-as-Judge and simplified stripping.
+Unit tests for batched LLM-as-Judge and simplified stripping.
 
 Verifies:
   - llm_judge_evaluate processes prompts in batches.

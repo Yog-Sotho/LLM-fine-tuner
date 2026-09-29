@@ -3,7 +3,7 @@ set -euo pipefail
 
 
 # =============================================================================
-# 🧠 LLM Fine-Tuner Installation Script (2026 Edition) — v3.2
+# 🧠 LLM Fine-Tuner Installation Script (2026 Edition)
 # =============================================================================
 # Fully addressed every bug: no bc, proper CUDA parsing, trap cleanup,
 # script directory anchoring, dependency arrays, robust launcher, etc.
@@ -290,7 +290,7 @@ fi
 # Final message
 # [FIX-3]: Version label corrected from "v5.0" to "v3.2"
 # ----------------------------------------------------------------------------
-print_step "Installation complete – LLM Fine-Tuner v3.2"
+print_step "Installation complete – LLM Fine-Tuner"
 echo ""
 echo -e "\033[1;32m🎉 Ready to fine-tune!\033[0m"
 echo ""

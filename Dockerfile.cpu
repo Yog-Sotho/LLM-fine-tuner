@@ -1,5 +1,5 @@
 # =============================================================================
-# 🧠 LLM Fine-Tuner v3.2 — CPU-only Dockerfile
+# 🧠 LLM Fine-Tuner — CPU-only Dockerfile
 # =============================================================================
 #
 # Use this when you have NO NVIDIA GPU, or just want to test quickly.
@@ -16,8 +16,7 @@
 FROM python:3.11-slim
 
 LABEL maintainer="Yog-Sotho"
-LABEL description="LLM Fine-Tuner v3.2 — CPU-only"
-LABEL version="3.2"
+LABEL description="LLM Fine-Tuner — CPU-only"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
