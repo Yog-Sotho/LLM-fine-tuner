@@ -188,6 +188,11 @@ You don't need to understand all of these to get started — the defaults work g
 | **KTO** | Alignment from thumbs-up / thumbs-down feedback | When you have good/bad labels but no ranked pairs |
 | **Distillation** | A small model learns from a larger one of the same family | When you want a big model's quality at a small model's cost |
 
+Large models: multi-GPU presets for DDP, FSDP2, FSDP + QLoRA and DeepSpeed ZeRO-2/3
+(`configs/accelerate/`), mixture-of-experts support (router kept stable, load balancing on)
+and long-sequence options (activation offloading, padding-free batches) — see
+[docs/10_advanced.md](docs/10_advanced.md).
+
 ---
 
 ## 📤 Export Options

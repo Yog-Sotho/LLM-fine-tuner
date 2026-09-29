@@ -1,0 +1,31 @@
+# DeepSpeed ZeRO-3: shards weights, gradients and optimizer state (LoRA, QLoRA or full
+# fine-tuning). Needs `pip install deepspeed`. `train` (SFT/DPO) only.
+# Note: the app loads the model before the trainer starts, so ZeRO-3 can't shard it while
+# loading (zero3_init) — every process first loads the whole model. For models too big for
+# that, use fsdp2.yaml (loads on one process, then shards) or fsdp_qlora.yaml.
+#   accelerate launch --config_file configs/accelerate/deepspeed_zero3.yaml --num_processes 4 \
+#       main.py train --model ... --data ...
+# mixed_precision is 'no' on purpose: the app picks bf16 / fp16 / fp32 for the GPU.
+# Based on TRL's examples/accelerate_configs/deepspeed_zero3.yaml.
+compute_environment: LOCAL_MACHINE
+debug: false
+deepspeed_config:
+  deepspeed_multinode_launcher: standard
+  offload_optimizer_device: none
+  offload_param_device: none
+  zero3_init_flag: true
+  zero3_save_16bit_model: true
+  zero_stage: 3
+distributed_type: DEEPSPEED
+downcast_bf16: 'no'
+machine_rank: 0
+main_training_function: main
+mixed_precision: 'no'
+num_machines: 1
+num_processes: 2
+rdzv_backend: static
+same_network: true
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false

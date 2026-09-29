@@ -177,3 +177,77 @@ def test_two_gpu_training_is_data_parallel(tiny_model, tmp_path):
     assert [r["world_size"] for r in ranks] == [2, 2]
     assert ranks[0]["weights"] == ranks[1]["weights"]
     _assert_safetensors_adapter(out)
+
+
+# ── Long sequences ─────────────────────────────────────────────────────────
+
+
+def test_activation_offloading(tiny_model, tmp_path):
+    summary, records = _train(tiny_model, tmp_path, hp={"activation_offloading": True})
+    assert not any("offloading skipped" in r.get("note", "") for r in records), records
+    assert math.isfinite(_final_loss(records)), summary
+
+
+@pytest.mark.skipif(
+    not torch.cuda.is_available() or torch.cuda.get_device_capability() < (8, 0),
+    reason="Flash Attention 2 needs compute capability 8.0+ (Ampere or newer)",
+)
+@pytest.mark.skipif(
+    importlib.util.find_spec("flash_attn") is None, reason="flash-attn not installed"
+)
+def test_padding_free_with_flash_attention(tiny_model, tmp_path):
+    summary, records = _train(tiny_model, tmp_path, use_flash_attn=True, hp={"padding_free": True})
+    assert not any("Padding-free skipped" in r.get("note", "") for r in records), records
+    assert math.isfinite(_final_loss(records)), summary
+
+
+# ── Sharded training with the accelerate presets (2+ GPUs) ─────────────────
+
+_SHARDED_PROBE = """
+import sys
+sys.path.insert(0, {repo!r})
+from datasets import Dataset
+from training.sft import train_model
+ds = Dataset.from_dict({{"instruction": [f"Say {{i}}" for i in range(16)],
+                        "output": [f"word {{i}}" for i in range(16)]}})
+hp = {{"learning_rate": 1e-2, "epochs": 1, "batch_size": 2, "grad_accum": 1, "max_length": 64,
+      "warmup_steps": 0, "eval_split": 0.0}}
+train_model({model!r}, ds, {out!r}, hp, "cuda", {peft!r}, True, 4, 8, 10, 64, 1, 10, False, 0,
+            "linear", False, False, False, "", progress=None)
+"""
+
+
+@pytest.mark.skipif(
+    not torch.cuda.is_available() or torch.cuda.device_count() < 2, reason="needs two GPUs"
+)
+@pytest.mark.parametrize(
+    ("preset", "peft"),
+    [("fsdp2.yaml", "LoRA"), ("fsdp2.yaml", "Full Fine-tuning"), ("fsdp_qlora.yaml", "LoRA"),
+     ("deepspeed_zero2.yaml", "LoRA"), ("deepspeed_zero3.yaml", "LoRA")],
+)  # fmt: skip
+def test_sharded_training_with_presets(tiny_model, tmp_path, preset, peft):
+    """FSDP / DeepSpeed: the run completes and the saved weights are whole (not one shard)."""
+    from safetensors.torch import load_file
+
+    if preset.startswith("deepspeed") and importlib.util.find_spec("deepspeed") is None:
+        pytest.skip("deepspeed not installed")
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    script, out = tmp_path / "probe.py", tmp_path / "out"
+    script.write_text(_SHARDED_PROBE.format(repo=repo, model=tiny_model, out=str(out), peft=peft))
+    result = subprocess.run(
+        [sys.executable, "-m", "accelerate.commands.launch", "--config_file",
+         os.path.join(repo, "configs", "accelerate", preset), "--num_processes", "2", str(script)],
+        capture_output=True, text=True, timeout=1200, env={**os.environ, "HF_HUB_OFFLINE": "1"},
+    )  # fmt: skip
+    assert result.returncode == 0, result.stderr[-3000:]
+    cfg = _assert_run_config(out, "sft", tiny_model)
+    assert cfg["sharding"] == ("fsdp" if preset.startswith("fsdp") else "deepspeed")
+    reference = __import__("transformers").AutoModelForCausalLM.from_pretrained(tiny_model)
+    if peft == "LoRA":
+        weights = load_file(str(out / "adapter_model.safetensors"))
+        a = [w for k, w in weights.items() if "lora_A" in k]
+        assert a and all(w.shape[0] == 4 and w.numel() > 4 for w in a)  # full rank-4 matrices
+    else:
+        weights = load_file(str(out / "model.safetensors"))
+        expected = {k: v.shape for k, v in reference.state_dict().items()}
+        assert all(tuple(weights[k].shape) == tuple(expected[k]) for k in weights if k in expected)

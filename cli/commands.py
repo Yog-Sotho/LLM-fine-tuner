@@ -170,6 +170,12 @@ def train(
     packing: bool = typer.Option(
         False, "--packing", help="Pack short samples together (needs --flash-attn on CUDA)"
     ),
+    activation_offloading: bool = typer.Option(
+        False, "--activation-offloading", help="Long sequences: activations in CPU RAM (CUDA)"
+    ),
+    padding_free: bool = typer.Option(
+        False, "--padding-free", help="Long sequences: no padding (needs --flash-attn on CUDA)"
+    ),
     seed: int = typer.Option(DEFAULT_SEED, "--seed", help="Random seed (data split + training)"),
     eval_split: float = typer.Option(
         DEFAULT_EVAL_SPLIT, "--eval-split", help="Share of rows held out for eval (0 = none)"
@@ -311,6 +317,8 @@ def train(
             "lora_alpha": lora_rank * 2,
             "lr_scheduler": "cosine",
             "packing": packing,
+            "activation_offloading": activation_offloading,
+            "padding_free": padding_free,
             "eval_split": eval_split,
         }
         msg, _ = train_model(

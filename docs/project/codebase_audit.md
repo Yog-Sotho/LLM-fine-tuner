@@ -54,7 +54,7 @@ persistent job queue, and the GPU paths have not been exercised by an automated 
 | Export & deploy | 8 | GGUF, FP8/W4A16, Hub card, llama-server / vLLM serving, remote client |
 | Reproducibility | 9 | run_config.yaml, dataset SHA-256, early seeding, resume, tracking, one version |
 | Security | 8 | See Security below |
-| Scale | 5 | DDP/FSDP via CLI; UI runs one GPU job at a time; no DeepSpeed/SP/MoE |
+| Scale | 6.5 (T14) | DDP + FSDP2 / FSDP-QLoRA / DeepSpeed ZeRO-2/3 presets for `train`; MoE support; activation offloading, padding-free. Sharding **not yet run on GPUs**; no context/sequence parallelism |
 | Code quality | 7 | mypy on all layers; `train_model()` still ~580 lines |
 | Test depth | 8 (was 6) | 88 % coverage, 505 tests; GPU suite written, not yet run on a GPU |
 
@@ -155,6 +155,14 @@ New findings from this audit are marked **NEW**.
 | MEDIUM | OPEN | `config/constants.py:233,344` | Import-time `import unsloth` (patches Transformers globally) and `nltk.download("punkt")` | `find_spec` probe + lazy import at call sites (as done for Liger, lm-eval, llm-compressor) |
 | LOW | OPEN | `docker-compose.yml:61-63,110-111`, Dockerfiles | `TRANSFORMERS_CACHE` deprecated; `HF_HUB_ENABLE_HF_TRANSFER` is deprecated in huggingface_hub 1.33 (hf_transfer no longer used — warns) | Drop both; keep `HF_HOME` |
 
+### Tier 14 findings
+
+| Severity | Status | Location | Issue | Fix |
+|---|---|---|---|---|
+| **NEW** HIGH | FIXED (T14) | all trainers (`lora_dropout=0.05`) | LoRA on any MoE model **failed** on Transformers 5 / PEFT 0.21: PEFT wraps the fused expert weights with a ParamWrapper that refuses dropout | `lora_dropout(model)` → 0 for MoE models; verified on tiny Qwen3-MoE with every trainer, TRL 0.29 and 1.14 |
+| **NEW** MEDIUM | FIXED (T14) | trainers | MoE fine-tuning ran without the router load-balancing loss (TRL adds it only with `output_router_logits`), and LoRA trained the router | `setup_moe()` per trainer (combination verified per trainer; DPO/KTO keep TRL's handling) |
+| **NEW** INFO | NOTED | accelerate on CPU | `accelerate launch` with an FSDP config sets `ACCELERATE_USE_FSDP` on CPU but trains plain DDP | `sharding_backend()` requires CUDA, so records and guards match what really runs |
+
 ### Code Quality [7/10]
 
 | Severity | Status | Location | Issue | Recommendation / fix |
@@ -200,6 +208,7 @@ New findings from this audit are marked **NEW**.
 | 2026-09-27 | `origin/main@7491ca6` | 3.8 | Baseline: app could not start, CI never ran, unauthenticated RCE |
 | 2026-09-29 | Tier 12 branch | 7.3 | All CRITICAL/HIGH fixed; SOTA 7/10; open items are MEDIUM/LOW |
 | 2026-09-29 | Tier 13 branch | 7.3 | Adapters → IA3 (finding fixed); distillation + adapter merging added; SOTA 7.5/10 |
+| 2026-09-29 | Tier 14 branch | 7.4 | MoE LoRA fixed on Transformers 5 (was failing); MoE router loss/freeze; sharding presets; long-context options; SOTA 7.5/10 (8 once the GPU suite passes) |
 
 Work between the two audits (all verified with the CI workflow replayed locally, floor and
 ceiling library versions, live UI and Docker CPU checks before each push):
@@ -229,7 +238,8 @@ suite + workflow, two bugs fixed (column mapping on upload, eval loss in the cha
    `HF_HUB_ENABLE_HF_TRANSFER`; `vllm_cache` lock.
 9. **[Roadmap]** ~~Tier 13 — distillation and model merging~~ (done: GKD distillation, LoRA
    adapter merging; full-model merges wait for a mergekit release that works with current
-   Transformers); Tier 14 — DeepSpeed/FSDP presets, long context, MoE.
+   Transformers); ~~Tier 14 — DeepSpeed/FSDP presets, long context, MoE~~ (done; sharding and
+   long-context paths still need their first GPU run).
 
 ---
 

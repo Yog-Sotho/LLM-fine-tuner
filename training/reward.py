@@ -33,7 +33,15 @@ from core.callbacks import (
     StopCallback,
     final_train_loss,
 )
-from core.hardware import compute_dtype, get_lora_targets, is_main_process, training_device_args
+from core.hardware import (
+    compute_dtype,
+    get_lora_targets,
+    is_main_process,
+    lora_dropout,
+    setup_moe,
+    sharding_unsupported,
+    training_device_args,
+)
 from core.run_config import save_run_config
 from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
@@ -61,6 +69,8 @@ def train_reward_model_v27(
     if err := (validate_path_traversal(model_name) or validate_path_traversal(output_dir)):
         return err
 
+    if err := sharding_unsupported("Reward model training"):
+        return err
     if not HAS_REWARD_TRAINER:
         return '❌ RewardTrainer not available. Install: pip install "trl>=0.29.1,<2"'
     if reward_file is None:
@@ -130,7 +140,7 @@ def train_reward_model_v27(
             r=16,
             lora_alpha=32,
             target_modules=get_lora_targets(),
-            lora_dropout=0.05,
+            lora_dropout=lora_dropout(model),
             bias="none",
         )
 
@@ -141,6 +151,7 @@ def train_reward_model_v27(
                 ETAProgressCallback(gradio_progress=progress, progress_start=0.3, progress_end=0.9)
             )
 
+        setup_moe(model)  # router aux-loss flag must be set before the trainer reads it
         trainer = RewardTrainer(
             model=model,
             args=config,
@@ -150,6 +161,7 @@ def train_reward_model_v27(
             callbacks=callbacks,
             peft_config=peft_config,
         )
+        moe = setup_moe(trainer.model)  # after TRL applied LoRA: freeze the router adapter
 
         if progress is not None:
             progress(0.3, desc="Reward model training started… calculating ETA…")
@@ -168,6 +180,7 @@ def train_reward_model_v27(
             tokenizer.save_pretrained(output_dir)
             save_run_config(
                 output_dir,
+                moe=moe,
                 mode="reward",
                 model=model_name,
                 dataset=ds,

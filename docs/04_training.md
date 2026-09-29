@@ -220,6 +220,9 @@ The **📉 Loss Curve** below the log plots these values visually.
 - **Tokens per example** are reported at the start of training, with a warning if examples are longer than **Max Sequence Length** (they get truncated). Max Sequence Length applies to DPO too.
 - **Mixed precision** is chosen automatically: bfloat16 on GPUs that support it, float16 on older GPUs, full precision on CPU.
 - **📦 Sequence packing** (optional): packs short examples into full-length sequences, which is much faster on short data. It needs **⚡ Flash Attention 2** on a CUDA GPU; without it the setting is skipped, because packed examples would leak into each other.
+- **Long sequences** (optional, SFT on a CUDA GPU; skipped with a note otherwise):
+  - **🧠 Activation offloading** keeps activations in CPU RAM between the forward and backward pass — much less GPU memory for long sequences, somewhat slower. Combine with gradient checkpointing for the longest inputs.
+  - **📏 Padding-free batches** concatenate each batch without padding, so no memory or compute is spent on pad tokens. Needs **⚡ Flash Attention 2** (other attention would mix the examples).
 
 ---
 

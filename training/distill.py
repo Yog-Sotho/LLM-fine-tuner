@@ -40,7 +40,15 @@ from config.constants import (
     HAS_GKD,
 )
 from core.callbacks import ETAProgressCallback, LoggingCallback, StopCallback, final_train_loss
-from core.hardware import compute_dtype, get_lora_targets, is_main_process, training_device_args
+from core.hardware import (
+    compute_dtype,
+    get_lora_targets,
+    is_main_process,
+    lora_dropout,
+    setup_moe,
+    sharding_unsupported,
+    training_device_args,
+)
 from core.run_config import latest_checkpoint, save_run_config
 from core.state import app_state, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file, load_table_dataset
@@ -108,6 +116,8 @@ def train_distill(
         or validate_path_traversal(teacher_model_name)
         or validate_path_traversal(output_dir)
     ):
+        return err
+    if err := sharding_unsupported("Distillation"):
         return err
     if not HAS_GKD:
         return '❌ GKDTrainer not available. Install: pip install "trl>=0.29.1,<2"'
@@ -182,9 +192,10 @@ def train_distill(
             r=DISTILL_LORA_RANK,
             lora_alpha=DISTILL_LORA_ALPHA,
             target_modules=get_lora_targets(),
-            lora_dropout=0.05,
+            lora_dropout=lora_dropout(model),
             bias="none",
         )
+        setup_moe(model)  # router aux-loss flag must be set before the trainer reads it
         trainer = GKDTrainer(
             model=model,
             teacher_model=teacher,
@@ -194,6 +205,7 @@ def train_distill(
             callbacks=callbacks,
             peft_config=lora,
         )
+        moe = setup_moe(trainer.model)  # after TRL applied LoRA: freeze the router adapter
 
         if progress is not None:
             progress(0.2, desc="Distillation started… calculating ETA…")
@@ -210,6 +222,7 @@ def train_distill(
             tokenizer.save_pretrained(output_dir)
             save_run_config(
                 output_dir,
+                moe=moe,
                 mode="distill",
                 model=student_model_name,
                 dataset=ds,

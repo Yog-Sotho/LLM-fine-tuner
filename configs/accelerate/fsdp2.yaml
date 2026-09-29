@@ -1,0 +1,32 @@
+# FSDP2: shards weights, gradients and optimizer state over the GPUs, so a model too big
+# for one GPU can be trained (LoRA or full fine-tuning). `train` (SFT/DPO) only.
+# Needs accelerate >= 1.7.
+#   accelerate launch --config_file configs/accelerate/fsdp2.yaml --num_processes 4 \
+#       main.py train --model ... --data ... --peft "Full Fine-tuning"
+# For 4-bit QLoRA use fsdp_qlora.yaml. mixed_precision is 'no' on purpose: the app
+# picks bf16 / fp16 / fp32 for the GPU.
+# Based on TRL's examples/accelerate_configs/fsdp2.yaml.
+compute_environment: LOCAL_MACHINE
+debug: false
+distributed_type: FSDP
+downcast_bf16: 'no'
+enable_cpu_affinity: false
+fsdp_config:
+  fsdp_activation_checkpointing: false
+  fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
+  fsdp_cpu_ram_efficient_loading: true
+  fsdp_offload_params: false
+  fsdp_reshard_after_forward: true
+  fsdp_state_dict_type: FULL_STATE_DICT
+  fsdp_version: 2
+machine_rank: 0
+main_training_function: main
+mixed_precision: 'no'
+num_machines: 1
+num_processes: 2
+rdzv_backend: static
+same_network: true
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false

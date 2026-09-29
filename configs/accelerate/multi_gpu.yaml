@@ -1,0 +1,22 @@
+# Data-parallel (DDP): a full copy of the model on every GPU, batches split between them.
+# Works with every trainer. Pick the GPU count with --num_processes.
+#   accelerate launch --config_file configs/accelerate/multi_gpu.yaml --num_processes 4 \
+#       main.py train --model ... --data ...
+# mixed_precision is 'no' on purpose: the app picks bf16 / fp16 / fp32 for the GPU.
+# Based on TRL's examples/accelerate_configs/multi_gpu.yaml.
+compute_environment: LOCAL_MACHINE
+debug: false
+distributed_type: MULTI_GPU
+downcast_bf16: 'no'
+gpu_ids: all
+machine_rank: 0
+main_training_function: main
+mixed_precision: 'no'
+num_machines: 1
+num_processes: 2
+rdzv_backend: static
+same_network: true
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false

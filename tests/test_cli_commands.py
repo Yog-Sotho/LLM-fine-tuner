@@ -232,3 +232,21 @@ def test_train_config_errors(tmp_path):
         in _run("train", "--model", "gpt2", "--data", "d.csv", "--lora-variant", "PiSSA")[1]
     )
     assert "❌" in _run("train", "--model", "gpt2", "--data", "d.csv", "--report-to", "nope")[1]
+
+
+def test_train_long_sequence_flags(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake_train(**kwargs):
+        seen.update(kwargs["hyperparams"])
+        return "done", []
+
+    monkeypatch.setattr(commands, "train_model", fake_train)
+    data = tmp_path / "d.csv"
+    pd.DataFrame({"instruction": ["Say hi", "Say bye"], "output": ["Hello", "Bye"]}).to_csv(
+        data, index=False
+    )
+    code, out = _run("train", "--model", "gpt2", "--data", str(data), "--output", str(tmp_path / "o"),
+                     "--activation-offloading", "--padding-free")  # fmt: skip
+    assert code == 0, out
+    assert seen["activation_offloading"] is True and seen["padding_free"] is True

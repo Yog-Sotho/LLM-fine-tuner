@@ -5,6 +5,13 @@ LLM-fine-tuner/
 ├── config/
 │   ├── __init__.py
 │   └── constants.py
+├── configs/
+│   └── accelerate/
+│       ├── deepspeed_zero2.yaml
+│       ├── deepspeed_zero3.yaml
+│       ├── fsdp2.yaml
+│       ├── fsdp_qlora.yaml
+│       └── multi_gpu.yaml
 ├── core/
 │   ├── __init__.py
 │   ├── callbacks.py
@@ -89,6 +96,7 @@ LLM-fine-tuner/
 │   ├── test_redact_sensitive_info.py
 │   ├── test_registry.py
 │   ├── test_run_config.py
+│   ├── test_scale.py
 │   ├── test_security_guards_new.py
 │   ├── test_sentinel_fixes.py
 │   ├── test_session_and_security.py

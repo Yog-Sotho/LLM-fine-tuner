@@ -226,6 +226,8 @@ def build_demo() -> gr.Blocks:
             report_to,
             eval_split,
             lora_variant,
+            activation_offloading,
+            padding_free,
             progress=gr.Progress(),
             request: gr.Request | None = None,
         ):
@@ -270,6 +272,8 @@ def build_demo() -> gr.Blocks:
                 report_to=report_to,
                 eval_split=eval_split,
                 lora_variant=lora_variant,
+                activation_offloading=activation_offloading,
+                padding_free=padding_free,
                 progress=progress,
                 request=request,
             )
@@ -319,6 +323,8 @@ def build_demo() -> gr.Blocks:
                 tt["report_to"],
                 tt["eval_split"],
                 tt["lora_variant"],
+                tt["activation_offloading"],
+                tt["padding_free"],
             ],
             outputs=[
                 tt["log_output"],

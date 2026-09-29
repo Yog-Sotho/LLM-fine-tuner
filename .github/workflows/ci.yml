@@ -240,6 +240,7 @@ jobs:
           snapshot_download('hf-internal-testing/tiny-random-LlamaForCausalLM')
           snapshot_download('trl-internal-testing/tiny-Qwen3ForCausalLM')
           snapshot_download('trl-internal-testing/tiny-Qwen2_5_VLForConditionalGeneration')
+          snapshot_download('trl-internal-testing/tiny-Qwen3MoeForCausalLM')
           print('Smoke-test models cached')
           "
 

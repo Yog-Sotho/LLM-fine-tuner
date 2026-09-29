@@ -441,6 +441,12 @@ ADAPTER_MERGE_METHODS: dict[str, str] = {
 ADAPTER_MERGE_DENSITY_METHODS = ("ties", "dare_ties", "dare_linear")
 DEFAULT_ADAPTER_MERGE_METHOD = "ties"
 DEFAULT_ADAPTER_MERGE_DENSITY = 0.5
+# Mixture-of-experts models: config fields holding the expert count, and the router
+# module names. The router stays frozen during fine-tuning (training it risks expert
+# collapse); the router load-balancing loss is switched on (output_router_logits).
+MOE_EXPERT_FIELDS = ("num_experts", "num_local_experts", "n_routed_experts")
+MOE_ROUTER_MODULES = ("gate", "router")
+LORA_DROPOUT = 0.05
 HAS_MATH_VERIFY: bool = importlib.util.find_spec("math_verify") is not None
 # Vision-language fine-tuning: VLM processors need torchvision (must match torch).
 HAS_TORCHVISION: bool = importlib.util.find_spec("torchvision") is not None
