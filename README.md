@@ -133,7 +133,8 @@ Create a simple spreadsheet (CSV file) with two columns:
 
 That's it. No special formatting, no coding. Just questions and the answers you want the model to give.
 
-> Don't have a CSV? The tool also accepts Word docs, PDFs, Excel files, plain text files, and more.
+> Don't have a CSV? The tool also accepts PDFs, Excel files, JSON, plain text files, and more — or it can
+> **write the questions and answers for you from your documents** (PDF, Word, text) with an AI model.
 
 ### Step 2 — Upload and train
 
@@ -216,12 +217,13 @@ Once trained, your model can be:
 - ✅ Command-line mode for power users
 - ✅ Batch evaluation tools
 - ✅ Data augmentation
+- ✅ Training data from your documents — an AI model writes and rates the questions and answers
+- ✅ Docker image — one-command setup with no dependencies
+- ✅ Multi-GPU training
+- ✅ Vision + language models
 
 **Coming soon:**
-- 🔲 Synthetic data generator — create training data with AI
-- 🔲 Docker image — one-command setup with no dependencies
-- 🔲 Multi-GPU training
-- 🔲 Vision + language models
+- 🔲 Embedding-model fine-tuning (for search / RAG)
 
 ---
 

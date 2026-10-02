@@ -50,6 +50,7 @@ from config.constants import (
 )
 from core.run_config import new_run_name, resolve_report_to, run_dir_for
 from core.state import app_state, redact_sensitive_info, validate_path_traversal
+from data.documents import document_chunks
 from data.loader import detect_file_type, load_dataset_from_file, load_hub_dataset
 from data.preprocessing import preview_dataset, validate_and_clean_dataset
 from export.hub import push_to_hub
@@ -57,6 +58,7 @@ from export.quantize import on_quantize_click
 from export.utils import create_zip_from_folder
 from inference.generate import batch_generate, generate_text
 from inference.remote import remote_chat
+from inference.synthesize import format_stats, local_writer, remote_writer, synthesize_pairs
 from training.sft import train_model
 
 # ── Training ───────────────────────────────────────────────────────────────
@@ -156,7 +158,8 @@ def on_train_click(
     if augmented_ds is not None:
         ds = augmented_ds
         issues_str = (
-            "✅ Using the dataset prepared in the Data tab (Hub load, augmentation or filter)."
+            "✅ Using the dataset prepared in the Data tab"
+            " (Hub load, documents, augmentation or filter)."
         )
     else:
         if file is None:
@@ -572,3 +575,71 @@ def on_remote_chat(url, model, api_key, system_prompt, prompt, max_tokens, tempe
                            int(max_tokens), float(temperature))  # fmt: skip
     except ValueError as e:
         return f"❌ {redact_sensitive_info(str(e))}"
+
+
+# ── Training data from documents ───────────────────────────────────────────
+
+
+def on_synthesize(files, writer, url, server_model, api_key, local_model, pairs_per_chunk,
+                  threshold, max_chunks, progress=gr.Progress(),
+                  request: gr.Request | None = None):  # fmt: skip
+    """Data tab: documents → question/answer pairs (used by Start Training) + a JSONL file.
+
+    Returns (status, preview, stats, dataset_or_None, jsonl_path_or_None).
+    """
+    import json
+    import tempfile
+
+    from datasets import Dataset
+
+    from config.constants import SYNTH_WRITERS
+
+    fail = lambda msg: (msg, pd.DataFrame(), " ", None, None)  # noqa: E731
+    paths = [f.name if hasattr(f, "name") else str(f) for f in (files or [])]
+    if not paths:
+        return fail("❌ Upload one or more documents (PDF, Word, text or Markdown).")
+    try:
+        chunks = document_chunks(paths)
+    except ValueError as e:
+        return fail(f"❌ {redact_sensitive_info(str(e))}")
+    if not chunks:
+        return fail("❌ No text found in the documents (scanned PDFs need OCR first).")
+    chunks = chunks[: int(max_chunks)]
+    if writer == SYNTH_WRITERS[1]:
+        local_model = (local_model or "").strip()
+        if not local_model:
+            return fail("❌ Enter the local model (Hub id or folder).")
+        if err := validate_path_traversal(local_model):
+            return fail(err)
+        ask = local_writer(local_model)
+    else:
+        if not (url or "").strip():
+            return fail("❌ Enter the server URL, e.g. http://127.0.0.1:8000")
+        ask = remote_writer(url, server_model or "", api_key or "")
+
+    session = app_state.session_for(request)
+    session.stop_event.clear()
+
+    def on_progress(i, total):
+        if progress is not None:
+            progress(i / total, desc=f"Writing pairs: chunk {i + 1} of {total}")
+
+    rows, stats = synthesize_pairs(chunks, ask, int(pairs_per_chunk), float(threshold),
+                                   on_progress, session.stop_event.is_set)  # fmt: skip
+    status = format_stats(stats)
+    if not rows:
+        return fail(status)
+    ds = Dataset.from_dict({COL_INSTRUCTION: [r[COL_INSTRUCTION] for r in rows],
+                            COL_OUTPUT: [r[COL_OUTPUT] for r in rows]})  # fmt: skip
+    session.release("synth")
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False, encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    session.track("synth", f.name)
+    return (
+        status + "\nUsed by **▶ Start Training** (or download the JSONL).",
+        preview_dataset(ds),
+        f"**Total examples:** {len(ds)}",
+        ds,
+        f.name,
+    )

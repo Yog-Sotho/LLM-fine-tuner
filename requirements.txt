@@ -32,6 +32,7 @@ tqdm>=4.66.0                # v3.2: Progress bars for tokenisation & dataset ops
 # ── File-format support ───────────────────────────────────────────────
 pypdf>=6.16.1               # PDF ingestion (PyPDF2 is abandoned; pypdf has the DoS fixes)
 openpyxl>=3.1.0             # Excel ingestion (optional at runtime, guarded by HAS_OPENPYXL)
+python-docx>=1.1.0          # Word documents for "Create training data" (guarded by HAS_DOCX)
 
 # ── System monitoring ─────────────────────────────────────────────────
 psutil>=6.0.0               # RAM display in hardware summary (optional, guarded by HAS_PSUTIL)

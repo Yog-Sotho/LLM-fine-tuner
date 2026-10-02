@@ -132,6 +132,22 @@ FILE_EXT_JSON = ".json"
 FILE_EXT_TXT = ".txt"
 FILE_EXT_XLSX = ".xlsx"
 FILE_EXT_PDF = ".pdf"
+FILE_EXT_DOCX = ".docx"
+FILE_EXT_MD = ".md"
+# Documents that "Create training data" reads as plain text.
+DOCUMENT_EXTENSIONS = (FILE_EXT_PDF, FILE_EXT_DOCX, FILE_EXT_TXT, FILE_EXT_MD)
+
+# ── Training data from documents (question / answer pairs written by an LLM) ──
+# Chunking follows Meta's synthetic-data-kit defaults (4000 characters, 200 overlap):
+# enough context per question, overlap so facts on a boundary aren't lost.
+SYNTH_CHUNK_CHARS = 4000
+SYNTH_CHUNK_OVERLAP = 200
+SYNTH_PAIRS_PER_CHUNK = 5
+SYNTH_MAX_CHUNKS = 50  # bounds the LLM calls per run
+# LLM-judge curation: pairs rated below this (1–10) are dropped; 0 = keep all.
+SYNTH_CURATE_THRESHOLD = 7
+SYNTH_MAX_NEW_TOKENS = 1024
+SYNTH_WRITERS = ("OpenAI-compatible server", "Local model")
 
 # ── GGUF quantisation presets ──────────────────────────────────────────────
 GGUF_QUANT_PRESETS: dict[str, dict[str, str]] = {
@@ -216,6 +232,9 @@ try:
     HAS_PDF = True
 except ImportError:
     HAS_PDF = False
+
+# ── python-docx (Word documents for "Create training data") ───────────────
+HAS_DOCX: bool = importlib.util.find_spec("docx") is not None
 
 # ── psutil (system RAM reporting) ─────────────────────────────────────────
 try:

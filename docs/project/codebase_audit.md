@@ -39,7 +39,7 @@ have tests (`tests/test_gpu.py`) but have **not yet been run on a GPU**.
 
 Average 7.89 (after Tier 15); no CRITICAL findings remain, so no hard caps apply → **7.9**. Remaining: GPU paths not yet run, `train_model()` / CLI size, quantised-loading duplication, batch-test error output, augment/filter re-reading the file.
 
-### SOTA position (separate from code quality): 7 / 10 (baseline 3)
+### SOTA position (separate from code quality): 7.5 / 10 (baseline 3)
 
 Feature parity with Unsloth / Axolotl / LlamaFactory on the 2026 core set (SFT, DPO, ORPO, KTO,
 GRPO with built-in rewards and vLLM, reward models, vision SFT, tool-calling and reasoning chats,
@@ -51,6 +51,7 @@ persistent job queue, and the GPU paths have not been exercised by an automated 
 | Area | Score | Notes |
 |---|---|---|
 | Training coverage | 8.5 (T13) | Core 2026 set + distillation (GKD), LoRA adapter merging (TIES/DARE/SVD), IA3; missing async/agentic RL, full-model merges |
+| Data | 8 (T16) | CSV/JSON/Excel/PDF/ZIP, Hub streaming, chat/tools/images, augmentation; training data from documents (PDF/.docx/.txt/.md → LLM-written Q/A pairs, LLM-rated, de-duplicated — synthetic-data-kit recipe) |
 | Export & deploy | 8 | GGUF, FP8/W4A16, Hub card, llama-server / vLLM serving, remote client |
 | Reproducibility | 9 | run_config.yaml, dataset SHA-256, early seeding, resume, tracking, one version |
 | Security | 8 | See Security below |
@@ -210,6 +211,7 @@ New findings from this audit are marked **NEW**.
 | 2026-09-29 | Tier 13 branch | 7.3 | Adapters → IA3 (finding fixed); distillation + adapter merging added; SOTA 7.5/10 |
 | 2026-09-29 | Tier 14 branch | 7.4 | MoE LoRA fixed on Transformers 5 (was failing); MoE router loss/freeze; sharding presets; long-context options; SOTA 7.5/10 (8 once the GPU suite passes) |
 | 2026-10-02 | Tier 15 branch | 7.9 | 12 audit findings fixed (path allow-list, deps, checkpoints out of uploads, redaction, vision cleanup, small fixes); remaining: GPU run, structural refactors |
+| 2026-10-02 | Tier 16 branch | 7.9 | Training data from documents (UI + `synthesize` CLI: chunking, Q/A writing via server or local model, LLM rating, dedup); SOTA 7.5/10 (8 once the GPU suite passes) |
 
 Work between the two audits (all verified with the CI workflow replayed locally, floor and
 ceiling library versions, live UI and Docker CPU checks before each push):

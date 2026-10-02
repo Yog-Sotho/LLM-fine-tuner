@@ -22,6 +22,7 @@ LLM-fine-tuner/
 ├── data/
 │   ├── __init__.py
 │   ├── augmentation.py
+│   ├── documents.py
 │   ├── loader.py
 │   └── preprocessing.py
 ├── docs/
@@ -68,6 +69,7 @@ LLM-fine-tuner/
 │   ├── evaluation.py
 │   ├── generate.py
 │   ├── remote.py
+│   ├── synthesize.py
 │   └── vllm_runner.py
 ├── tests/
 │   ├── __init__.py
@@ -102,6 +104,7 @@ LLM-fine-tuner/
 │   ├── test_session_and_security.py
 │   ├── test_smoke_training.py
 │   ├── test_stats_calculation.py
+│   ├── test_synthesize.py
 │   ├── test_token_security.py
 │   ├── test_training_data.py
 │   └── test_training_guards.py

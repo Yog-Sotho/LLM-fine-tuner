@@ -49,6 +49,7 @@ from ui.handlers import (
     on_refresh_preview,
     on_remote_chat,
     on_stop,
+    on_synthesize,
     on_train_click,
 )
 from ui.tabs.data_tab import build_data_tab
@@ -140,6 +141,16 @@ def build_demo() -> gr.Blocks:
                 dt["augmented_ds_state"],
             ],
         )
+
+        dt["synth_btn"].click(
+            fn=on_synthesize,
+            **GPU_JOB,  # a local writer model uses the GPU
+            inputs=[dt["synth_files"], dt["synth_writer"], dt["synth_url"],
+                    dt["synth_server_model"], dt["synth_api_key"], dt["synth_local_model"],
+                    dt["synth_pairs"], dt["synth_threshold"], dt["synth_max_chunks"]],
+            outputs=[dt["file_status"], dt["preview_box"], dt["stats_box"],
+                     dt["augmented_ds_state"], dt["synth_file"]],
+        )  # fmt: skip
 
         dt["refresh_preview_btn"].click(
             fn=on_refresh_preview,

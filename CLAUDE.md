@@ -34,6 +34,7 @@ LLM-fine-tuner/
 │
 ├── data/
 │   ├── loader.py            # Multi-format file ingestion (CSV/JSON/PDF/Excel/ZIP)
+│   ├── documents.py         # read_document() (PDF/.docx/.txt/.md) + chunk_text() for synthetic data
 │   ├── preprocessing.py     # Dataset validation, cleaning, deduplication
 │   └── augmentation.py      # nlpaug-backed data augmentation
 │
@@ -51,6 +52,7 @@ LLM-fine-tuner/
 │   ├── evaluation.py        # BLEU/ROUGE/BERTScore/LLM-judge evaluation, base-model comparison
 │   ├── benchmarks.py        # run_benchmarks() — lm-evaluation-harness (ARC, HellaSwag, GSM8K…)
 │   ├── remote.py            # remote_chat() — any OpenAI-compatible /v1/chat/completions server
+│   ├── synthesize.py        # synthesize_pairs() — Q/A pairs from document chunks + LLM rating
 │   └── vllm_runner.py       # vLLM engine with caching
 │
 ├── export/
@@ -76,7 +78,7 @@ LLM-fine-tuner/
 │       └── share_tab.py     # Hub push & download layout
 │
 ├── cli/
-│   └── commands.py          # Typer CLI (train … distill, benchmark, merge, merge-adapters, export, push, serve)
+│   └── commands.py          # Typer CLI (train … distill, benchmark, merge, merge-adapters, export, push, serve, synthesize)
 │
 ├── tests/
 │   ├── conftest.py          # pytest setup (inserts repo root into sys.path)
@@ -267,6 +269,7 @@ HF_TOKEN=hf_xxx docker compose up llm-fine-tuner-gpu
 | `LFT_RUNS_DIR` | `runs` (Docker: `/app/models`) | Where UI training runs are saved (`<dir>/<run name>/`) |
 | `LFT_GPU_JOBS` | `1` | Heavy GPU jobs (training, eval, benchmarks, export, merge, vLLM) the web UI runs at once (1–8) |
 | `LFT_SERVE_API_KEY` | — | API key required by `main.py serve` (passed to the server via its environment) |
+| `LFT_SYNTH_API_KEY` | — | API key for the writer server of `main.py synthesize` |
 | `LFT_LOG_LEVEL` | `INFO` | Log level for the app's own modules (other libraries log warnings only) |
 | `LFT_REPORT_TO` | `none` | Default experiment tracker (`trackio`, `wandb`, `mlflow`, `tensorboard`) if installed |
 | `HF_TOKEN` | — | HuggingFace Hub auth (gated models, Hub push) |
@@ -317,6 +320,16 @@ Model / LoRA adapter → quantize_model() [adapter merged to a temp dir] → llm
 serve --model X → build_serve_command(): .gguf → llama-server | folder/Hub id → vllm serve
     (adapter → base + --lora-modules); API key via env (LLAMA_API_KEY / VLLM_API_KEY), never argv
 ```
+
+### Training data from documents
+```
+Documents → document_chunks() [data/documents.py: read_document + chunk_text, 4000/200 chars]
+    → synthesize_pairs(chunks, ask) [inference/synthesize.py] → QA_PROMPT (JSON pairs) per chunk
+    → [threshold > 0] RATING_PROMPT → parse_judge_score() → drop low/unrated + duplicate questions
+ask = remote_writer() (remote_chat, any OpenAI-compatible server) | local_writer() (cached HF model)
+```
+Reading lives in `data/` and writing in `inference/` (inference may not import data); the UI
+handler / CLI joins them. One failed chunk is counted, never fatal.
 
 ### Hub push
 ```
