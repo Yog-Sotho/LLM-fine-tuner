@@ -47,6 +47,7 @@ Commands:
   export    Export for deployment: GGUF or FP8/W4A16 safetensors (vLLM)
   push      Upload a model folder to the Hugging Face Hub
   serve     Serve a model behind an OpenAI-compatible API
+  synthesize  Create question/answer training data from documents with an LLM
 ```
 
 Each command also has its own `--help`:
@@ -459,6 +460,30 @@ LFT_SERVE_API_KEY=secret python main.py serve --model ./model.gguf --host 0.0.0.
 | `--host` | `127.0.0.1` | Bind address |
 | `--port` | `8000` | Port |
 | `--name` | `model` | Model name clients send |
+
+---
+
+### `synthesize` — Training Data from Documents
+
+```bash
+LFT_SYNTH_API_KEY=sk-... python main.py synthesize --input manual.pdf --input notes.md \
+    --server http://localhost:8000 --output synthetic.jsonl
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--input` | *(required, repeatable)* | PDF / `.docx` / `.txt` / `.md` document |
+| `--output` | `synthetic.jsonl` | JSONL file (`instruction`, `output`, `source`, `score`) |
+| `--server` | — | OpenAI-compatible server URL (vLLM, llama-server, Ollama, hosted API) |
+| `--server-model` | first model the server lists | Model name on the server |
+| `--model` | — | Local model instead of a server (give `--server` or `--model`) |
+| `--pairs` | `5` | Pairs per text chunk |
+| `--threshold` | `7` | Drop pairs the writer rates below this (1–10; `0` keeps all, no rating) |
+| `--max-chunks` | `50` | Stop after this many text chunks |
+
+The server's API key comes from `LFT_SYNTH_API_KEY`, never from the command line. The output trains
+directly: `python main.py train --data synthetic.jsonl …`. See
+[Data Preparation](03_data_preparation.md#creating-training-data-from-your-documents).
 
 ---
 

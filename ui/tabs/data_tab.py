@@ -2,7 +2,15 @@
 
 import gradio as gr
 
-from config.constants import HUB_DEFAULT_MAX_ROWS, HUB_MAX_ROWS_LIMIT
+from config.constants import (
+    DOCUMENT_EXTENSIONS,
+    HUB_DEFAULT_MAX_ROWS,
+    HUB_MAX_ROWS_LIMIT,
+    SYNTH_CURATE_THRESHOLD,
+    SYNTH_MAX_CHUNKS,
+    SYNTH_PAIRS_PER_CHUNK,
+    SYNTH_WRITERS,
+)
 
 
 def build_data_tab() -> dict:
@@ -37,6 +45,51 @@ def build_data_tab() -> dict:
                         "`prompt`+`chosen`+`rejected` for DPO. Rows are streamed, so only "
                         "what you load is downloaded. Private datasets need `HF_TOKEN`._"
                     )
+                with gr.Accordion("…or create training data from your documents", open=False):
+                    gr.Markdown(
+                        "An LLM reads your PDFs, Word or text files and writes question / "
+                        "answer pairs from them; it can then rate each pair and drop weak "
+                        "ones. The result is used by **▶ Start Training**. Use a capable "
+                        "instruct model (e.g. a vLLM or llama-server endpoint, or a hosted "
+                        "API) — small local models often fail to answer in valid JSON."
+                    )
+                    synth_files = gr.File(
+                        label="Documents", file_count="multiple",
+                        file_types=list(DOCUMENT_EXTENSIONS),
+                    )  # fmt: skip
+                    synth_writer = gr.Radio(
+                        list(SYNTH_WRITERS), value=SYNTH_WRITERS[0], label="Written by"
+                    )
+                    with gr.Row():
+                        synth_url = gr.Textbox(
+                            label="Server URL", placeholder="http://127.0.0.1:8000",
+                            max_length=512,
+                        )  # fmt: skip
+                        synth_server_model = gr.Textbox(
+                            label="Model name (blank: server's first)", max_length=200
+                        )
+                        synth_api_key = gr.Textbox(
+                            label="API key (optional)", type="password", max_length=512
+                        )
+                    synth_local_model = gr.Textbox(
+                        label="Local model (Hub id or folder)",
+                        placeholder="Qwen/Qwen3-4B-Instruct-2507", max_length=512,
+                    )  # fmt: skip
+                    with gr.Row():
+                        synth_pairs = gr.Slider(
+                            1, 20, value=SYNTH_PAIRS_PER_CHUNK, step=1, label="Pairs per chunk"
+                        )
+                        synth_threshold = gr.Slider(
+                            0, 10, value=SYNTH_CURATE_THRESHOLD, step=1,
+                            label="Quality threshold (0 = keep all)",
+                            info="The LLM rates each pair 1–10; lower ones are dropped.",
+                        )  # fmt: skip
+                        synth_max_chunks = gr.Number(
+                            label="Max chunks", value=SYNTH_MAX_CHUNKS, precision=0,
+                            minimum=1, maximum=1000,
+                        )  # fmt: skip
+                    synth_btn = gr.Button("✨ Create training data", variant="secondary")
+                    synth_file = gr.File(label="Download (JSONL)", interactive=False)
             with gr.Column(scale=3):
                 with gr.Row():
                     col_inst = gr.Dropdown(
@@ -105,6 +158,17 @@ def build_data_tab() -> dict:
         hub_split=hub_split,
         hub_max_rows=hub_max_rows,
         hub_load_btn=hub_load_btn,
+        synth_files=synth_files,
+        synth_writer=synth_writer,
+        synth_url=synth_url,
+        synth_server_model=synth_server_model,
+        synth_api_key=synth_api_key,
+        synth_local_model=synth_local_model,
+        synth_pairs=synth_pairs,
+        synth_threshold=synth_threshold,
+        synth_max_chunks=synth_max_chunks,
+        synth_btn=synth_btn,
+        synth_file=synth_file,
         col_inst=col_inst,
         col_out=col_out,
         col_text=col_text,

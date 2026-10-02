@@ -14,6 +14,7 @@ grpo      — GRPO fine-tuning with a reward model and/or reference answers
 kto       — KTO alignment from desirable / undesirable examples
 distill   — knowledge distillation (GKD): a small student learns from a larger teacher
 merge-adapters — combine LoRA adapters of one base model (TIES, DARE, SVD, …)
+synthesize — write question/answer training data from documents with an LLM
 evaluate  — batched BLEU / ROUGE / BERTScore evaluation (optionally vs the base model)
 benchmark — standard benchmarks through lm-evaluation-harness
 
@@ -71,10 +72,14 @@ from config.constants import (
     LORA_VARIANTS,
     QUANT_CALIBRATION_SAMPLES,
     QUANT_EXPORT_FORMATS,
+    SYNTH_CURATE_THRESHOLD,
+    SYNTH_MAX_CHUNKS,
+    SYNTH_PAIRS_PER_CHUNK,
     TRACKING_BACKENDS,
 )
 from core.run_config import dataset_fingerprint, load_run_config, resolve_report_to
 from core.state import validate_path_traversal
+from data.documents import document_chunks
 from data.loader import load_dataset_from_file, load_hub_dataset
 from data.preprocessing import validate_and_clean_dataset
 from export.gguf import export_to_gguf
@@ -89,6 +94,7 @@ from inference.evaluation import (
     generate_predictions,
 )
 from inference.generate import _load_for_inference
+from inference.synthesize import format_stats, local_writer, remote_writer, synthesize_pairs
 from inference.vllm_runner import merge_adapter_for_inference
 from training.distill import train_distill
 from training.grpo import train_grpo
@@ -903,6 +909,56 @@ def merge_adapters(
     typer.echo(result, err=not result.startswith("✅"))
     if not result.startswith("✅"):
         raise typer.Exit(code=1)
+
+
+@app.command()
+def synthesize(
+    input: list[str] = typer.Option(
+        ..., "--input", help="PDF / .docx / .txt / .md document (repeat for several)"
+    ),
+    output: str = typer.Option("synthetic.jsonl", "--output", help="JSONL file to write"),
+    server: str = typer.Option(
+        "", "--server", help="OpenAI-compatible server URL, e.g. http://127.0.0.1:8000"
+    ),
+    server_model: str = typer.Option("", "--server-model", help="Model name on the server"),
+    model: str = typer.Option("", "--model", help="Local model instead of a server"),
+    pairs: int = typer.Option(SYNTH_PAIRS_PER_CHUNK, "--pairs", help="Pairs per text chunk"),
+    threshold: float = typer.Option(
+        SYNTH_CURATE_THRESHOLD, "--threshold", help="Drop pairs the LLM rates below (0 = keep all)"
+    ),
+    max_chunks: int = typer.Option(SYNTH_MAX_CHUNKS, "--max-chunks"),
+):
+    """Write question/answer training data from documents with an LLM (then train on it)."""
+    import json
+
+    if bool(server) == bool(model):
+        typer.echo("❌ Give either --server (OpenAI-compatible URL) or --model (local).", err=True)
+        raise typer.Exit(code=1)
+    for path in [*input, output, model]:
+        if err := validate_path_traversal(path):
+            typer.echo(err, err=True)
+            raise typer.Exit(code=1)
+    try:
+        chunks = document_chunks(input)[:max_chunks]
+    except ValueError as e:
+        typer.echo(f"❌ {e}", err=True)
+        raise typer.Exit(code=1) from e
+    if not chunks:
+        typer.echo("❌ No text found in the documents.", err=True)
+        raise typer.Exit(code=1)
+    api_key = os.environ.get("LFT_SYNTH_API_KEY", "")
+    ask = remote_writer(server, server_model, api_key) if server else local_writer(model)
+    typer.echo(f"✍️  {len(chunks)} chunks → {pairs} pairs each ({server or model})")
+    rows, stats = synthesize_pairs(
+        chunks, ask, pairs, threshold, lambda i, n: typer.echo(f"   chunk {i + 1}/{n}")
+    )
+    typer.echo(format_stats(stats))
+    if not rows:
+        raise typer.Exit(code=1)
+    with open(output, "w", encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    typer.echo(f"💾 {output} — train with: python main.py train --model ... --data {output}")
 
 
 @app.command()

@@ -177,6 +177,40 @@ Rows are streamed, so only the rows you load are downloaded. Supported layouts: 
 
 ---
 
+## Creating Training Data from Your Documents
+
+No question/answer data yet? Open **…or create training data from your documents** in the Data tab:
+
+1. Upload one or more documents: PDF, Word (`.docx`), `.txt` or `.md`.
+2. Pick the **writer** — the model that writes the questions and answers:
+   - **OpenAI-compatible server**: any `/v1/chat/completions` endpoint — `vllm serve`, llama.cpp's
+     `llama-server`, Ollama, or a hosted API (enter its URL, model name and API key).
+     `python main.py serve` starts one from a model you have.
+   - **Local model**: a Hugging Face model id or folder, run in the app (a GPU helps a lot).
+3. Set **pairs per chunk** and the **quality threshold**, then click **✨ Create training data**.
+
+The text is cut into chunks of about 4,000 characters (200 characters overlap, cut at paragraph or
+sentence ends). For each chunk the writer is asked for question/answer pairs based **only** on that
+text, as JSON. With a threshold above 0 the writer then rates each pair from 1 to 10 and pairs
+below the threshold are dropped (pairs it can't rate are dropped too); duplicate questions are
+dropped as well. Set the threshold to 0 to keep everything and skip the rating calls. This is the
+recipe of Meta's synthetic-data-kit.
+
+The result is loaded as your training data (`instruction` / `output`), ready for
+**▶ Start Training**, and offered as a JSONL download that also records each pair's source
+document and score. Read a sample before training: the pairs are only as good as the writer.
+**⏹ Stop** in the Training tab stops a long run and keeps the pairs written so far.
+
+From the CLI:
+
+```bash
+LFT_SYNTH_API_KEY=sk-... python main.py synthesize --input handbook.pdf --input faq.docx \
+    --server http://localhost:8000 --output synthetic.jsonl
+python main.py train --model Qwen/Qwen3-0.6B --data synthetic.jsonl --output ./runs/handbook
+```
+
+---
+
 ## Cleaning Your Data
 
 The tool automatically checks for and warns you about:
