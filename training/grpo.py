@@ -57,7 +57,7 @@ from core.hardware import (
     training_device_args,
 )
 from core.run_config import latest_checkpoint, save_run_config
-from core.state import app_state, validate_path_traversal
+from core.state import app_state, redact_sensitive_info, validate_path_traversal
 from data.loader import load_table_dataset
 
 
@@ -208,7 +208,7 @@ def train_grpo(
     try:
         variant_kwargs = lora_variant_kwargs(lora_variant)
     except ValueError as e:
-        return f"❌ {e}"
+        return f"❌ {redact_sensitive_info(str(e))}"
     if use_vllm and not (HAS_VLLM and torch.cuda.is_available()):
         return (
             "❌ vLLM generation needs a CUDA GPU and vLLM built for your TRL version: "
@@ -245,7 +245,7 @@ def train_grpo(
         try:
             reward_funcs: list = build_reward_funcs(rewards, has_reference, regex_pattern)
         except ValueError as e:
-            return f"❌ {e}"
+            return f"❌ {redact_sensitive_info(str(e))}"
         if reward_model_path:
             reward_funcs.insert(0, reward_model_path)
         if not reward_funcs:
@@ -379,7 +379,7 @@ def train_grpo(
         )
 
     except Exception as e:
-        return f"❌ GRPO training failed: {e}"
+        return f"❌ GRPO training failed: {redact_sensitive_info(str(e))}"
     finally:
         try:
             del trainer

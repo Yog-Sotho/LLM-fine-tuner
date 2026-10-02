@@ -22,7 +22,7 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from config.constants import ALLOW_REMOTE_CODE, FILE_EXT_CSV
-from core.state import app_state, validate_adapter_dir
+from core.state import app_state, redact_sensitive_info, validate_adapter_dir
 
 # H-8 FIX: Thread-safe model cache. Gradio runs in multi-threaded mode; without
 # this lock, concurrent requests could simultaneously evict the cache and trigger
@@ -159,7 +159,7 @@ def generate_text(
         input_len = inputs["input_ids"].shape[1]
         return tokenizer.decode(out[0][input_len:], skip_special_tokens=True)
     except Exception as e:
-        return f"❌ Generation failed: {e}"
+        return f"❌ Generation failed: {redact_sensitive_info(str(e))}"
 
 
 def batch_generate(
@@ -246,4 +246,4 @@ def batch_generate(
         return tmp.name
 
     except Exception as e:
-        return str(e)
+        return redact_sensitive_info(str(e))

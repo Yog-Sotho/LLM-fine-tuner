@@ -18,8 +18,25 @@ import json
 import os
 from datetime import datetime
 
-from config.constants import APP_NAME, HAS_HUB, HF_TOKEN_MIN_LEN, HF_TOKEN_PREFIX
+from config.constants import (
+    APP_NAME,
+    HAS_HUB,
+    HF_TOKEN_MIN_LEN,
+    HF_TOKEN_PREFIX,
+    OUTPUT_EXCLUDE_PATTERNS,
+)
 from core.state import redact_sensitive_info
+
+
+def _version_key(meta_file: str):
+    """Sort metadata_v<version>.json by version (v2 before v10), text versions last."""
+    from packaging.version import InvalidVersion, Version
+
+    version = meta_file.removeprefix("metadata_v").removesuffix(".json")
+    try:
+        return (0, Version(version), "")
+    except InvalidVersion:
+        return (1, Version("0"), version)
 
 
 class ModelRegistry:
@@ -93,6 +110,7 @@ class ModelRegistry:
                 repo_type="model",
                 token=self.token,
                 commit_message=f"Upload version {version}",
+                ignore_patterns=list(OUTPUT_EXCLUDE_PATTERNS),
             )
 
             # Auto-detect base model name from saved config files.
@@ -111,7 +129,7 @@ class ModelRegistry:
                         "_name_or_path", cfg.get("base_model_name", "unknown")
                     )
             except Exception as e:
-                base_model_name = f"unknown (error: {e})"
+                base_model_name = f"unknown (error: {redact_sensitive_info(str(e))})"
 
             metadata["base_model"] = base_model_name
             metadata["version"] = version
@@ -147,7 +165,7 @@ class ModelRegistry:
                 return "No versioned uploads found in this repository."
 
             versions_info = []
-            for meta_file in sorted(meta_files):
+            for meta_file in sorted(meta_files, key=_version_key):
                 try:
                     content = self.api.hf_hub_download(
                         repo_id=self.repo_id,

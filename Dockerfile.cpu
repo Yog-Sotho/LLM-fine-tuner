@@ -23,8 +23,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     HF_HOME=/app/cache/huggingface \
-    TRANSFORMERS_CACHE=/app/cache/huggingface \
-    HF_HUB_ENABLE_HF_TRANSFER=1 \
     GRADIO_SERVER_NAME=0.0.0.0 \
     GRADIO_SERVER_PORT=7860 \
     LFT_RUNS_DIR=/app/models
@@ -56,7 +54,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # ── Core dependencies (skip GPU-only packages) ────────────────────────────────
 COPY requirements.txt /tmp/requirements.txt
-RUN grep -vE "^(flash-attn|vllm|auto-gptq|exllamav2|unsloth|bitsandbytes|#)" \
+RUN grep -vE "^(flash-attn|unsloth|bitsandbytes|#)" \
         /tmp/requirements.txt | pip install -r /dev/stdin
 
 # bitsandbytes CPU-only build (for 8-bit quantisation on CPU — optional)

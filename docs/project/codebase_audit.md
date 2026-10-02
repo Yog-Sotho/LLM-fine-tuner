@@ -23,21 +23,21 @@ packages hard-listed in `requirements.txt`, an oversized `train_model()`, and GP
 have tests (`tests/test_gpu.py`) but have **not yet been run on a GPU**.
 **Top priority:** run `.github/workflows/gpu.yml` on a GPU runner.
 
-## Overall Score: 7.3 / 10 (baseline 3.8)
+## Overall Score: 7.9 / 10 (baseline 3.8; 7.3 after Tier 12)
 
 | Dimension | Score | Baseline | Priority | Status |
 |---|---|---|---|---|
-| Security | 8/10 | 3 | CRITICAL | PASS |
+| Security | 9/10 | 3 | CRITICAL | PASS |
 | Build & Types | 8/10 | 2 | CRITICAL | PASS |
-| Concurrency | 7/10 | 4 | HIGH | PASS |
+| Concurrency | 8/10 | 4 | HIGH | PASS |
 | Code Principles | 6/10 | 5 | HIGH | WARN |
-| Dependencies | 7/10 | 3 | MEDIUM | WARN |
+| Dependencies | 8/10 | 3 | MEDIUM | PASS |
 | Observability | 8/10 | 3 | MEDIUM | PASS |
-| Lifecycle | 7/10 | 4 | MEDIUM | WARN |
+| Lifecycle | 8/10 | 4 | MEDIUM | PASS |
 | Code Quality | 7/10 | 5 | MEDIUM | WARN |
-| Dead Code | 8/10 | 5 | LOW | PASS |
+| Dead Code | 9/10 | 5 | LOW | PASS |
 
-Average 7.33; no CRITICAL findings remain, so no hard caps apply → **7.3**.
+Average 7.89 (after Tier 15); no CRITICAL findings remain, so no hard caps apply → **7.9**. Remaining: GPU paths not yet run, `train_model()` / CLI size, quantised-loading duplication, batch-test error output, augment/filter re-reading the file.
 
 ### SOTA position (separate from code quality): 7 / 10 (baseline 3)
 
@@ -82,7 +82,7 @@ persistent job queue, and the GPU paths have not been exercised by an automated 
 Status of every baseline finding: **FIXED** (with the tier that fixed it) or **OPEN**.
 New findings from this audit are marked **NEW**.
 
-### Security [8/10]
+### Security [9/10]
 
 | Severity | Status | Location | Issue | Recommendation / fix |
 |---|---|---|---|---|
@@ -90,8 +90,8 @@ New findings from this audit are marked **NEW**.
 | HIGH | FIXED (T1) | Docker, CI, adapter upload | torch ≤ 2.5.1 (CVE-2025-32434) + `.bin` adapters | torch ≥ 2.6 (images: 2.14); `validate_adapter_dir()` rejects pickle weights |
 | HIGH | FIXED (T1) | entrypoint / `main.py` | `SHARE` / auth passed as argv to the CLI | `GRADIO_SHARE`/`SHARE`/`GRADIO_AUTH` read from env in `main.py` |
 | MEDIUM | FIXED (T1+) | dependency floors | Gradio/Transformers floors with advisories | gradio ≥ 6, transformers ≥ 4.56.2; pip-audit in CI (3 documented waivers) |
-| MEDIUM | OPEN | `core/state.py:46` `validate_path_traversal` | Still a string blacklist (`..`, `\`, NUL). Absolute server paths in path fields are accepted — mitigated by auth + localhost default, not by the check | Allow-list: `realpath` must be under the temp dir, Gradio upload dir or `LFT_RUNS_DIR` (absolute paths are legitimate, so do not simply block them) |
-| LOW | OPEN | `ui/handlers.py:129,424,497,561`, `inference/vllm_runner.py:95,249`, `inference/generate.py:162`, trainers' failure returns | Raw exception text shown in the UI without `redact_sensitive_info` | Route every user-facing error through `redact_sensitive_info` |
+| MEDIUM | FIXED (T15) | `core/state.py:46` `validate_path_traversal` | Still a string blacklist (`..`, `\`, NUL). Absolute server paths in path fields are accepted — mitigated by auth + localhost default, not by the check | Allow-list: `realpath` must be under the temp dir, Gradio upload dir or `LFT_RUNS_DIR` (absolute paths are legitimate, so do not simply block them) — done: web UI only (CLI unrestricted); roots = working dir, runs dir, temp dir, `GRADIO_TEMP_DIR`, `LFT_ALLOWED_PATHS` |
+| LOW | FIXED (T15) | `ui/handlers.py:129,424,497,561`, `inference/vllm_runner.py:95,249`, `inference/generate.py:162`, trainers' failure returns | Raw exception text shown in the UI without `redact_sensitive_info` | Route every user-facing error through `redact_sensitive_info` |
 
 ### Build & Types [8/10]
 
@@ -105,7 +105,7 @@ New findings from this audit are marked **NEW**.
 | **NEW** MEDIUM | FIXED (T12) | CI mypy | mypy skipped `training/`, `inference/`, `ui/`, `main.py` | All layers checked |
 | **NEW** MEDIUM | OPEN | GPU paths | QLoRA 4-bit, half-precision full FT, Flash Attention + packing, vLLM GRPO, NCCL have never run in automation | `tests/test_gpu.py` + `.github/workflows/gpu.yml` (manual, or weekly when `GPU_RUNNER` is set) — **run it** |
 
-### Concurrency [7/10]
+### Concurrency [8/10]
 
 | Severity | Status | Location | Issue | Recommendation / fix |
 |---|---|---|---|---|
@@ -113,7 +113,7 @@ New findings from this audit are marked **NEW**.
 | MEDIUM | FIXED (T1/T5) | Stop / evaluation | Stop event not cleared; evaluation silently empty after Stop | Cleared at the start of every job; evaluation takes the session's event |
 | MEDIUM | FIXED (T1) | `inference/generate.py` | Parallel loads of the same model | Per-key load lock + `_cache_lock` |
 | MEDIUM | FIXED (T5) | `inference/evaluation.py` | `fork` in a threaded server | Metrics computed in-process |
-| MEDIUM | OPEN (mitigated) | `inference/vllm_runner.py:179-197` | `app_state.vllm_cache` read/evicted without a lock | UI calls are serialised by the GPU queue (`GPU_JOB`); add a lock for other callers |
+| MEDIUM | FIXED (T15) | `inference/vllm_runner.py:179-197` | `app_state.vllm_cache` read/evicted without a lock | UI calls are serialised by the GPU queue (`GPU_JOB`); add a lock for other callers — lock around lookup, eviction and creation |
 
 ### Code Principles [6/10]
 
@@ -125,15 +125,15 @@ New findings from this audit are marked **NEW**.
 | MEDIUM | FIXED (T2/T5) | split guard, batched generation | Copied 3–4× | Shared helpers (`generate_predictions`, dataset split helpers) |
 | LOW | OPEN | `export/hub.py`, `export/registry.py` | HF-token validation duplicated | `validate_hf_token()` in `core/state.py` |
 
-### Dependencies [7/10]
+### Dependencies [8/10]
 
 | Severity | Status | Location | Issue | Recommendation / fix |
 |---|---|---|---|---|
 | HIGH | FIXED (T1) | ranges | Floors only → incompatible TRL/Transformers | Tested ranges, CI on floor and ceiling |
 | HIGH | FIXED (T1) | torch pin | CVE-2025-32434 | torch ≥ 2.6 |
-| MEDIUM | OPEN | `requirements.txt:50-51,74` | `auto-gptq`, `exllamav2`, `vllm` still hard requirements (Dockerfiles filter them out; `pip install -r` fails on CPU/macOS) | Move them to extras only (`.[quant]`, `.[vllm]`); `auto-gptq` is unmaintained |
+| MEDIUM | FIXED (T15) | `requirements.txt:50-51,74` | `auto-gptq`, `exllamav2`, `vllm` still hard requirements (Dockerfiles filter them out; `pip install -r` fails on CPU/macOS) | Move them to extras only (`.[quant]`, `.[vllm]`); `auto-gptq` is unmaintained — auto-gptq / exllamav2 were unused: removed; vLLM via the `vllm` extra (`trl[vllm]`) |
 | LOW | FIXED | PyPDF2 | Deprecated | `pypdf>=6.16.1` |
-| LOW | OPEN | `config/constants.py:155` | vLLM quantisation option `"bnb"`; vLLM expects `"bitsandbytes"` | Map `bnb → bitsandbytes` |
+| LOW | FIXED (T15) | `config/constants.py:155` | vLLM quantisation option `"bnb"`; vLLM expects `"bitsandbytes"` | Map `bnb → bitsandbytes` |
 
 ### Observability [8/10]
 
@@ -145,15 +145,15 @@ New findings from this audit are marked **NEW**.
 | **NEW** MEDIUM | FIXED (T12) | `core/callbacks.py` `LoggingCallback` | Evaluation logs separately from training, so **eval loss never reached the loss chart** (always NaN) | Eval results attach to the record of their step; `final_train_loss()` skips eval-only records; covered by a real training test |
 | LOW | OPEN | `ui/tabs/inference_tab.py:53` | Batch test returns error strings into a `gr.File` output | Separate status text component |
 
-### Lifecycle [7/10]
+### Lifecycle [8/10]
 
 | Severity | Status | Location | Issue | Recommendation / fix |
 |---|---|---|---|---|
-| HIGH | PARTLY FIXED | trainers | GPU memory not freed on failure | `try/finally` cleanup in SFT, reward, ORPO, KTO, GRPO; **`training/vision.py` has none** — add the same `finally` |
+| HIGH | FIXED (T15) | trainers | GPU memory not freed on failure | `try/finally` cleanup in SFT, reward, ORPO, KTO, GRPO; **`training/vision.py` has none** — add the same `finally` — vision now has it too |
 | MEDIUM | FIXED (T3) | UI runs | Resume impossible (fresh temp dir per run) | Persistent `<LFT_RUNS_DIR>/<run name>/` |
-| MEDIUM | PARTLY FIXED | `export/hub.py:113`, `export/utils.py` | `create_repo(exist_ok=True)` added; Hub push and ZIP still include `checkpoint-*` (optimizer states) | `ignore_patterns=["checkpoint-*"]`, skip them in the ZIP |
-| MEDIUM | OPEN | `config/constants.py:233,344` | Import-time `import unsloth` (patches Transformers globally) and `nltk.download("punkt")` | `find_spec` probe + lazy import at call sites (as done for Liger, lm-eval, llm-compressor) |
-| LOW | OPEN | `docker-compose.yml:61-63,110-111`, Dockerfiles | `TRANSFORMERS_CACHE` deprecated; `HF_HUB_ENABLE_HF_TRANSFER` is deprecated in huggingface_hub 1.33 (hf_transfer no longer used — warns) | Drop both; keep `HF_HOME` |
+| MEDIUM | FIXED (T15) | `export/hub.py:113`, `export/utils.py` | `create_repo(exist_ok=True)` added; Hub push and ZIP still include `checkpoint-*` (optimizer states) | `ignore_patterns=["checkpoint-*"]`, skip them in the ZIP — `checkpoint-*` and `training_args.bin` (pickle) excluded from Hub push, registry upload and ZIP |
+| MEDIUM | PARTLY FIXED (T15) | `config/constants.py:233,344` | Import-time `import unsloth` (patches Transformers globally) and `nltk.download("punkt")` | `find_spec` probe + lazy import at call sites (as done for Liger, lm-eval, llm-compressor) — NLTK download removed (BLEU needs no data); Unsloth kept at startup **on purpose**: Unsloth must be imported before transformers/TRL/PEFT or its optimizations are lost |
+| LOW | FIXED (T15) | `docker-compose.yml:61-63,110-111`, Dockerfiles | `TRANSFORMERS_CACHE` deprecated; `HF_HUB_ENABLE_HF_TRANSFER` is deprecated in huggingface_hub 1.33 (hf_transfer no longer used — warns) | Drop both; keep `HF_HOME` |
 
 ### Tier 14 findings
 
@@ -171,12 +171,12 @@ New findings from this audit are marked **NEW**.
 | MEDIUM | FIXED (T2) | precision | `fp16=True` forced with bf16 weights | `select_precision` / `compute_dtype` |
 | MEDIUM | FIXED (T13) | `training/sft.py`, `ui/tabs/train_tab.py` | "Adapters" PEFT option always failed: PEFT has no `AdapterConfig` | Replaced with IA3 (`IA3Config`, PEFT default layers per architecture); mergeable for export; `adapter_reduction_factor` removed end to end |
 | **NEW** HIGH | FIXED (T12) | `ui/handlers.py:on_file_upload` | A CSV/Excel with non-standard column names raised an error before the column-mapping dropdowns were shown, so such files could not be mapped at all (regression from the "in-memory refresh" optimisation) | Columns checked before conversion; raw rows + dropdowns shown; covered by tests |
-| MEDIUM | OPEN | `data/augmentation.py:122` | Data without `text`/`instruction` (DPO) is silently duplicated N× and reported as augmented; augment/filter re-read the file and ignore the column mapping | Say "not supported for preference data"; operate on the prepared dataset |
-| LOW | OPEN | `data/loader.py` JSON/JSONL branch | `column_mapping` ignored for JSON | Load through pandas like CSV |
-| LOW | OPEN | `export/registry.py:150` | Versions sorted as strings (`v10` before `v2`) | `packaging.version.parse` |
+| MEDIUM | PARTLY FIXED (T15) | `data/augmentation.py:122` | Data without `text`/`instruction` (DPO) is silently duplicated N× and reported as augmented; augment/filter re-read the file and ignore the column mapping | Say "not supported for preference data"; operate on the prepared dataset — preference/chat data now refused with a message; augment/filter still re-read the file |
+| LOW | FIXED (T15) | `data/loader.py` JSON/JSONL branch | `column_mapping` ignored for JSON | Load through pandas like CSV — mapping applied to JSON/JSONL (rename, unknown columns logged) |
+| LOW | FIXED (T15) | `export/registry.py:150` | Versions sorted as strings (`v10` before `v2`) | `packaging.version.parse` |
 | LOW | FIXED (T11) | banners | "PRODUCTION READY" / stale version strings | Removed; version from `APP_VERSION` |
 
-### Dead Code [8/10]
+### Dead Code [9/10]
 
 | Severity | Status | Location | Issue | Recommendation / fix |
 |---|---|---|---|---|
@@ -209,6 +209,7 @@ New findings from this audit are marked **NEW**.
 | 2026-09-29 | Tier 12 branch | 7.3 | All CRITICAL/HIGH fixed; SOTA 7/10; open items are MEDIUM/LOW |
 | 2026-09-29 | Tier 13 branch | 7.3 | Adapters → IA3 (finding fixed); distillation + adapter merging added; SOTA 7.5/10 |
 | 2026-09-29 | Tier 14 branch | 7.4 | MoE LoRA fixed on Transformers 5 (was failing); MoE router loss/freeze; sharding presets; long-context options; SOTA 7.5/10 (8 once the GPU suite passes) |
+| 2026-10-02 | Tier 15 branch | 7.9 | 12 audit findings fixed (path allow-list, deps, checkpoints out of uploads, redaction, vision cleanup, small fixes); remaining: GPU run, structural refactors |
 
 Work between the two audits (all verified with the CI workflow replayed locally, floor and
 ceiling library versions, live UI and Docker CPU checks before each push):

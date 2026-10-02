@@ -273,7 +273,7 @@ HF_TOKEN=hf_xxx docker compose up llm-fine-tuner-gpu
 | `SHARE` | `false` | Enable public Gradio link |
 | `TOKENIZERS_PARALLELISM` | `false` | Suppress tokenizer parallelism warning (Docker) |
 | `HF_HOME` | `/app/cache/huggingface` | HuggingFace cache path (Docker) |
-| `HF_HUB_ENABLE_HF_TRANSFER` | `1` | Faster Hub downloads (Docker) |
+| `LFT_ALLOWED_PATHS` | — | Extra folders the web UI may read/write (os.pathsep-separated); always allowed: working directory, runs folder, temp folder |
 
 ---
 
@@ -388,7 +388,7 @@ Example: `# C-1: Removed broken llm_fine_tuner.* package imports`
 ## Package & Dependency Notes
 
 - **Core deps:** transformers, datasets, peft, trl, torch, gradio, typer, pandas, safetensors
-- **Optional groups** (install via `pip install -e ".[group]"`): `eval`, `quant`, `vllm`, `heretic`, `vision`, `compress` (llm-compressor — pins recent torch/Transformers, not in `all`), `dev`, `all`
+- **Optional groups** (install via `pip install -e ".[group]"`): `eval`, `vllm` (TRL's vllm extra, CUDA), `heretic`, `vision`, `compress` (llm-compressor — pins recent torch/Transformers, not in `all`), `dev`, `all`
 - **Unsloth:** installed separately — not in `requirements.txt`. Provides 2–5× training speedup and native GGUF export.
 - **heretic-llm:** optional dep (moved out of required in v3.2 to avoid PyPI install failures).
 - **Python:** 3.10, 3.11, 3.12 supported.

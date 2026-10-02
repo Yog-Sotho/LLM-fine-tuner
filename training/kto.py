@@ -48,7 +48,7 @@ from core.hardware import (
     training_device_args,
 )
 from core.run_config import latest_checkpoint, save_run_config
-from core.state import app_state, validate_path_traversal
+from core.state import app_state, redact_sensitive_info, validate_path_traversal
 from data.loader import load_table_dataset
 
 _TRUE = {"1", "true", "yes", "y", "desirable", "good", "👍"}
@@ -232,7 +232,7 @@ def train_kto(
         )
 
     except Exception as e:
-        return f"❌ KTO training failed: {e}"
+        return f"❌ KTO training failed: {redact_sensitive_info(str(e))}"
     finally:
         try:
             del trainer

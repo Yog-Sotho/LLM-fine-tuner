@@ -92,7 +92,7 @@ vLLM is a specialised inference engine that can handle many users simultaneously
 ### Requirements
 
 - NVIDIA GPU with CUDA
-- vLLM installed: `pip install vllm`
+- vLLM installed (CUDA): `pip install "trl[vllm]"`
 - A **merged** model (see above — vLLM doesn't support unmerged adapters)
 
 ### How to Use

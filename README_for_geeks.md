@@ -73,7 +73,6 @@ pandas>=2.2.0
 huggingface_hub>=0.25.0
 safetensors
 einops
-hf_transfer
 ```
 
 ### Optional (feature-gated via `HAS_*` flags)
@@ -81,9 +80,7 @@ hf_transfer
 ```
 unsloth                   # HAS_UNSLOTH  — 2-5x speed, native GGUF
 flash-attn                # --no-build-isolation; Ampere+ only; bfloat16 enforced
-vllm>=0.2.0               # HAS_VLLM     — requires merged model, CUDA
-auto-gptq>=0.7.1          # HAS_GPTQ
-exllamav2                 # HAS_EXLLAMA
+trl[vllm]                 # HAS_VLLM     — CUDA; TRL pins the supported vLLM
 evaluate>=0.4.0           # HAS_EVALUATE
 rouge-score>=0.1.2        # HAS_ROUGE
 bert-score>=0.3.13        # HAS_BERTSCORE
@@ -119,7 +116,7 @@ The installer:
 5. Attempts `flash-attn --no-build-isolation` (non-fatal on failure)
 6. Prompts for Unsloth, vLLM, quantization tools, eval/data tools
 7. Optionally clones and builds `llama.cpp` with `LLAMA_CUDA=1`
-8. Creates `llm_finetuner_env/bin/llm-finetune` launcher with `HF_HUB_ENABLE_HF_TRANSFER=1`
+8. Creates the `llm_finetuner_env/bin/llm-finetune` launcher
 
 ### Manual (PyTorch first, then requirements)
 

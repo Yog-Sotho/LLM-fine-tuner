@@ -239,7 +239,14 @@ def load_dataset_from_file(
             if chat_rows := _read_chat_rows(path, file_type):
                 return chat_dataset(chat_rows)
             # Use Dataset.from_json for faster, Arrow-backed loading.
-            return Dataset.from_json(str(path))
+            ds = Dataset.from_json(str(path))
+            if column_mapping:  # same mapping as CSV / Excel (unknown source columns ignored)
+                mapping = {k: v for k, v in column_mapping.items()
+                           if k in ds.column_names and k != v}  # fmt: skip
+                if missing := sorted(set(column_mapping) - set(ds.column_names)):
+                    logger.warning("Column mapping: source columns not found, ignored: %s", missing)
+                ds = ds.rename_columns(mapping)
+            return ds
 
         # ── Plain text ────────────────────────────────────────────────────
         if file_type == "txt":
