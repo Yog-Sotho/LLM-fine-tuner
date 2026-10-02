@@ -216,8 +216,7 @@ jobs:
             "pytest-cov>=5.0.0" \
             "pytest-timeout>=2.3.0"
 
-      # NLTK data: punkt is looked up by constants.py at import time; wordnet and
-      # the tagger are needed by nlpaug's synonym augmentation tests.
+      # NLTK data for nlpaug (synonym augmentation uses wordnet and the tagger).
       - name: "Pre-fetch NLTK data"
         run: |
           python -c "

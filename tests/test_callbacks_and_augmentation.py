@@ -156,10 +156,10 @@ def test_augmentation_keeps_row_count_when_the_augmenter_misbehaves(fake_nlpaug)
     ]
 
 
-def test_augmentation_without_a_text_column_duplicates_rows(fake_nlpaug):
+def test_preference_data_is_not_augmented(fake_nlpaug):
     ds = Dataset.from_dict({"prompt": ["p"], "chosen": ["c"], "rejected": ["r"]})
-    out, _ = aug.augment_dataset_v27(ds, 2)
-    assert out["prompt"] == ["p", "p"]
+    out, msg = aug.augment_dataset_v27(ds, 2)
+    assert out is ds and msg.startswith("⚠️ Augmentation needs a 'text' or 'instruction' column")
 
 
 def test_augmentation_edge_cases(fake_nlpaug, monkeypatch):

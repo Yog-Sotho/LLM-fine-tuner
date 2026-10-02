@@ -50,7 +50,7 @@ from config.constants import (
     HAS_NLTK,
     HAS_ROUGE,
 )
-from core.state import app_state, validate_path_traversal
+from core.state import app_state, redact_sensitive_info, validate_path_traversal
 from inference.generate import _load_for_inference
 
 # ── HTML escaping helper ───────────────────────────────────────────────────
@@ -168,7 +168,7 @@ def compute_bertscore_metric(
         }
     except Exception as e:
         return {
-            "BERTScore-P": f"Error: {e}",
+            "BERTScore-P": f"Error: {redact_sensitive_info(str(e))}",
             "BERTScore-R": "N/A",
             "BERTScore-F1": "N/A",
         }
@@ -707,4 +707,4 @@ def on_evaluate_click(
         return metrics_str, pd.DataFrame(result_data), preview_html
 
     except Exception as e:
-        return f"❌ Evaluation failed: {e}", pd.DataFrame(), ""
+        return f"❌ Evaluation failed: {redact_sensitive_info(str(e))}", pd.DataFrame(), ""

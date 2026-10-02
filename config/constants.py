@@ -58,6 +58,15 @@ ALLOW_REMOTE_CODE: bool = os.environ.get("ALLOW_REMOTE_CODE", "false").strip().l
 # ── Reproducibility ────────────────────────────────────────────────────────
 # UI training runs are saved as <RUNS_DIR>/<run name>/ so they persist and can be resumed.
 RUNS_DIR: str = os.environ.get("LFT_RUNS_DIR", "runs")
+# Extra folders the web UI may read and write (os.pathsep-separated). Always allowed:
+# the working directory, RUNS_DIR and the temp folder (uploads, exports).
+# Left out of Hub uploads and download ZIPs: resume checkpoints (optimizer state, often
+# several times the adapter size) and training_args.bin (a pickle). fnmatch patterns on
+# paths relative to the model folder.
+OUTPUT_EXCLUDE_PATTERNS: tuple[str, ...] = ("checkpoint-*", "training_args.bin")
+EXTRA_ALLOWED_PATHS: list[str] = [
+    p for p in os.environ.get("LFT_ALLOWED_PATHS", "").split(os.pathsep) if p.strip()
+]
 RUN_CONFIG_FILENAME = "run_config.yaml"
 RUN_NAME_PATTERN = r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
 DEFAULT_SEED = 42
@@ -152,7 +161,8 @@ QLORA_ENHANCED_BNB_KWARGS: dict = {
 }
 
 # ── vLLM / evaluation constants ───────────────────────────────────────────
-VLLM_QUANT_OPTIONS: list[str] = ["none", "awq", "gptq", "bnb"]
+# vLLM `quantization` values ("bitsandbytes", not "bnb": vLLM rejects the short name).
+VLLM_QUANT_OPTIONS: list[str] = ["none", "awq", "gptq", "bitsandbytes"]
 LLM_JUDGE_CRITERIA: list[str] = [
     "helpfulness",
     "accuracy",
@@ -224,6 +234,9 @@ except ImportError:
     HAS_HUB = False
 
 # ── Unsloth (2-5× faster training + GGUF export) ──────────────────────────
+# Imported here, at startup, on purpose: Unsloth patches transformers / TRL / PEFT and
+# warns that it "should be imported before trl, transformers, peft to ensure all
+# optimizations are applied" — a lazy import would lose them. Only when installed.
 try:
     from unsloth import (
         FastLanguageModel,  # noqa: F401
@@ -297,22 +310,6 @@ except ImportError:
     except ImportError:
         HAS_ORPO = False
 
-# ── AutoGPTQ (GPTQ quantised inference) ───────────────────────────────────
-try:
-    from auto_gptq import AutoGPTQForCausalLM  # noqa: F401
-
-    HAS_GPTQ = True
-except ImportError:
-    HAS_GPTQ = False
-
-# ── ExLlamaV2 (EXL2 inference backend) ────────────────────────────────────
-try:
-    from exllamav2 import ExLlamaV2, ExLlamaV2Config  # noqa: F401
-
-    HAS_EXLLAMA = True
-except ImportError:
-    HAS_EXLLAMA = False
-
 # ── HuggingFace evaluate hub ──────────────────────────────────────────────
 try:
     import evaluate as hf_evaluate  # noqa: F401
@@ -337,23 +334,10 @@ try:
 except ImportError:
     HAS_BERTSCORE = False
 
-# ── NLTK + BLEU ───────────────────────────────────────────────────────────
-try:
-    import nltk
-
-    try:
-        nltk.data.find("tokenizers/punkt")
-    except LookupError:
-        nltk.download("punkt", quiet=True)
-    from nltk.translate.bleu_score import (  # noqa: F401
-        SmoothingFunction,
-        corpus_bleu,
-        sentence_bleu,
-    )
-
-    HAS_NLTK = True
-except ImportError:
-    HAS_NLTK = False
+# ── NLTK (BLEU) ───────────────────────────────────────────────────────────
+# find_spec, not import + nltk.download: BLEU splits on whitespace (no tokenizer data
+# needed), and a download at every start blocks offline / proxied servers.
+HAS_NLTK: bool = importlib.util.find_spec("nltk") is not None
 
 # ── nlpaug (data augmentation) ────────────────────────────────────────────
 try:

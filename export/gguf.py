@@ -22,7 +22,7 @@ import tempfile
 import gradio as gr
 
 from config.constants import HAS_UNSLOTH, MERGEABLE_PEFT_TYPES
-from core.state import app_state, validate_path_traversal
+from core.state import app_state, redact_sensitive_info, validate_path_traversal
 from inference.vllm_runner import merge_adapter_for_inference
 
 logger = logging.getLogger(__name__)
@@ -192,7 +192,7 @@ def export_to_gguf(model_path: str, output_dir: str, quantization: str = "q6_k")
             "The model may be too large or disk I/O is slow."
         )
     except Exception as e:
-        return f"❌ GGUF export error: {e}\nEnsure dependencies are installed correctly"
+        return f"❌ GGUF export error: {redact_sensitive_info(str(e))}\nEnsure dependencies are installed correctly"
 
 
 def on_export_gguf(model_path: str, quantization: str, request: gr.Request | None = None):

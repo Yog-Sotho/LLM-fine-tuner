@@ -179,7 +179,7 @@ CORE_DEPS=(
     "transformers>=4.56.2,<6" "datasets>=4.0.0,<6" "accelerate>=1.4.0,<2"
     "peft>=0.17.0,<1" bitsandbytes "trl>=0.29.1,<2"
     "gradio>=6.0.0,<7" typer pandas numpy matplotlib tqdm "huggingface-hub>=0.34.0,<2"
-    safetensors einops hf_transfer heretic-llm
+    safetensors einops heretic-llm
 )
 
 
@@ -207,15 +207,9 @@ ask "Install Unsloth (2-5× faster training, GGUF export)?" && {
 }
 
 
-ask "Install vLLM (high-throughput inference)?" && {
-    pip install vllm
+ask "Install vLLM (high-throughput inference, CUDA only)?" && {
+    pip install "trl[vllm]"   # the vLLM version this TRL supports
     print_success "vLLM installed"
-}
-
-
-ask "Install quantization tools (AutoGPTQ + exllamav2)?" && {
-    pip install auto-gptq exllamav2
-    print_success "Quantization tools installed"
 }
 
 
@@ -274,7 +268,6 @@ if [ -f "$SCRIPT_PATH" ]; then
     cat > "$LAUNCHER" <<EOF
 #!/bin/bash
 source "$VENV_DIR/bin/activate"
-export HF_HUB_ENABLE_HF_TRANSFER=1
 export PATH="\$PATH:$PROJECT_ROOT/llama.cpp:$PROJECT_ROOT/llama.cpp/build/bin"
 python "$SCRIPT_PATH" "\$@"
 EOF

@@ -43,15 +43,47 @@ def redact_sensitive_info(text: str | None) -> str:
     return text
 
 
-def validate_path_traversal(path: str | None) -> str | None:
-    """Check if the path contains '..' or '\\' or null bytes (unsafe).
+# Folders the web UI may read and write. None (the CLI) means no restriction: the CLI
+# user already has a shell. main.py fills it when it starts the UI.
+_allowed_roots: tuple[str, ...] | None = None
 
-    Returns a standardized error message if unsafe, or None if safe.
+
+def restrict_paths_to(roots: list[str]) -> None:
+    """Limit every path checked by validate_path_traversal to these folders (web UI)."""
+    global _allowed_roots
+    _allowed_roots = tuple(os.path.realpath(r) for r in roots if r)
+
+
+def allowed_roots() -> tuple[str, ...] | None:
+    return _allowed_roots
+
+
+def _outside_allowed_roots(path: str) -> bool:
+    if _allowed_roots is None:
+        return False
+    real = os.path.realpath(path)  # relative → under the working directory; symlinks resolved
+    return not any(real == root or real.startswith(root + os.sep) for root in _allowed_roots)
+
+
+def validate_path_traversal(path: str | None) -> str | None:
+    """Check a user-supplied path (or Hub id / name) before it is used.
+
+    Rejects '..', '\\' and null bytes. In the web UI (``restrict_paths_to`` called),
+    also rejects paths that resolve outside the allowed folders — the working directory,
+    the runs folder, the temp folder (uploads, exports) and LFT_ALLOWED_PATHS — so a
+    visitor can't read or write elsewhere on the server. Hub ids and relative paths
+    resolve under the working directory and stay allowed.
+    Returns an error message, or None if the path is acceptable.
     """
     if not path:
         return None
     if ".." in path or "\\" in path or "\0" in path:
         return "❌ Path traversal attempt detected."
+    if _outside_allowed_roots(path):
+        return (
+            f"❌ Path outside the folders this app may use: {path}. "
+            "Add the folder to LFT_ALLOWED_PATHS to allow it."
+        )
     return None
 
 

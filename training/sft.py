@@ -94,7 +94,7 @@ from core.hardware import (
     training_device_args,
 )
 from core.run_config import latest_checkpoint, save_run_config
-from core.state import app_state, validate_path_traversal
+from core.state import app_state, redact_sensitive_info, validate_path_traversal
 from data.preprocessing import (
     drop_prompts_over_limit,
     format_token_report,
@@ -704,7 +704,7 @@ def train_model(
                 except Exception as e:
                     summary = (
                         f"✅ Training {status}!\n"
-                        f"⚠️ Heretic failed: {e}\n"
+                        f"⚠️ Heretic failed: {redact_sensitive_info(str(e))}\n"
                         f"⏱ Elapsed: {elapsed / 60:.1f} min\n"
                         f"📁 Model saved to: {output_dir}\n"
                     )

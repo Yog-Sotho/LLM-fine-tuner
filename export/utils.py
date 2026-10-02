@@ -13,6 +13,7 @@ clear_gpu_cache        — free CUDA memory and report reserved VRAM
 The README.md model card is written by core.model_card when each trainer saves.
 """
 
+import fnmatch
 import gc
 import os
 import tempfile
@@ -21,7 +22,13 @@ import zipfile
 import gradio as gr
 import torch
 
-from core.state import PICKLE_WEIGHT_SUFFIXES, app_state, validate_adapter_dir
+from config.constants import OUTPUT_EXCLUDE_PATTERNS
+from core.state import (
+    PICKLE_WEIGHT_SUFFIXES,
+    app_state,
+    redact_sensitive_info,
+    validate_adapter_dir,
+)
 from data.loader import safe_extract_zip
 
 
@@ -41,6 +48,9 @@ def create_zip_from_folder(folder_path: str) -> str:
             for root, _, files in os.walk(folder_path):
                 for fname in files:
                     fpath = os.path.join(root, fname)
+                    inner = os.path.relpath(fpath, start=folder_path)
+                    if any(fnmatch.fnmatch(inner, p) for p in OUTPUT_EXCLUDE_PATTERNS):
+                        continue  # resume checkpoints / pickles stay on the server
                     arc_name = os.path.relpath(fpath, start=os.path.dirname(folder_path))
                     zf.write(fpath, arc_name)
     return zip_path
@@ -96,7 +106,7 @@ def on_peft_zip_upload(zip_file, request: gr.Request | None = None) -> tuple:
         )
     except Exception as e:
         session.release("peft_dir")
-        return " ", f"❌ Failed to extract ZIP: {e} ", " "
+        return " ", f"❌ Failed to extract ZIP: {redact_sensitive_info(str(e))} ", " "
 
 
 def clear_gpu_cache() -> str:

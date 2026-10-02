@@ -15,6 +15,8 @@ UI launch settings come from the environment:
   GRADIO_AUTH         "user:password" pairs, comma-separated, to require a login
 
 LFT_LOG_LEVEL (default INFO) sets how much the app's own modules log.
+LFT_ALLOWED_PATHS adds folders the UI may read/write (besides the working directory,
+the runs folder and the temp folder).
 """
 
 import logging
@@ -34,6 +36,18 @@ def _configure_logging(level: str) -> None:
         level = "INFO"
     for name in _APP_PACKAGES:
         logging.getLogger(name).setLevel(level)
+
+
+def _ui_path_roots(environ: dict[str, str]) -> list[str]:
+    """Folders the web UI may read and write (paths typed by visitors are checked)."""
+    import tempfile
+
+    from config.constants import EXTRA_ALLOWED_PATHS, RUNS_DIR
+
+    roots = [os.getcwd(), RUNS_DIR, tempfile.gettempdir(), *EXTRA_ALLOWED_PATHS]
+    if environ.get("GRADIO_TEMP_DIR"):  # where Gradio stores uploads
+        roots.append(environ["GRADIO_TEMP_DIR"])
+    return roots
 
 
 def _fail(message: str, code: int) -> None:
@@ -108,6 +122,7 @@ def main() -> None:
 
     import torch
 
+    from core.state import restrict_paths_to
     from ui.app import build_demo, build_theme
     from ui.css import CUSTOM_CSS
 
@@ -122,6 +137,7 @@ def main() -> None:
     if warning := _exposure_warning(dict(os.environ), launch_kwargs):
         print(warning, file=sys.stderr)
 
+    restrict_paths_to(_ui_path_roots(dict(os.environ)))
     demo = build_demo()
     try:
         demo.launch(css=CUSTOM_CSS, theme=build_theme(), **launch_kwargs)

@@ -10,6 +10,7 @@ the project's conventions: seed first, precision, LoRA on every linear layer wit
 chosen variant, checkpoints/resume, stop + ETA callbacks, run_config + model card.
 """
 
+import gc
 import time
 
 import torch
@@ -119,104 +120,114 @@ def train_vision_sft(
         )
     else:
         model_kwargs["torch_dtype"] = torch.float32
-    model = AutoModelForImageTextToText.from_pretrained(model_name, **model_kwargs)
-    peft_config = None
-    if not full_finetune:
-        peft_config = LoraConfig(
-            task_type=TaskType.CAUSAL_LM,
-            r=int(lora_rank),
-            lora_alpha=int(lora_alpha),
-            target_modules=get_lora_targets(),
-            lora_dropout=lora_dropout(model),
-            bias="none",
-            **variant_kwargs,
-        )
+    model = trainer = None
+    try:
+        model = AutoModelForImageTextToText.from_pretrained(model_name, **model_kwargs)
+        peft_config = None
+        if not full_finetune:
+            peft_config = LoraConfig(
+                task_type=TaskType.CAUSAL_LM,
+                r=int(lora_rank),
+                lora_alpha=int(lora_alpha),
+                target_modules=get_lora_targets(),
+                lora_dropout=lora_dropout(model),
+                bias="none",
+                **variant_kwargs,
+            )
 
-    log_callback = LoggingCallback()
-    callbacks = [StopCallback(stop_event), log_callback]
-    # Early stopping on < 50 train rows reacts to a 1-row eval set's noise.
-    if early_stop > 0 and eval_ds is not None and len(train_ds) >= 50:
-        callbacks.append(EarlyStoppingCallback(early_stopping_patience=int(early_stop)))
-    if progress is not None:
-        callbacks.append(ETAProgressCallback(gradio_progress=progress))
+        log_callback = LoggingCallback()
+        callbacks = [StopCallback(stop_event), log_callback]
+        # Early stopping on < 50 train rows reacts to a 1-row eval set's noise.
+        if early_stop > 0 and eval_ds is not None and len(train_ds) >= 50:
+            callbacks.append(EarlyStoppingCallback(early_stopping_patience=int(early_stop)))
+        if progress is not None:
+            callbacks.append(ETAProgressCallback(gradio_progress=progress))
 
-    config = SFTConfig(
-        output_dir=output_dir,
-        num_train_epochs=hyperparams["epochs"],
-        per_device_train_batch_size=hyperparams["batch_size"],
-        gradient_accumulation_steps=hyperparams["grad_accum"],
-        learning_rate=hyperparams["learning_rate"],
-        warmup_steps=hyperparams["warmup_steps"],
-        logging_steps=10,
-        eval_strategy="no" if eval_ds is None else "steps",
-        eval_steps=50 if eval_ds is not None else None,
-        save_strategy="steps",
-        save_steps=200,
-        save_total_limit=2,
-        load_best_model_at_end=eval_ds is not None,
-        metric_for_best_model="eval_loss" if eval_ds is not None else None,
-        greater_is_better=False,
-        **training_device_args(device),
-        report_to=report_to,
-        run_name=run_name,
-        seed=seed,
-        lr_scheduler_type=lr_scheduler_type,
-        gradient_checkpointing=gradient_checkpointing,
-        gradient_checkpointing_kwargs={"use_reentrant": False} if gradient_checkpointing else None,
-        # Truncating could cut image tokens and break the batch (TRL's advice for VLMs).
-        max_length=None,
-        dataset_num_proc=None,
-    )
-    setup_moe(model)  # router aux-loss flag must be set before the trainer reads it
-    trainer = SFTTrainer(
-        model=model,
-        args=config,
-        train_dataset=train_ds,
-        eval_dataset=eval_ds,
-        processing_class=processor,
-        peft_config=peft_config,
-        callbacks=callbacks,
-    )
-    moe = setup_moe(trainer.model)  # after TRL applied LoRA: freeze the router adapter
-    if progress is not None:
-        progress(0.3, desc="Training started… calculating ETA…")
-    t0 = time.time()
-    trainer.train(
-        resume_from_checkpoint=latest_checkpoint(output_dir) if resume_from_checkpoint else None
-    )
-    elapsed = time.time() - t0
-    status = "stopped by user" if stop_event.is_set() else "complete"
-
-    # One process writes the outputs (multi-process runs: every rank holds the same weights).
-    if is_main_process():
-        trainer.model.save_pretrained(output_dir)
-        processor.save_pretrained(output_dir)
-        save_run_config(
-            output_dir,
-            moe=moe,
-            mode="sft",
-            model=model_name,
-            dataset=dataset,
-            seed=seed,
+        config = SFTConfig(
+            output_dir=output_dir,
+            num_train_epochs=hyperparams["epochs"],
+            per_device_train_batch_size=hyperparams["batch_size"],
+            gradient_accumulation_steps=hyperparams["grad_accum"],
+            learning_rate=hyperparams["learning_rate"],
+            warmup_steps=hyperparams["warmup_steps"],
+            logging_steps=10,
+            eval_strategy="no" if eval_ds is None else "steps",
+            eval_steps=50 if eval_ds is not None else None,
+            save_strategy="steps",
+            save_steps=200,
+            save_total_limit=2,
+            load_best_model_at_end=eval_ds is not None,
+            metric_for_best_model="eval_loss" if eval_ds is not None else None,
+            greater_is_better=False,
+            **training_device_args(device),
             report_to=report_to,
-            vision=True,
-            hyperparams=dict(hyperparams),
-            peft={
-                "method": peft_method,
-                "lora_rank": lora_rank,
-                "lora_alpha": lora_alpha,
-                "lora_variant": lora_variant,
-            },
-            gradient_checkpointing=bool(gradient_checkpointing),
+            run_name=run_name,
+            seed=seed,
             lr_scheduler_type=lr_scheduler_type,
-            early_stop=int(early_stop),
+            gradient_checkpointing=gradient_checkpointing,
+            gradient_checkpointing_kwargs={"use_reentrant": False}
+            if gradient_checkpointing
+            else None,
+            # Truncating could cut image tokens and break the batch (TRL's advice for VLMs).
+            max_length=None,
+            dataset_num_proc=None,
         )
-    summary = (
-        f"✅ Training {status}!\n"
-        f"🖼️ Vision-language fine-tuning ({len(train_ds)} image + text examples)\n"
-        f"⏱ Elapsed: {elapsed / 60:.1f} min\n"
-        f"📁 Model saved to: {output_dir}\n"
-    )
-    if log_callback.records:
-        summary += f"📉 Final train loss: {final_train_loss(log_callback.records)}"
-    return summary, log_callback.records
+        setup_moe(model)  # router aux-loss flag must be set before the trainer reads it
+        trainer = SFTTrainer(
+            model=model,
+            args=config,
+            train_dataset=train_ds,
+            eval_dataset=eval_ds,
+            processing_class=processor,
+            peft_config=peft_config,
+            callbacks=callbacks,
+        )
+        moe = setup_moe(trainer.model)  # after TRL applied LoRA: freeze the router adapter
+        if progress is not None:
+            progress(0.3, desc="Training started… calculating ETA…")
+        t0 = time.time()
+        trainer.train(
+            resume_from_checkpoint=latest_checkpoint(output_dir) if resume_from_checkpoint else None
+        )
+        elapsed = time.time() - t0
+        status = "stopped by user" if stop_event.is_set() else "complete"
+
+        # One process writes the outputs (multi-process runs: every rank holds the same weights).
+        if is_main_process():
+            trainer.model.save_pretrained(output_dir)
+            processor.save_pretrained(output_dir)
+            save_run_config(
+                output_dir,
+                moe=moe,
+                mode="sft",
+                model=model_name,
+                dataset=dataset,
+                seed=seed,
+                report_to=report_to,
+                vision=True,
+                hyperparams=dict(hyperparams),
+                peft={
+                    "method": peft_method,
+                    "lora_rank": lora_rank,
+                    "lora_alpha": lora_alpha,
+                    "lora_variant": lora_variant,
+                },
+                gradient_checkpointing=bool(gradient_checkpointing),
+                lr_scheduler_type=lr_scheduler_type,
+                early_stop=int(early_stop),
+            )
+        summary = (
+            f"✅ Training {status}!\n"
+            f"🖼️ Vision-language fine-tuning ({len(train_ds)} image + text examples)\n"
+            f"⏱ Elapsed: {elapsed / 60:.1f} min\n"
+            f"📁 Model saved to: {output_dir}\n"
+        )
+        if log_callback.records:
+            summary += f"📉 Final train loss: {final_train_loss(log_callback.records)}"
+        return summary, log_callback.records
+    finally:
+        # Free GPU memory on failure too (the other trainers do the same).
+        del trainer, model
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()

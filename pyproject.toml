@@ -25,7 +25,7 @@ classifiers = [
 
 
 # Core runtime dependencies — mirrors requirements.txt.
-# Heavy optional deps (vllm, auto-gptq, bert-score, unsloth, heretic-llm) are listed
+# Heavy optional deps (vllm, bert-score, unsloth, heretic-llm) are listed
 # under [project.optional-dependencies] and installed on demand.
 dependencies = [
     "gradio>=6.0.0,<7",
@@ -63,12 +63,9 @@ eval = [
     "lm-eval>=0.4.13,<0.5",  # standard benchmarks (ARC, HellaSwag, GSM8K, …)
     "math-verify>=0.5.2",  # GRPO maths-answer reward (TRL's accuracy_reward)
 ]
-quant = [
-    "auto-gptq>=0.7.1",
-    "exllamav2",
-]
+# CUDA only. TRL's vllm extra pins the vLLM range this TRL supports.
 vllm = [
-    "vllm>=0.2.0",
+    "trl[vllm]>=0.29.1,<2",
 ]
 # H-11 FIX: heretic-llm isolated in its own optional group so a missing package
 # never breaks a standard install.
@@ -91,7 +88,7 @@ compress = [
     "llmcompressor>=0.14.0",
 ]
 all = [
-    "llm-fine-tuner[eval,quant,vllm,heretic,vision,dev]",
+    "llm-fine-tuner[eval,vllm,heretic,vision,dev]",
 ]
 
 

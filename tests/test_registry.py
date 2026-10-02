@@ -153,3 +153,11 @@ def test_registry_checks_its_own_inputs(hub, tmp_path):
 def test_registry_without_huggingface_hub(monkeypatch):
     monkeypatch.setattr(registry, "HAS_HUB", False)
     assert "huggingface_hub not installed" in registry.on_registry_list("me/r", TOKEN)
+
+
+def test_versions_are_listed_in_version_order(hub):
+    for version in ("10", "2", "1.5", "beta"):
+        hub.files[f"metadata_v{version}.json"] = json.dumps({"base_model": "b"}).encode()
+    listing = registry.on_registry_list("me/models", TOKEN)
+    order = [line.split(":")[0] for line in listing.splitlines()[1:]]
+    assert order == ["• v1.5", "• v2", "• v10", "• vbeta"]

@@ -228,3 +228,11 @@ def test_merge_button(monkeypatch, tmp_path):
 )
 def test_merge_input_checks(tmp_path, base, adapter, message):
     assert message in vr.merge_adapter_for_inference(base, adapter, str(tmp_path / "out"))
+
+
+def test_vllm_gets_the_bitsandbytes_name(fake_vllm):
+    vr.vllm_generate_v27("m", ["a"], vllm_quantization="bnb")
+    assert fake_vllm[-1].quantization == "bitsandbytes"
+    from config.constants import VLLM_QUANT_OPTIONS
+
+    assert "bitsandbytes" in VLLM_QUANT_OPTIONS and "bnb" not in VLLM_QUANT_OPTIONS

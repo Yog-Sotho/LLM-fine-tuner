@@ -50,7 +50,7 @@ from core.hardware import (
     training_device_args,
 )
 from core.run_config import latest_checkpoint, save_run_config
-from core.state import app_state, validate_path_traversal
+from core.state import app_state, redact_sensitive_info, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file, load_table_dataset
 from data.preprocessing import chat_dataset, clean_messages
 
@@ -258,7 +258,7 @@ def train_distill(
         )
 
     except Exception as e:
-        return f"❌ Distillation failed: {e}"
+        return f"❌ Distillation failed: {redact_sensitive_info(str(e))}"
     finally:
         try:
             del trainer

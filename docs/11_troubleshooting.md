@@ -193,7 +193,21 @@ The model isn't following the format of your prompts.
 **Fixes:**
 1. Make sure you have a CUDA GPU: `python -c "import torch; print(torch.cuda.is_available())"`
 2. Make sure you're passing a **merged** model path (see [06 — Inference](06_inference.md))
-3. Check vLLM is installed: `pip install vllm`
+3. Check vLLM is installed: `pip install "trl[vllm]"` (CUDA only)
+
+---
+
+## "Path outside the folders this app may use"
+
+The web UI only reads and writes inside its own folder, the runs folder (`LFT_RUNS_DIR`)
+and the temp folder (uploads, exports), so a visitor can't reach other files on the
+server. To use a model or dataset stored elsewhere, start the UI with the folder allowed:
+
+```bash
+LFT_ALLOWED_PATHS=/data/models:/data/datasets python main.py
+```
+
+The command line (`python main.py train …`) has no such limit.
 
 ---
 

@@ -26,6 +26,7 @@ from config.constants import (
     COL_TEXT,
     HAS_NLPAUG,
 )
+from core.state import redact_sensitive_info
 from data.loader import detect_file_type, load_dataset_from_file
 from data.preprocessing import preview_dataset
 
@@ -119,13 +120,12 @@ def augment_dataset_v27(
             combined_df = pd.concat(dfs).sort_index(kind="stable")
             aug_ds = Dataset.from_pandas(combined_df, preserve_index=False)
         else:
-            # Fallback for datasets without TEXT or INSTRUCTION columns
-            import pandas as pd
-
-            df_orig = dataset.to_pandas()
-            dfs = [df_orig] * augmentation_factor
-            combined_df = pd.concat(dfs).sort_index(kind="stable")
-            aug_ds = Dataset.from_pandas(combined_df, preserve_index=False)
+            # Preference / chat data: rewriting one side of a pair (or one turn) would
+            # change what the example teaches, and copying rows only adds duplicates.
+            return dataset, (
+                "⚠️ Augmentation needs a 'text' or 'instruction' column; preference "
+                "(prompt/chosen/rejected) and chat data are left unchanged."
+            )
         msg = (
             f"✅ Augmentation complete!\n"
             f"Original: {len(dataset)} examples\n"
@@ -135,7 +135,10 @@ def augment_dataset_v27(
         return aug_ds, msg
 
     except Exception as e:
-        return dataset, f"❌ Augmentation failed: {e}\nOriginal dataset returned."
+        return (
+            dataset,
+            f"❌ Augmentation failed: {redact_sensitive_info(str(e))}\nOriginal dataset returned.",
+        )
 
 
 def quality_filter_v27(
@@ -222,7 +225,7 @@ def quality_filter_v27(
         return dataset, msg
 
     except Exception as e:
-        return dataset, f"❌ Quality filter failed: {e}"
+        return dataset, f"❌ Quality filter failed: {redact_sensitive_info(str(e))}"
 
 
 # ── Gradio UI handlers ─────────────────────────────────────────────────────
@@ -275,7 +278,12 @@ def on_augment_click(file, training_mode, aug_factor, aug_type, progress=gr.Prog
         )
 
     except Exception as e:
-        return f"❌ {e}", gr.update(visible=False), gr.update(visible=False), None
+        return (
+            f"❌ {redact_sensitive_info(str(e))}",
+            gr.update(visible=False),
+            gr.update(visible=False),
+            None,
+        )
 
 
 def on_quality_filter_click(file, training_mode, min_len, max_len, progress=gr.Progress()):
@@ -324,4 +332,9 @@ def on_quality_filter_click(file, training_mode, min_len, max_len, progress=gr.P
         )
 
     except Exception as e:
-        return f"❌ {e}", gr.update(visible=False), gr.update(visible=False), None
+        return (
+            f"❌ {redact_sensitive_info(str(e))}",
+            gr.update(visible=False),
+            gr.update(visible=False),
+            None,
+        )

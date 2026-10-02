@@ -252,3 +252,19 @@ def test_safe_extract_zip_bomb_high_ratio():
             ValueError, match="❌ Zip Bomb attempt detected: high compression ratio"
         ):
             safe_extract_zip("dummy.zip", "dummy_dir")
+
+
+def test_jsonl_honours_the_column_mapping(tmp_path, caplog):
+    import json
+    import logging
+
+    path = tmp_path / "d.jsonl"
+    path.write_text(json.dumps({"q": "Say hi", "a": "Hello"}) + "\n")
+    with caplog.at_level(logging.WARNING, logger="data.loader"):
+        ds = load_dataset_from_file(
+            DummyFile(str(path)),
+            "jsonl",
+            column_mapping={"q": "instruction", "a": "output", "x": "y"},
+        )
+    assert set(ds.column_names) == {"instruction", "output"} and ds[0]["output"] == "Hello"
+    assert "ignored: ['x']" in caplog.text

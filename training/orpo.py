@@ -44,7 +44,7 @@ from core.hardware import (
     training_device_args,
 )
 from core.run_config import save_run_config
-from core.state import app_state, validate_path_traversal
+from core.state import app_state, redact_sensitive_info, validate_path_traversal
 from data.loader import detect_file_type, load_dataset_from_file
 from data.preprocessing import validate_and_clean_dataset
 
@@ -256,7 +256,7 @@ def train_orpo_v27(
         )
 
     except Exception as e:
-        return f"❌ ORPO training failed: {e}"
+        return f"❌ ORPO training failed: {redact_sensitive_info(str(e))}"
     finally:
         # Free VRAM on failure too; names are unbound if loading never happened.
         try:

@@ -71,8 +71,8 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # ── Core dependencies ─────────────────────────────────────────────────────────
 COPY requirements.txt /tmp/requirements.txt
 # Strip optional heavy packages that require special build steps
-# (flash-attn, vllm, auto-gptq, exllamav2 are installed separately below)
-RUN grep -vE "^(flash-attn|vllm|auto-gptq|exllamav2|#)" /tmp/requirements.txt \
+# (flash-attn is installed separately below)
+RUN grep -vE "^(flash-attn|#)" /tmp/requirements.txt \
     | pip install -r /dev/stdin
 
 # ── Flash Attention 2 (requires CUDA headers, built here in builder) ──────────
@@ -118,8 +118,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     # HuggingFace
     HF_HOME=/app/cache/huggingface \
-    TRANSFORMERS_CACHE=/app/cache/huggingface \
-    HF_HUB_ENABLE_HF_TRANSFER=1 \
     # llama.cpp on PATH
     PATH="/opt/llama.cpp/build/bin:${PATH}" \
     # Gradio

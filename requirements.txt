@@ -42,11 +42,6 @@ huggingface_hub>=0.34.0,<2     # Hub push, create_repo (optional, guarded by HAS
 # ── CLI / headless mode ───────────────────────────────────────────────
 typer>=0.15.0               # CLI commands: train, reward, orpo, evaluate, ppo
 
-# ── Optional quantisation backends ───────────────────────────────────
-auto-gptq>=0.7.1            # GPTQ quantised inference (optional, guarded by HAS_GPTQ)
-exllamav2                   # EXL2 inference backend  (optional, guarded by HAS_EXLLAMA)
-# Note: auto-gptq and exllamav2 are optional. Comment them out if not needed.
-
 # ── Flash Attention 2 (strongly recommended for GPU) ──────────────────
 # Provides ~2× attention speedup; requires CUDA 11.6+ and a Volta/Ampere+ GPU.
 # Install separately due to its compilation requirements:
@@ -66,8 +61,8 @@ math-verify>=0.5.2          # GRPO maths-answer reward — optional
 # Data augmentation
 nlpaug>=1.1.10              # Synonym / random-word / spelling augmentation — optional
 
-# High-throughput inference
-vllm>=0.2.0                 # vLLM engine (optional, requires CUDA; cached in app_state.vllm_cache)
+# High-throughput inference (CUDA only, not installed by this file — it brings its own torch):
+#   pip install "trl[vllm]"   (the vLLM version your TRL supports; or pip install -e ".[vllm]")
 
 # Utility / performance
 einops>=0.8.0               # v3.2: Tensor rearrangement used by attention layers in some models

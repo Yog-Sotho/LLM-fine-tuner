@@ -127,7 +127,7 @@ def on_train_click(
         run_name = (run_name or "").strip() or new_run_name(training_mode)
         output_dir = run_dir_for(run_name)
     except ValueError as e:
-        return f"❌ {e}", None, None, []
+        return f"❌ {redact_sensitive_info(str(e))}", None, None, []
     run_exists = os.path.isdir(output_dir)
     if run_exists and not resume:
         return (
@@ -180,7 +180,7 @@ def on_train_click(
         try:
             ds = load_dataset_from_file(file, ftype, col_map, is_dpo=is_dpo)
         except Exception as e:
-            return str(e), None, None, []
+            return redact_sensitive_info(str(e)), None, None, []
 
         ds, issues = validate_and_clean_dataset(ds, is_dpo=is_dpo)
         if len(ds) == 0:
@@ -262,7 +262,7 @@ def on_train_click(
         # Remove a run folder this attempt created, unless it saved checkpoints to resume from.
         if not run_exists and not glob.glob(os.path.join(output_dir, "checkpoint-*")):
             shutil.rmtree(output_dir, ignore_errors=True)
-        return f"❌ Training failed: {e}\n{issues_str}", None, None, []
+        return f"❌ Training failed: {redact_sensitive_info(str(e))}\n{issues_str}", None, None, []
 
 
 def on_stop(request: gr.Request | None = None) -> str:
@@ -422,7 +422,7 @@ def on_file_upload(file, training_mode="sft"):
 
     except Exception as e:
         return (
-            f"❌ Error: {e}",
+            f"❌ Error: {redact_sensitive_info(str(e))}",
             gr.update(visible=False),
             gr.update(visible=False),
             gr.update(visible=False),
@@ -495,7 +495,7 @@ def on_refresh_preview(
         return preview_df, stats
 
     except Exception as e:
-        return pd.DataFrame(), f"❌ Preview refresh failed: {e}"
+        return pd.DataFrame(), f"❌ Preview refresh failed: {redact_sensitive_info(str(e))}"
 
 
 # ── Loss chart ─────────────────────────────────────────────────────────────
@@ -559,7 +559,9 @@ def on_quantize_export(model_path, fmt, file, augmented_ds, progress=gr.Progress
             ds = load_dataset_from_file(file, detect_file_type(file))
             dataset, _ = validate_and_clean_dataset(ds)
         except Exception as e:
-            return f"❌ Cannot read the training data for calibration: {e}"
+            return (
+                f"❌ Cannot read the training data for calibration: {redact_sensitive_info(str(e))}"
+            )
     return on_quantize_click(model_path, fmt, dataset, progress)
 
 
@@ -569,4 +571,4 @@ def on_remote_chat(url, model, api_key, system_prompt, prompt, max_tokens, tempe
         return remote_chat(url, prompt, model, api_key, system_prompt,
                            int(max_tokens), float(temperature))  # fmt: skip
     except ValueError as e:
-        return f"❌ {e}"
+        return f"❌ {redact_sensitive_info(str(e))}"

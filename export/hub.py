@@ -21,7 +21,7 @@ Fix log
 import os
 import re
 
-from config.constants import HAS_HUB, HF_TOKEN_MIN_LEN, HF_TOKEN_PREFIX
+from config.constants import HAS_HUB, HF_TOKEN_MIN_LEN, HF_TOKEN_PREFIX, OUTPUT_EXCLUDE_PATTERNS
 from core.state import redact_sensitive_info
 
 
@@ -111,7 +111,8 @@ def push_to_hub(model_path: str, repo_id: str, token: str) -> str:
         # upload_folder needs an existing repo (404 otherwise); visibility follows
         # the account's default for new repos.
         api.create_repo(repo_id=repo_id, repo_type="model", exist_ok=True)
-        api.upload_folder(folder_path=model_path, repo_id=repo_id, repo_type="model")
+        api.upload_folder(folder_path=model_path, repo_id=repo_id, repo_type="model",
+                          ignore_patterns=list(OUTPUT_EXCLUDE_PATTERNS))  # fmt: skip
         return f"✅ Pushed to https://huggingface.co/{repo_id}"
     except Exception as e:
         err_msg = redact_sensitive_info(str(e))
