@@ -5,7 +5,6 @@ remote path runs end to end without a network or a large model.
 """
 
 import json
-import re
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -83,7 +82,7 @@ def _fake_writer(rating=8, reply=None, fail_on=()):
     def ask(prompt):
         if prompt.startswith("Rate"):
             return "unclear" if rating is None else f"Score: {rating}"
-        chunk = re.search(r'"""\n(.*)\n"""', prompt, re.S).group(1)
+        chunk = prompt.split('"""\n', 1)[1].rsplit('\n"""', 1)[0]  # text between the quotes
         if chunk in fail_on:
             raise RuntimeError("server error hf_" + "c" * 34)
         return reply or json.dumps([{"question": f"What does '{chunk[:12]}' say?", "answer": chunk},
