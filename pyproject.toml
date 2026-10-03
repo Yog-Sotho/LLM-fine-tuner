@@ -88,8 +88,12 @@ vision = [
 compress = [
     "llmcompressor>=0.14.0",
 ]
+# Embedding-model fine-tuning (search / RAG). 6.x needs Transformers 5; 5.4+ works with 4.56.
+embedding = [
+    "sentence-transformers>=5.4.0,<7",
+]
 all = [
-    "llm-fine-tuner[eval,vllm,heretic,vision,dev]",
+    "llm-fine-tuner[eval,vllm,heretic,vision,embedding,dev]",
 ]
 
 

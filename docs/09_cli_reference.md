@@ -40,6 +40,7 @@ Commands:
   grpo      GRPO fine-tuning with a reward model and/or reference answers
   kto       KTO alignment from desirable / undesirable examples
   distill   Knowledge distillation (GKD): train a small student on a larger teacher's outputs
+  embed     Fine-tune an embedding model for search / RAG; reports retrieval before and after
   evaluate  Batched BLEU / ROUGE / BERTScore evaluation (greedy decoding)
   benchmark Standard benchmarks with lm-evaluation-harness (ARC, HellaSwag, GSM8K, …)
   merge     Merge a LoRA or IA3 adapter into its base model
@@ -311,6 +312,32 @@ python main.py distill \
 
 ---
 
+### `embed` — Embedding Model (search / RAG)
+
+```bash
+python main.py synthesize --input handbook.pdf --server http://localhost:8000 --output qa.jsonl
+python main.py embed --data qa.jsonl --output ./handbook-embedder --hard-negatives
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--model` | `sentence-transformers/all-MiniLM-L6-v2` | Embedding model (Hub id or folder) |
+| `--data` | *(required)* | `anchor`/`positive` (optional `negative`), `instruction`/`context` (`synthesize` output), `instruction`/`output`, `prompt`/`completion` or chats |
+| `--output` | `./embedding_model` | Output directory |
+| `--lora` | off | Train LoRA instead of all weights (merged into the saved model) |
+| `--epochs` / `--lr` | `1` / `2e-5` | Training length and learning rate (LoRA: try `1e-4`) |
+| `--batch-size` | `32` | Bigger is better: the batch's other passages are the negatives |
+| `--max-seq-length` | `256` | Tokens per query / passage |
+| `--matryoshka/--no-matryoshka` | on | Also train truncated dimensions (512, 256, 128, 64) |
+| `--hard-negatives` | off | Mine a similar non-answer passage per pair with the base model |
+| `--eval-split` | `0.1` | Share of pairs held out to measure retrieval |
+| `--query-prompt` | the model's own | Prefix for queries, e.g. `query: ` for E5 |
+
+Prints NDCG@10 / MRR@10 / Recall@10 before → after. See
+[Training → Embedding Models](04_training.md#embedding-models-search--rag).
+
+---
+
 ### `evaluate` — Batch Evaluation
 
 Runs BLEU, ROUGE, and optionally BERTScore on your model. Generation is greedy
@@ -473,7 +500,7 @@ LFT_SYNTH_API_KEY=sk-... python main.py synthesize --input manual.pdf --input no
 | Flag | Default | Description |
 |---|---|---|
 | `--input` | *(required, repeatable)* | PDF / `.docx` / `.txt` / `.md` document |
-| `--output` | `synthetic.jsonl` | JSONL file (`instruction`, `output`, `source`, `score`) |
+| `--output` | `synthetic.jsonl` | JSONL file (`instruction`, `output`, `context`, `source`, `score`) |
 | `--server` | — | OpenAI-compatible server URL (vLLM, llama-server, Ollama, hosted API) |
 | `--server-model` | first model the server lists | Model name on the server |
 | `--model` | — | Local model instead of a server (give `--server` or `--model`) |

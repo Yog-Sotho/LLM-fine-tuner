@@ -197,8 +197,11 @@ dropped as well. Set the threshold to 0 to keep everything and skip the rating c
 recipe of Meta's synthetic-data-kit.
 
 The result is loaded as your training data (`instruction` / `output`), ready for
-**▶ Start Training**, and offered as a JSONL download that also records each pair's source
-document and score. Read a sample before training: the pairs are only as good as the writer.
+**▶ Start Training**, and offered as a JSONL download that also records, for each pair, the
+document, the passage it was written from (`context`) and its score. Read a sample before
+training: the pairs are only as good as the writer. The same JSONL trains a search / RAG
+embedding model on question ↔ passage (**🔎 Embeddings** tab, see
+[Training → Embedding Models](04_training.md#embedding-models-search--rag)).
 **⏹ Stop** in the Training tab stops a long run and keeps the pairs written so far.
 
 From the CLI:

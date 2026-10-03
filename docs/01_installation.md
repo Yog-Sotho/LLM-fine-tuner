@@ -108,6 +108,10 @@ pip install torch torchvision torchaudio
 pip install -r requirements.txt
 ```
 
+This includes the optional extras (evaluation metrics, augmentation, embedding-model training).
+Installing the package instead? Pick extras by name, e.g. `pip install -e ".[eval,embedding]"`
+or `".[all]"`.
+
 ### Step 6 — Install Unsloth (highly recommended)
 
 Unsloth makes training 2–5× faster and uses 60–80% less VRAM. It's optional but strongly recommended if you have an NVIDIA GPU.

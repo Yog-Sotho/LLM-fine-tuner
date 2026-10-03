@@ -226,6 +226,60 @@ The **📉 Loss Curve** below the log plots these values visually.
 
 ---
 
+## Embedding Models (search / RAG)
+
+The **🔎 Embeddings** tab fine-tunes an *embedding model* — the model a search engine or a
+RAG pipeline uses to find the passages that answer a question. A general-purpose embedding
+model often misses domain vocabulary (product names, internal terms, legal or medical
+language); a short fine-tune on your own (question, passage) pairs fixes much of that.
+
+**Data** (CSV / JSON / JSONL):
+
+| Columns | Pairs used |
+|---|---|
+| `anchor`, `positive` (optional `negative`) | as given |
+| `instruction`, `context` — the JSONL from [create training data from your documents](03_data_preparation.md#creating-training-data-from-your-documents) | question ↔ the passage it was written from (best for RAG) |
+| `instruction`, `output` / `prompt`, `completion` / chats | question ↔ answer |
+
+**Settings:**
+- **Embedding model** — pick a suggestion or type any Hub id or folder. `all-MiniLM-L6-v2`
+  (22M, English) trains in minutes on a CPU; `multilingual-e5-small` and `bge-m3` cover other
+  languages; `Qwen3-Embedding-0.6B` is stronger and wants a GPU.
+- **Method** — *Full fine-tuning* (default; embedding models are small) or *LoRA* for large
+  models. LoRA is merged into the model before saving, so the result is a normal model.
+- **Batch size** — bigger is better: every other passage in the batch serves as a wrong answer
+  for each question (in-batch negatives, `MultipleNegativesRankingLoss`).
+- **Matryoshka** (on) — also trains the first 512 / 256 / 128 / 64 dimensions, so you can store
+  shorter vectors later (`truncate_dim`) and keep most of the quality.
+- **Mine hard negatives** — before training, the base model finds, for each question, a
+  passage that looks similar but is not its answer (passages scoring within 5 % of the right
+  one are skipped as likely duplicates). Harder examples, usually better results.
+- **Held-out share** — pairs kept aside to measure retrieval (with fewer than 5 held-out
+  pairs, the training pairs are used and the status says so).
+- **Query prompt** — a prefix some models expect on queries (`query: ` for E5). Empty uses the
+  model's own; it is saved with the model.
+
+**Result:** the status shows retrieval quality before → after — **NDCG@10** (ranking quality),
+**MRR@10** (how high the right passage ranks) and **Recall@10** (how often it is in the top 10)
+— each held-out question searched among all passages. The model is saved to
+`runs/<run name>/` with `run_config.yaml` and a model card, ready for `push` to the Hub or any
+tool that loads sentence-transformers models:
+
+```python
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer("runs/my-embedder")
+scores = model.similarity(
+    model.encode(["How do I reset my password?"]),
+    model.encode(["To reset your password, open Settings …"]),
+)
+```
+
+Needs `sentence-transformers` (in `requirements.txt`; or `pip install "llm-fine-tuner[embedding]"`).
+From the CLI: `python main.py embed --data pairs.jsonl --output ./my-embedder`.
+
+---
+
 ## Stopping Training Early
 
 Click **⏹ Stop** at any time. The model will finish the current step, save what it has, and stop. Your partially-trained model is still usable.

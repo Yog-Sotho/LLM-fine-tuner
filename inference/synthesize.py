@@ -18,6 +18,7 @@ from collections.abc import Callable
 import torch
 
 from config.constants import (
+    COL_CONTEXT,
     COL_INSTRUCTION,
     COL_OUTPUT,
     SYNTH_CURATE_THRESHOLD,
@@ -128,8 +129,9 @@ def synthesize_pairs(
 ) -> tuple[list[dict], dict]:
     """Write and (if ``curate_threshold`` > 0) rate pairs for every (source, chunk).
 
-    Returns (rows with instruction / output / source / score, stats). Failed chunks are
-    counted and skipped, so one bad reply doesn't lose the run.
+    Returns (rows with instruction / output / context / source / score, stats); context is
+    the passage the pair was written from (embedding training pairs question ↔ context).
+    Failed chunks are counted and skipped, so one bad reply doesn't lose the run.
     """
     rows: list[dict] = []
     seen: set[str] = set()
@@ -171,7 +173,7 @@ def synthesize_pairs(
                     continue
             seen.add(key)
             rows.append({COL_INSTRUCTION: pair["question"], COL_OUTPUT: pair["answer"],
-                         "source": source, "score": score})  # fmt: skip
+                         COL_CONTEXT: chunk, "source": source, "score": score})  # fmt: skip
     stats["kept"] = len(rows)
     return rows, stats
 

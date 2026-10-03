@@ -188,6 +188,7 @@ You don't need to understand all of these to get started — the defaults work g
 | **ORPO** | Modern single-step alignment from ranked pairs | Faster alternative to reward + RL |
 | **KTO** | Alignment from thumbs-up / thumbs-down feedback | When you have good/bad labels but no ranked pairs |
 | **Distillation** | A small model learns from a larger one of the same family | When you want a big model's quality at a small model's cost |
+| **Embedding models** | Teaches a search model which passages answer which questions | When your RAG / search misses the right documents |
 
 Large models: multi-GPU presets for DDP, FSDP2, FSDP + QLoRA and DeepSpeed ZeRO-2/3
 (`configs/accelerate/`), mixture-of-experts support (router kept stable, load balancing on)
@@ -221,9 +222,7 @@ Once trained, your model can be:
 - ✅ Docker image — one-command setup with no dependencies
 - ✅ Multi-GPU training
 - ✅ Vision + language models
-
-**Coming soon:**
-- 🔲 Embedding-model fine-tuning (for search / RAG)
+- ✅ Embedding-model fine-tuning for search / RAG — with before/after retrieval scores
 
 ---
 

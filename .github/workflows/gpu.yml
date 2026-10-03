@@ -78,7 +78,7 @@ jobs:
 
       - name: "Install package and test tools"
         run: |
-          pip install --quiet -e ".[eval]"
+          pip install --quiet -e ".[eval,embedding]"
           pip install --quiet "pytest>=8.0.0" "pytest-timeout>=2.3.0"
 
       - name: "Check CUDA from Python"
@@ -98,6 +98,7 @@ jobs:
           snapshot_download('hf-internal-testing/tiny-random-LlamaForCausalLM')
           snapshot_download('trl-internal-testing/tiny-Qwen3ForCausalLM')
           snapshot_download('trl-internal-testing/tiny-Qwen3MoeForCausalLM')
+          snapshot_download('sentence-transformers-testing/stsb-bert-tiny-safetensors')
           "
 
       - name: "Run GPU tests"

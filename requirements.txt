@@ -59,6 +59,9 @@ nltk>=3.8.0                 # BLEU scoring + punkt tokeniser (downloads punkt on
 lm-eval>=0.4.13,<0.5        # Standard benchmarks via lm-evaluation-harness — optional
 math-verify>=0.5.2          # GRPO maths-answer reward — optional
 
+# Embedding-model fine-tuning (search / RAG)
+sentence-transformers>=5.4.0,<7  # Embeddings tab / `embed` command — optional
+
 # Data augmentation
 nlpaug>=1.1.10              # Synonym / random-word / spelling augmentation — optional
 

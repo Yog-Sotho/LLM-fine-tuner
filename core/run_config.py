@@ -31,6 +31,7 @@ from config.constants import (
 from core.model_card import write_model_card
 
 _LIBRARIES = ("torch", "transformers", "trl", "peft", "datasets", "accelerate")
+_OPTIONAL_LIBRARIES = ("sentence-transformers",)  # recorded only when installed
 
 
 def dataset_fingerprint(dataset) -> dict:
@@ -60,6 +61,11 @@ def library_versions() -> dict[str, str]:
             versions[name] = metadata.version(name)
         except metadata.PackageNotFoundError:
             versions[name] = "not installed"
+    for name in _OPTIONAL_LIBRARIES:
+        try:
+            versions[name] = metadata.version(name)
+        except metadata.PackageNotFoundError:
+            pass
     return versions
 
 

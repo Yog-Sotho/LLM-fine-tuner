@@ -45,6 +45,7 @@ LLM-fine-tuner/
 │   ├── grpo.py              # train_grpo() — GRPO (reward model and/or reference answers)
 │   ├── kto.py               # train_kto() — KTO from desirable/undesirable examples
 │   ├── distill.py           # train_distill() — knowledge distillation (TRL GKD, student ← teacher)
+│   ├── embedding.py         # train_embedding() — embedding models for search/RAG (sentence-transformers)
 │   └── orpo.py              # train_orpo_v27() — ORPO alignment
 │
 ├── inference/
@@ -70,6 +71,7 @@ LLM-fine-tuner/
 │   ├── css.py               # CUSTOM_CSS styling (violet theme)
 │   └── tabs/
 │       ├── data_tab.py      # Data upload & preview layout
+│       ├── embedding_tab.py # Embedding-model fine-tuning layout
 │       ├── train_tab.py     # Training configuration layout
 │       ├── gguf_tab.py      # GGUF export layout
 │       ├── inference_tab.py # Inference layout
@@ -78,7 +80,7 @@ LLM-fine-tuner/
 │       └── share_tab.py     # Hub push & download layout
 │
 ├── cli/
-│   └── commands.py          # Typer CLI (train … distill, benchmark, merge, merge-adapters, export, push, serve, synthesize)
+│   └── commands.py          # Typer CLI (train … distill, embed, benchmark, merge, merge-adapters, export, push, serve, synthesize)
 │
 ├── tests/
 │   ├── conftest.py          # pytest setup (inserts repo root into sys.path)
@@ -331,6 +333,14 @@ ask = remote_writer() (remote_chat, any OpenAI-compatible server) | local_writer
 Reading lives in `data/` and writing in `inference/` (inference may not import data); the UI
 handler / CLI joins them. One failed chunk is counted, never fatal.
 
+### Embedding training
+```
+Pairs file → to_embedding_pairs() → split_pairs() [held-out queries, ≥ 5 or eval on train]
+    → [hard negatives] mine_hard_negatives() + add_negatives() → IR evaluator "before"
+    → [LoRA] get_peft_model(model[0].model) → MNRL (+ Matryoshka) → SentenceTransformerTrainer
+    → [LoRA] merge_and_unload() → IR evaluator "after" → save_pretrained + save_run_config
+```
+
 ### Hub push
 ```
 Trained model → push_to_hub()
@@ -342,9 +352,11 @@ Trained model → push_to_hub()
 
 ## Training Modes & PEFT Methods
 
-**Training modes:** SFT, DPO (via `training/sft.py`), ORPO (`training/orpo.py`), KTO (`training/kto.py`), GRPO (`training/grpo.py`), Reward modeling (`training/reward.py`), Distillation (`training/distill.py`)
+**Training modes:** SFT, DPO (via `training/sft.py`), ORPO (`training/orpo.py`), KTO (`training/kto.py`), GRPO (`training/grpo.py`), Reward modeling (`training/reward.py`), Distillation (`training/distill.py`), Embedding models (`training/embedding.py`)
 
 **Distillation** uses `trl.experimental.gkd.GKDTrainer` (same API in TRL 0.29 and 1.x): chat data only (`to_distill_dataset()` turns instruction/output and prompt/completion into chats), the student gets LoRA, the teacher only runs forward. Check the vocab sizes match before training — TRL 0.29 doesn't.
+
+**Embedding models** (`training/embedding.py`) use sentence-transformers 5.4–6.x (6.x needs Transformers 5; 5.4 works with 4.56): import from `sentence_transformers.sentence_transformer.{losses,evaluation,training_args}` (the old top-level paths are deprecated in 6.x) and use `get_embedding_dimension()`. Pairs come from `to_embedding_pairs()` (anchor/positive[/negative], instruction/context from `synthesize`, instruction/output, prompt/completion, chats); loss is MNRL (in-batch negatives, `BatchSamplers.NO_DUPLICATES`), wrapped in MatryoshkaLoss. LoRA wraps the inner model (`model[0].model` — `auto_model` is a read-only property) with `get_peft_model` and is merged before saving: an adapter-only ST folder does not reload on 5.4. Mined hard negatives never drop pairs (`add_negatives()` fills the rest with random passages). Use integer `warmup_steps` (`warmup_ratio` is deprecated in Transformers 5). Keep query prompts verbatim (`"query: "` — the space matters).
 
 **Adapter merging** (`export/merge.py`) uses PEFT `add_weighted_adapter`: LoRA only, one base model, no DoRA (magnitudes are dropped); linear/ties/dare_* need equal ranks. Make merged weights contiguous before saving (older PEFT leaves SVD views). mergekit is not used: 0.1.4 pins accelerate~=1.6 / pydantic~=2.10 and fails with current Transformers.
 
@@ -401,7 +413,7 @@ Example: `# C-1: Removed broken llm_fine_tuner.* package imports`
 ## Package & Dependency Notes
 
 - **Core deps:** transformers, datasets, peft, trl, torch, gradio, typer, pandas, safetensors
-- **Optional groups** (install via `pip install -e ".[group]"`): `eval`, `vllm` (TRL's vllm extra, CUDA), `heretic`, `vision`, `compress` (llm-compressor — pins recent torch/Transformers, not in `all`), `dev`, `all`
+- **Optional groups** (install via `pip install -e ".[group]"`): `eval`, `vllm` (TRL's vllm extra, CUDA), `heretic`, `vision`, `embedding` (sentence-transformers, `HAS_SENTENCE_TRANSFORMERS`), `compress` (llm-compressor — pins recent torch/Transformers, not in `all`), `dev`, `all`
 - **Unsloth:** installed separately — not in `requirements.txt`. Provides 2–5× training speedup and native GGUF export.
 - **heretic-llm:** optional dep (moved out of required in v3.2 to avoid PyPI install failures).
 - **Python:** 3.10, 3.11, 3.12 supported.

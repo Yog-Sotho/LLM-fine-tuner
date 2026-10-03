@@ -41,6 +41,7 @@ from training.reward import train_reward_model_v27
 from ui.handlers import (
     build_loss_chart,
     on_batch_test,
+    on_embed_click,
     on_file_upload,
     on_generate,
     on_hub_load,
@@ -53,6 +54,7 @@ from ui.handlers import (
     on_train_click,
 )
 from ui.tabs.data_tab import build_data_tab
+from ui.tabs.embedding_tab import build_embedding_tab
 from ui.tabs.evaluation_tab import build_evaluation_tab
 from ui.tabs.gguf_tab import build_gguf_tab
 from ui.tabs.inference_tab import build_inference_tab
@@ -83,7 +85,7 @@ def build_demo() -> gr.Blocks:
         gr.HTML(f"""
         <div id="header-banner">
             <h1>🧠 {APP_NAME}</h1>
-            <p>SFT · DPO · ORPO · KTO · Reward model · GRPO — LoRA / QLoRA · GGUF export · vLLM inference</p>
+            <p>SFT · DPO · ORPO · KTO · Reward model · GRPO · Embeddings — LoRA / QLoRA · GGUF export · vLLM inference</p>
         </div>
         """)
         hw_md = gr.Markdown(get_hardware_summary(), elem_id="hw-info")  # noqa: F841
@@ -95,6 +97,7 @@ def build_demo() -> gr.Blocks:
             gt = build_gguf_tab()
             it = build_inference_tab()
             rlt = build_rlhf_tab()
+            emt = build_embedding_tab()
             et = build_evaluation_tab()
             st = build_share_tab()
 
@@ -526,6 +529,30 @@ def build_demo() -> gr.Blocks:
             ],
             outputs=[rlt["orpo_status"]],
         )
+
+        # ── Embeddings Tab ─────────────────────────────────────────────────
+        # Input order matches on_embed_click's positional parameters.
+        emt["embed_train_btn"].click(
+            fn=on_embed_click,
+            **GPU_JOB,  # one shared GPU queue (see config.constants)
+            inputs=[
+                emt["embed_model"],
+                emt["embed_file"],
+                emt["embed_run_name"],
+                emt["embed_method"],
+                emt["embed_lr"],
+                emt["embed_epochs"],
+                emt["embed_batch"],
+                emt["embed_max_len"],
+                emt["embed_matryoshka"],
+                emt["embed_hard_negatives"],
+                emt["embed_eval_split"],
+                emt["embed_query_prompt"],
+            ],
+            outputs=[emt["embed_status"]],
+        )
+        # Stop stays outside the GPU queue, so it works while training runs.
+        emt["embed_stop_btn"].click(fn=on_stop, inputs=[], outputs=[emt["embed_status"]])
 
         # ── Evaluation Tab ─────────────────────────────────────────────────
         # F-6: on_evaluate_click now returns 3 values.  The third value is the
