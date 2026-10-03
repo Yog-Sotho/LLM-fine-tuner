@@ -171,8 +171,8 @@ QLORA_ENHANCED_LORA_CONFIG: dict = {
     "bias": "none",
 }
 
-# NOTE: bnb_4bit_compute_dtype uses torch.bfloat16 as default; callers must
-# override to torch.float16 when torch.cuda.is_bf16_supported() returns False.
+# The 4-bit config every QLoRA load uses: build it with core.hardware.nf4_quantization_config,
+# which sets bnb_4bit_compute_dtype to the training precision (fp16 without bf16 support).
 QLORA_ENHANCED_BNB_KWARGS: dict = {
     "load_in_4bit": True,
     "bnb_4bit_quant_type": "nf4",

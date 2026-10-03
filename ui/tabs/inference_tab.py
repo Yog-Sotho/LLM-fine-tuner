@@ -50,7 +50,9 @@ def build_inference_tab() -> dict:
                 label="Upload prompts (CSV with 'prompt' col, or .txt one per line)"
             )
             batch_btn = gr.Button("Run Batch", variant="secondary")
-            batch_out = gr.File(label="Download responses CSV")
+            with gr.Column():
+                batch_status = gr.Textbox(label="Status", interactive=False)
+                batch_out = gr.File(label="Download responses CSV")
 
         gr.Markdown("### Load a saved PEFT adapter")
         with gr.Row():
@@ -154,6 +156,7 @@ def build_inference_tab() -> dict:
         gen_out=gen_out,
         batch_file=batch_file,
         batch_btn=batch_btn,
+        batch_status=batch_status,
         batch_out=batch_out,
         lora_zip_upload=lora_zip_upload,
         lora_zip_status=lora_zip_status,

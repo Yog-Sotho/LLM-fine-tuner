@@ -161,7 +161,10 @@ The quality filter removes examples that are too short, too long, or low quality
 - **Min Character Length** (default: 50) — removes very short examples
 - **Max Character Length** (default: 2048) — removes examples that would be truncated anyway
 
-A good workflow: filter first, then augment.
+A good workflow: filter first, then augment. Each tool works on the data prepared so far — the
+uploaded file (read with your column mapping), a Hub dataset, data created from documents, or
+the result of the other tool — and **▶ Start Training** uses the latest result. Uploading a new
+file starts over. Each click applies again: augmenting twice multiplies twice.
 
 ---
 

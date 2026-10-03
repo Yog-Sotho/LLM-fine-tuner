@@ -23,21 +23,21 @@ packages hard-listed in `requirements.txt`, an oversized `train_model()`, and GP
 have tests (`tests/test_gpu.py`) but have **not yet been run on a GPU**.
 **Top priority:** run `.github/workflows/gpu.yml` on a GPU runner.
 
-## Overall Score: 7.9 / 10 (baseline 3.8; 7.3 after Tier 12)
+## Overall Score: 8.0 / 10 (baseline 3.8; 7.3 after Tier 12)
 
 | Dimension | Score | Baseline | Priority | Status |
 |---|---|---|---|---|
 | Security | 9/10 | 3 | CRITICAL | PASS |
 | Build & Types | 8/10 | 2 | CRITICAL | PASS |
 | Concurrency | 8/10 | 4 | HIGH | PASS |
-| Code Principles | 6/10 | 5 | HIGH | WARN |
+| Code Principles | 7/10 | 5 | HIGH | PASS |
 | Dependencies | 8/10 | 3 | MEDIUM | PASS |
 | Observability | 8/10 | 3 | MEDIUM | PASS |
 | Lifecycle | 8/10 | 4 | MEDIUM | PASS |
 | Code Quality | 7/10 | 5 | MEDIUM | WARN |
 | Dead Code | 9/10 | 5 | LOW | PASS |
 
-Average 7.89 (after Tier 15); no CRITICAL findings remain, so no hard caps apply → **7.9**. Remaining: GPU paths not yet run, `train_model()` / CLI size, quantised-loading duplication, batch-test error output, augment/filter re-reading the file.
+Average 8.0 (after Tier 18: Code Principles 6 → 7 — NF4 config, column mapping and CLI boilerplate de-duplicated, `train_model()` split into steps); no CRITICAL findings remain, so no hard caps apply → **8.0**. Remaining: GPU paths not yet run; `train_model()` still takes ~30 positional parameters; the CLI is one module.
 
 ### SOTA position (separate from code quality): 7.5 / 10 (baseline 3)
 
@@ -57,7 +57,7 @@ an automated run; no sequence/context parallelism, persistent job queue or async
 | Reproducibility | 9 | run_config.yaml, dataset SHA-256, early seeding, resume, tracking, one version |
 | Security | 8 | See Security below |
 | Scale | 6.5 (T14) | DDP + FSDP2 / FSDP-QLoRA / DeepSpeed ZeRO-2/3 presets for `train`; MoE support; activation offloading, padding-free. Sharding **not yet run on GPUs**; no context/sequence parallelism |
-| Code quality | 7 | mypy on all layers; `train_model()` still ~580 lines |
+| Code quality | 7.5 (T18) | mypy on all layers; `train_model()` split into steps (248 lines), GPU load arguments pinned by a snapshot test |
 | Test depth | 8 (was 6) | 90 % coverage, 657 tests (639 CPU + 18 GPU-only); GPU suite written, not yet run on a GPU |
 
 ---
@@ -121,9 +121,9 @@ New findings from this audit are marked **NEW**.
 
 | Severity | Status | Location | Issue | Recommendation |
 |---|---|---|---|---|
-| MEDIUM | OPEN | `training/sft.py:118` | `train_model()` is ~580 lines with ~35 parameters, 21 of them positional (called positionally from ~20 places) | `TrainConfig` dataclass; split into load / apply PEFT / build trainer |
+| MEDIUM | PARTLY FIXED (T18) | `training/sft.py` | `train_model()` is ~580 lines with ~35 parameters, 21 of them positional (called positionally from ~20 places) | `TrainConfig` dataclass; split into load / apply PEFT / build trainer — split into `_load_tokenizer`, `_split_train_eval`, `_load_model`, `_apply_peft`, `_training_args`, `_callbacks`, `_build_trainer`, `_heretic_note` (248 lines left, behaviour pinned by a GPU-load-arguments snapshot test); `TrainConfig` not done: it would change every positional call site |
 | MEDIUM | OPEN | `training/sft.py:279,351`, `orpo.py:112`, `vision.py:109` | 4-bit `BitsAndBytesConfig` built in 3 files | One `core` helper for quantised loading |
-| MEDIUM | OPEN | `cli/commands.py` (893 lines) | All commands in one module | One module per command group |
+| MEDIUM | PARTLY FIXED (T18) | `cli/commands.py` | All commands in one module | One module per command group — repeated error/exit and path-check boilerplate replaced by `_fail` / `_check_paths` / `_report` (1,139 → 1,041 lines, same messages and exit codes); not split: the tests patch `cli.commands.*`, and per-group modules would add no behaviour |
 | MEDIUM | FIXED (T2/T5) | split guard, batched generation | Copied 3–4× | Shared helpers (`generate_predictions`, dataset split helpers) |
 | LOW | OPEN | `export/hub.py`, `export/registry.py` | HF-token validation duplicated | `validate_hf_token()` in `core/state.py` |
 
@@ -145,7 +145,7 @@ New findings from this audit are marked **NEW**.
 | MEDIUM | FIXED | `raise … from e` | Lost tracebacks | ruff B904 clean |
 | MEDIUM | FIXED (T6) | Heretic | Return code ignored | Checked |
 | **NEW** MEDIUM | FIXED (T12) | `core/callbacks.py` `LoggingCallback` | Evaluation logs separately from training, so **eval loss never reached the loss chart** (always NaN) | Eval results attach to the record of their step; `final_train_loss()` skips eval-only records; covered by a real training test |
-| LOW | OPEN | `ui/tabs/inference_tab.py:53` | Batch test returns error strings into a `gr.File` output | Separate status text component |
+| LOW | FIXED (T18) | `ui/tabs/inference_tab.py:53` | Batch test returns error strings into a `gr.File` output (Gradio raised FileNotFoundError on the message, so users saw a generic error) | Separate status text component — done, regression test added |
 
 ### Lifecycle [8/10]
 
@@ -173,7 +173,7 @@ New findings from this audit are marked **NEW**.
 | MEDIUM | FIXED (T2) | precision | `fp16=True` forced with bf16 weights | `select_precision` / `compute_dtype` |
 | MEDIUM | FIXED (T13) | `training/sft.py`, `ui/tabs/train_tab.py` | "Adapters" PEFT option always failed: PEFT has no `AdapterConfig` | Replaced with IA3 (`IA3Config`, PEFT default layers per architecture); mergeable for export; `adapter_reduction_factor` removed end to end |
 | **NEW** HIGH | FIXED (T12) | `ui/handlers.py:on_file_upload` | A CSV/Excel with non-standard column names raised an error before the column-mapping dropdowns were shown, so such files could not be mapped at all (regression from the "in-memory refresh" optimisation) | Columns checked before conversion; raw rows + dropdowns shown; covered by tests |
-| MEDIUM | PARTLY FIXED (T15) | `data/augmentation.py:122` | Data without `text`/`instruction` (DPO) is silently duplicated N× and reported as augmented; augment/filter re-read the file and ignore the column mapping | Say "not supported for preference data"; operate on the prepared dataset — preference/chat data now refused with a message; augment/filter still re-read the file |
+| MEDIUM | FIXED (T15/T18) | `data/augmentation.py:122` | Data without `text`/`instruction` (DPO) is silently duplicated N× and reported as augmented; augment/filter re-read the file and ignore the column mapping (so filter-then-augment lost the filter, and Hub / document data could not be augmented) | Say "not supported for preference data"; operate on the prepared dataset — both done; column mapping shared (`column_mapping()`), regression tests added |
 | LOW | FIXED (T15) | `data/loader.py` JSON/JSONL branch | `column_mapping` ignored for JSON | Load through pandas like CSV — mapping applied to JSON/JSONL (rename, unknown columns logged) |
 | LOW | FIXED (T15) | `export/registry.py:150` | Versions sorted as strings (`v10` before `v2`) | `packaging.version.parse` |
 | LOW | FIXED (T11) | banners | "PRODUCTION READY" / stale version strings | Removed; version from `APP_VERSION` |
@@ -214,6 +214,7 @@ New findings from this audit are marked **NEW**.
 | 2026-10-02 | Tier 15 branch | 7.9 | 12 audit findings fixed (path allow-list, deps, checkpoints out of uploads, redaction, vision cleanup, small fixes); remaining: GPU run, structural refactors |
 | 2026-10-02 | Tier 16 branch | 7.9 | Training data from documents (UI + `synthesize` CLI: chunking, Q/A writing via server or local model, LLM rating, dedup); SOTA 7.5/10 (8 once the GPU suite passes) |
 | 2026-10-03 | Tier 17 branch | 7.9 | Embedding-model fine-tuning (Embeddings tab + `embed` CLI; sentence-transformers 5.4–6.x); synthetic data keeps its source passage for question ↔ passage training; SOTA 7.5/10 (8 once the GPU suite passes) |
+| 2026-10-03 | Tier 18 branch | 8.0 | Structural clean-up: shared NF4 config, `train_model()` split into steps (GPU load-argument snapshot test first), CLI `_fail`/`_check_paths`/`_report`; bugs fixed: batch-test errors crashed the file output, augment/filter ignored the prepared data and column mapping |
 
 Work between the two audits (all verified with the CI workflow replayed locally, floor and
 ceiling library versions, live UI and Docker CPU checks before each push):
@@ -237,7 +238,8 @@ suite + workflow, two bugs fixed (column mapping on upload, eval loss in the cha
 5. **[MEDIUM]** Exclude `checkpoint-*` from Hub push and the download ZIP.
 6. **[MEDIUM]** Lazy `unsloth` import; drop the import-time `nltk.download`; `finally` GPU cleanup in `training/vision.py`.
 7. **[MEDIUM]** Split `train_model()` behind a `TrainConfig`; one quantised-loading helper; split
-   `cli/commands.py`.
+   `cli/commands.py` — partly done (T18): `train_model()` split into steps, one NF4 helper, CLI
+   boilerplate helpers; `TrainConfig` and a per-group CLI remain.
 8. **[LOW]** Redact all UI error text; vLLM `bnb → bitsandbytes`; registry version sort; JSON
    column mapping; DPO augmentation message; drop deprecated `TRANSFORMERS_CACHE` /
    `HF_HUB_ENABLE_HF_TRANSFER`; `vllm_cache` lock.

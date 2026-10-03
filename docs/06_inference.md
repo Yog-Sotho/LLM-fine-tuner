@@ -52,21 +52,23 @@ The response appears in the **Output** box within a few seconds.
 
 ## Batch Testing
 
-Batch testing lets you send many prompts at once and see all the responses in a table. Perfect for evaluating your model's consistency.
+Batch testing sends many prompts at once and gives you all the responses as a CSV. Perfect for checking your model's consistency.
 
-1. Create a CSV with a `prompt` column (and optionally a `reference` column with expected answers):
+1. Create a CSV with a `prompt` column (other columns are ignored), or a `.txt` file with one prompt per line:
    ```csv
-   prompt,reference
-   "What is photosynthesis?","Plants convert sunlight, water, and CO₂ into glucose and oxygen."
-   "Who invented the telephone?","Alexander Graham Bell is widely credited with inventing the telephone in 1876."
-   "Name three primary colours.","Red, blue, and yellow."
+   prompt
+   "What is photosynthesis?"
+   "Who invented the telephone?"
+   "Name three primary colours."
    ```
 
-2. In the **Batch Test** section, upload this file
-3. Set the **Batch Size** (default: 4) — how many prompts to process at once
-4. Click **🧪 Run Batch Test**
+2. In the **Batch inference** section, upload this file
+3. Click **Run Batch** — prompts are generated in batches of up to 8
 
-Results appear in a table showing the prompt, the model's response, and the reference answer side-by-side.
+The **Status** box shows how many responses were written (or what went wrong, e.g. a missing
+`prompt` column), and **Download responses CSV** gives you a `prompt,response` file. To score
+responses against reference answers (BLEU / ROUGE / BERTScore / LLM judge), use the
+[Evaluation tab](07_evaluation.md).
 
 ---
 

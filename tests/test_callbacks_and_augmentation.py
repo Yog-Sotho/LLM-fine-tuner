@@ -190,12 +190,12 @@ def test_augment_and_filter_buttons(fake_nlpaug, tmp_path):
     pd.DataFrame({"instruction": ["short", "a longer instruction"],
                   "output": ["ok", "a longer answer"]}).to_csv(path, index=False)  # fmt: skip
     msg, preview, stats, ds = aug.on_augment_click(
-        _File(path), "SFT", 2, "synonym", lambda *a, **k: None
+        _File(path), "SFT", 2, "synonym", progress=lambda *a, **k: None
     )
     assert msg.startswith("✅ Augmentation complete") and len(ds) == 4 and preview["visible"]
     assert "**Augmented:** 4" in stats["value"]
     msg, preview, stats, ds = aug.on_quality_filter_click(
-        _File(path), "SFT", 20, 100, lambda *a, **k: None
+        _File(path), "SFT", 20, 100, progress=lambda *a, **k: None
     )
     assert len(ds) == 1 and "**After filter:** 1" in stats["value"]
 
@@ -205,5 +205,50 @@ def test_augment_and_filter_buttons_report_problems(handler, tmp_path):
     assert handler(None, "SFT", 2, 3)[0] == "❌ Upload a dataset first."
     bad = tmp_path / "bad.jsonl"
     bad.write_text("{not json\n")
-    msg, _, _, ds = handler(_File(bad), "SFT", 2, 3, lambda *a, **k: None)
+    msg, _, _, ds = handler(_File(bad), "SFT", 2, 3, progress=lambda *a, **k: None)
     assert msg.startswith("❌") and ds is None
+
+
+def _noop(*a, **k):
+    return None
+
+
+def test_filter_then_augment_keeps_the_filter(fake_nlpaug, tmp_path):
+    """BUG: each button re-read the uploaded file, so augmenting after filtering threw the
+    filter away (the docs recommend exactly that order)."""
+    path = tmp_path / "d.csv"
+    pd.DataFrame({"instruction": ["short", "a longer instruction", "another long instruction"],
+                  "output": ["ok", "a longer answer", "another long answer"]}).to_csv(
+        path, index=False)  # fmt: skip
+    _, _, _, filtered = aug.on_quality_filter_click(_File(path), "SFT", 20, 100, progress=_noop)
+    assert len(filtered) == 2
+    _, _, stats, augmented = aug.on_augment_click(
+        _File(path), "SFT", 2, "synonym", filtered, progress=_noop
+    )
+    assert len(augmented) == 4 and "**Original:** 2" in stats["value"]
+    assert "short" not in augmented["instruction"]
+
+
+def test_prepared_data_without_a_file_can_be_augmented_and_filtered(fake_nlpaug):
+    """Hub loads and data created from documents live only in the prepared state."""
+    prepared = Dataset.from_dict({"instruction": ["what is a question here?", "hi"],
+                                  "output": ["a sufficiently long answer", "ok"]})  # fmt: skip
+    msg, _, _, augmented = aug.on_augment_click(None, "SFT", 2, "synonym", prepared, progress=_noop)
+    assert msg.startswith("✅") and len(augmented) == 4
+    _, _, _, filtered = aug.on_quality_filter_click(None, "SFT", 20, 100, prepared, progress=_noop)
+    assert len(filtered) == 1
+
+
+def test_augment_and_filter_use_the_column_mapping(fake_nlpaug, tmp_path):
+    path = tmp_path / "custom.csv"
+    pd.DataFrame({"q": ["a question long enough"], "a": ["an answer long enough"]}).to_csv(
+        path, index=False
+    )
+    msg, _, _, filtered = aug.on_quality_filter_click(
+        _File(path), "SFT", 20, 100, None, "q", "a", None, progress=_noop
+    )
+    assert msg.startswith("✅") and filtered["instruction"] == ["a question long enough"]
+    _, _, _, augmented = aug.on_augment_click(
+        _File(path), "SFT", 2, "synonym", None, "q", "a", None, progress=_noop
+    )
+    assert len(augmented) == 2

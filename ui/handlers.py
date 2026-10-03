@@ -52,7 +52,7 @@ from core.run_config import new_run_name, resolve_report_to, run_dir_for
 from core.state import app_state, redact_sensitive_info, validate_path_traversal
 from data.documents import document_chunks
 from data.loader import detect_file_type, load_dataset_from_file, load_hub_dataset
-from data.preprocessing import preview_dataset, validate_and_clean_dataset
+from data.preprocessing import column_mapping, preview_dataset, validate_and_clean_dataset
 from export.hub import push_to_hub
 from export.quantize import on_quantize_click
 from export.utils import create_zip_from_folder
@@ -168,18 +168,7 @@ def on_train_click(
 
         ftype = detect_file_type(file)
 
-        col_map = {}
-        if is_dpo:
-            if col_inst and col_out and col_text:
-                col_map[col_inst] = COL_PROMPT
-                col_map[col_out] = COL_CHOSEN
-                col_map[col_text] = COL_REJECTED
-        else:
-            if col_inst and col_out:
-                col_map[col_inst] = COL_INSTRUCTION
-                col_map[col_out] = COL_OUTPUT
-            elif col_text:
-                col_map[col_text] = COL_TEXT
+        col_map = column_mapping(is_dpo, col_inst, col_out, col_text)
 
         try:
             ds = load_dataset_from_file(file, ftype, col_map, is_dpo=is_dpo)
@@ -321,27 +310,31 @@ def on_generate(prompt, model_choice, custom_model, lora_path, max_tok, temp, to
 
 def on_batch_test(
     f, model_choice, custom_model, lora_path, request: gr.Request | None = None
-) -> str:
+) -> tuple[str, str | None]:
+    """Batch inference → (status, responses CSV or None).
+
+    Errors go to the status box: returned into the gr.File output, Gradio would try to
+    open the message as a file path and show a generic error instead.
+    """
     # Strip whitespace and validate against path traversal.
     custom_model = custom_model.strip() if custom_model else ""
     lora_path = lora_path.strip() if lora_path else ""
     if err := (validate_path_traversal(custom_model) or validate_path_traversal(lora_path)):
-        return err
+        return err, None
 
     if f and hasattr(f, "name") and f.name:
         if err := validate_path_traversal(f.name):
-            return err
+            return err, None
 
     session = app_state.session_for(request)
     session.release("batch")
 
     model_name = custom_model if custom_model else model_choice
     result = batch_generate(model_name, lora_path, f)
-
-    if os.path.isfile(result):
-        session.track("batch", result)
-
-    return result
+    if not os.path.isfile(result):  # an error message
+        return result, None
+    session.track("batch", result)
+    return f"✅ {len(pd.read_csv(result))} responses — download the CSV.", result
 
 
 # ── Hub ────────────────────────────────────────────────────────────────────
@@ -501,18 +494,7 @@ def on_refresh_preview(
 
     from data.loader import load_dataset_from_dataframe
 
-    col_map = {}
-    if is_dpo:
-        if col_inst and col_out and col_text:
-            col_map[col_inst] = COL_PROMPT
-            col_map[col_out] = COL_CHOSEN
-            col_map[col_text] = COL_REJECTED
-    else:
-        if col_inst and col_out:
-            col_map[col_inst] = COL_INSTRUCTION
-            col_map[col_out] = COL_OUTPUT
-        elif col_text:
-            col_map[col_text] = COL_TEXT
+    col_map = column_mapping(is_dpo, col_inst, col_out, col_text)
 
     try:
         # Bypassing I/O by loading directly from raw_df_state

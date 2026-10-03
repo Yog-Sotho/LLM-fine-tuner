@@ -191,14 +191,28 @@ def test_generate_validates_and_prefers_the_custom_model(monkeypatch):
 
 def test_batch_test_tracks_the_result_file(monkeypatch, tmp_path):
     result = tmp_path / "results.csv"
-    result.write_text("prompt,response\n")
+    result.write_text("prompt,response\nhi,there\n")
     monkeypatch.setattr(handlers, "batch_generate", lambda *a: str(result))
-    assert handlers.on_batch_test(_File(tmp_path / "p.csv"), "gpt2", "", "") == str(result)
-    assert "Path traversal" in handlers.on_batch_test(None, "gpt2", "../m", "")
-    assert "Path traversal" in handlers.on_batch_test(_File("../p.csv"), "gpt2", "", "")
-    monkeypatch.setattr(handlers, "batch_generate", lambda *a: "❌ no prompts")
-    assert handlers.on_batch_test(None, "gpt2", "", "") == "❌ no prompts"
+    status, path = handlers.on_batch_test(_File(tmp_path / "p.csv"), "gpt2", "", "")
+    assert path == str(result) and status == "✅ 1 responses — download the CSV."
     app_state.session_for(None).release("batch")
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        ((None, "gpt2", "../m", ""), "Path traversal"),
+        (("../p.csv", "gpt2", "", ""), "Path traversal"),
+        ((None, "gpt2", "", ""), "❌ no prompts"),
+    ],
+)
+def test_batch_test_errors_go_to_the_status_not_the_file(monkeypatch, args, message):
+    """BUG: errors were returned into the gr.File output; Gradio then raised
+    FileNotFoundError on the message, so the user saw a generic error instead."""
+    monkeypatch.setattr(handlers, "batch_generate", lambda *a: "❌ no prompts")
+    file = _File(args[0]) if args[0] else None
+    status, path = handlers.on_batch_test(file, *args[1:])
+    assert message in status and path is None
 
 
 def test_push_delegates(monkeypatch):
