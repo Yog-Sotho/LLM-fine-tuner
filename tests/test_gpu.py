@@ -1,5 +1,6 @@
 """GPU-only paths: 4-bit QLoRA, full fine-tuning in half precision, Flash Attention 2 +
-packing, vLLM generation for GRPO, and NCCL data-parallel training.
+packing, vLLM generation for GRPO, NCCL data-parallel training, and embedding training
+in mixed precision.
 
 Skipped without CUDA (the CPU CI jobs). Run them on a GPU machine with
 ``pytest -m gpu`` — the GPU workflow (.github/workflows/gpu.yml) does this on a
@@ -251,3 +252,20 @@ def test_sharded_training_with_presets(tiny_model, tmp_path, preset, peft):
         weights = load_file(str(out / "model.safetensors"))
         expected = {k: v.shape for k, v in reference.state_dict().items()}
         assert all(tuple(weights[k].shape) == tuple(expected[k]) for k in weights if k in expected)
+
+
+@pytest.mark.parametrize("method", ["Full fine-tuning", "LoRA"])
+def test_embedding_training_in_mixed_precision(tmp_path, method):
+    """bf16 / fp16 autocast on the GPU; LoRA is merged into the saved model."""
+    pytest.importorskip("sentence_transformers")
+    from tests.test_embedding import TINY_EMBEDDER, _File, _pairs_file
+    from training.embedding import train_embedding
+
+    out = tmp_path / "embedder"
+    status = train_embedding(
+        TINY_EMBEDDER, _File(_pairs_file(tmp_path)), str(out), method=method,
+        learning_rate=1e-3 if method == "LoRA" else 1e-4, epochs=2, batch_size=8,
+        max_seq_length=64, hard_negatives=True, eval_split=0.25, progress=None,
+    )  # fmt: skip
+    assert status.startswith("✅ Embedding training complete!"), status
+    assert (out / "model.safetensors").exists() and not (out / "adapter_config.json").exists()

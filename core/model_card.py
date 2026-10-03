@@ -25,6 +25,7 @@ _MODE_NAMES = {
     "reward": "reward modelling",
     "distill": "knowledge distillation (GKD)",
     "merge": "adapter merging",
+    "embedding": "embedding fine-tuning (sentence-transformers)",
 }
 
 
@@ -54,10 +55,17 @@ def build_model_card(record: dict, is_adapter: bool) -> ModelCard:
     dataset = record.get("dataset") or {}
     hub_dataset = dataset.get("hub_id")
 
+    embedding = mode == "embedding"
     data = ModelCardData(
         base_model=base_model,
-        library_name="peft" if is_adapter else "transformers",
-        pipeline_tag="text-classification"
+        library_name="peft"
+        if is_adapter
+        else "sentence-transformers"
+        if embedding
+        else "transformers",
+        pipeline_tag="sentence-similarity"
+        if embedding
+        else "text-classification"
         if mode == "reward"
         else "image-text-to-text"
         if record.get("vision")
@@ -65,7 +73,7 @@ def build_model_card(record: dict, is_adapter: bool) -> ModelCard:
         datasets=[hub_dataset] if hub_dataset else None,
         tags=[
             "llm-fine-tuner",
-            "trl",
+            *(["sentence-transformers", "feature-extraction"] if embedding else ["trl"]),
             mode,
             *([_method_tag(method)] if method else []),
             *(["vision"] if record.get("vision") else []),
@@ -85,6 +93,18 @@ def build_model_card(record: dict, is_adapter: bool) -> ModelCard:
                 if is_adapter
                 else 'model = AutoModelForImageTextToText.from_pretrained("<this repo>")'
             )
+        )
+    elif embedding:
+        prompt = (record.get("hyperparams") or {}).get("query_prompt")
+        dims = (record.get("hyperparams") or {}).get("matryoshka_dims") or []
+        usage = (
+            "from sentence_transformers import SentenceTransformer\n\n"
+            'model = SentenceTransformer("<this repo>")'
+            + (f"  # or truncate_dim={dims[1]} for smaller vectors" if len(dims) > 1 else "")
+            + "\nqueries = model.encode(['How do I reset my password?']"
+            + (', prompt_name="query")' if prompt else ")")
+            + "\npassages = model.encode(['To reset your password, open Settings …'])\n"
+            "print(model.similarity(queries, passages))"
         )
     elif mode == "reward":
         usage = (
@@ -115,6 +135,18 @@ def build_model_card(record: dict, is_adapter: bool) -> ModelCard:
         if dataset
         else ""
     )
+    evaluation = record.get("evaluation") or {}
+    eval_section = ""
+    if evaluation.get("before") and evaluation.get("after"):
+        eval_rows = "\n".join(
+            f"| {m.split('_', 1)[-1]} | {evaluation['before'][m]} | {evaluation['after'][m]} |"
+            for m in evaluation["after"]
+        )
+        eval_section = (
+            f"\n## Retrieval evaluation\n\n{evaluation.get('queries', '?')} queries "
+            f"({evaluation.get('split', '?')}), each searched among all passages:\n\n"
+            f"| Metric | Base model | Fine-tuned |\n| --- | --- | --- |\n{eval_rows}\n"
+        )
     if record.get("sources"):  # adapter merge
         merged = ", ".join(f"`{s['adapter']}` × {s['weight']}" for s in record["sources"])
         data_line = f"- **Merged from:** {merged} ({(record.get('merge') or {}).get('method')})\n"
@@ -139,7 +171,7 @@ Trained from `{model}` with {_MODE_NAMES.get(mode, mode)} using
 
 {data_line}{teacher_line}- **Libraries:** {libraries}
 - **Trained:** {record.get("created_at", "?")}
-
+{eval_section}
 `run_config.yaml` in this repository records every setting needed to repeat the run.
 
 ## License

@@ -13,6 +13,7 @@ orpo      — ORPO alignment training
 grpo      — GRPO fine-tuning with a reward model and/or reference answers
 kto       — KTO alignment from desirable / undesirable examples
 distill   — knowledge distillation (GKD): a small student learns from a larger teacher
+embed     — fine-tune an embedding model (search / RAG) on (query, passage) pairs
 merge-adapters — combine LoRA adapters of one base model (TIES, DARE, SVD, …)
 synthesize — write question/answer training data from documents with an LLM
 evaluate  — batched BLEU / ROUGE / BERTScore evaluation (optionally vs the base model)
@@ -58,6 +59,8 @@ from config.constants import (
     DISTILL_LMBDA,
     DISTILL_MAX_NEW_TOKENS,
     DISTILL_TEMPERATURE,
+    EMBED_MAX_SEQ_LENGTH,
+    EMBED_METHODS,
     GGUF_QUANT_PRESETS,
     GRPO_LORA_ALPHA,
     GRPO_LORA_RANK,
@@ -68,6 +71,7 @@ from config.constants import (
     HAS_KTO,
     HAS_ORPO,
     HAS_REWARD_TRAINER,
+    HAS_SENTENCE_TRANSFORMERS,
     HUB_DEFAULT_MAX_ROWS,
     LORA_VARIANTS,
     QUANT_CALIBRATION_SAMPLES,
@@ -97,6 +101,7 @@ from inference.generate import _load_for_inference
 from inference.synthesize import format_stats, local_writer, remote_writer, synthesize_pairs
 from inference.vllm_runner import merge_adapter_for_inference
 from training.distill import train_distill
+from training.embedding import train_embedding
 from training.grpo import train_grpo
 from training.kto import train_kto
 from training.orpo import train_orpo_v27
@@ -711,6 +716,78 @@ def distill(
         temperature=temperature,
         max_new_tokens=max_new_tokens,
         resume=resume,
+        progress=None,
+    )
+    if "✅" not in result:
+        typer.echo(result, err=True)
+        raise typer.Exit(code=1)
+    typer.echo(f"\n{result}")
+
+
+@app.command()
+def embed(
+    model: str = typer.Option(
+        "sentence-transformers/all-MiniLM-L6-v2", "--model", help="Embedding model (ID or path)"
+    ),
+    data: str = typer.Option(
+        ...,
+        "--data",
+        help="anchor/positive (optional negative), instruction/context (synthesize output), "
+        "instruction/output, prompt/completion or chats",
+    ),
+    output: str = typer.Option("./embedding_model", "--output", help="Output directory"),
+    lora: bool = typer.Option(
+        False, "--lora", help="Train LoRA (merged on save) instead of all weights"
+    ),
+    epochs: int = typer.Option(1, "--epochs"),
+    lr: float = typer.Option(2e-5, "--lr"),
+    batch_size: int = typer.Option(
+        32, "--batch-size", help="Bigger is better: the batch's other passages are the negatives"
+    ),
+    max_seq_length: int = typer.Option(EMBED_MAX_SEQ_LENGTH, "--max-seq-length"),
+    matryoshka: bool = typer.Option(
+        True, "--matryoshka/--no-matryoshka", help="Also train truncated dimensions (512, 256, …)"
+    ),
+    hard_negatives: bool = typer.Option(
+        False, "--hard-negatives", help="Mine a similar non-answer passage per pair (base model)"
+    ),
+    eval_split: float = typer.Option(
+        DEFAULT_EVAL_SPLIT, "--eval-split", help="Share of pairs held out to measure retrieval"
+    ),
+    query_prompt: str = typer.Option(
+        "", "--query-prompt", help="Prefix for queries, e.g. 'query: ' (default: the model's own)"
+    ),
+):
+    """Fine-tune an embedding model for search / RAG; reports retrieval before and after."""
+    for path in (model, data, output):
+        if err := validate_path_traversal(path):
+            typer.echo(err, err=True)
+            raise typer.Exit(code=1)
+    if not HAS_SENTENCE_TRANSFORMERS:
+        typer.echo(
+            '❌ sentence-transformers not installed. Install: pip install "llm-fine-tuner[embedding]"',
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    if not os.path.exists(data):
+        typer.echo(f"❌ Dataset not found: {data}", err=True)
+        raise typer.Exit(code=1)
+
+    method = EMBED_METHODS[1] if lora else EMBED_METHODS[0]
+    typer.echo(f"🔎 Embedding training: {model} | {method} | batch {batch_size}")
+    result = train_embedding(
+        model_name=model,
+        data_file=DummyFile(data),
+        output_dir=output,
+        method=method,
+        learning_rate=lr,
+        epochs=epochs,
+        batch_size=batch_size,
+        max_seq_length=max_seq_length,
+        matryoshka=matryoshka,
+        hard_negatives=hard_negatives,
+        eval_split=eval_split,
+        query_prompt=query_prompt,
         progress=None,
     )
     if "✅" not in result:

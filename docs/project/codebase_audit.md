@@ -44,20 +44,21 @@ Average 7.89 (after Tier 15); no CRITICAL findings remain, so no hard caps apply
 Feature parity with Unsloth / Axolotl / LlamaFactory on the 2026 core set (SFT, DPO, ORPO, KTO,
 GRPO with built-in rewards and vLLM, reward models, vision SFT, tool-calling and reasoning chats,
 LoRA / rsLoRA / DoRA / QLoRA / full fine-tuning, GGUF + FP8/W4A16 export, OpenAI-compatible
-serving, reproducible runs). Not yet at 8: no DeepSpeed / sequence parallelism / efficient MoE
-training, no distillation (TRL GKD/GOLD) or model merging, no embedding-model training, no
-persistent job queue, and the GPU paths have not been exercised by an automated run.
+serving, reproducible runs), plus distillation, adapter merging, sharding presets, MoE,
+training data from documents and embedding-model training. Not yet at 8: the GPU paths
+(QLoRA, sharding, vLLM GRPO, mixed-precision embedding training) have not been exercised by
+an automated run; no sequence/context parallelism, persistent job queue or async/agentic RL.
 
 | Area | Score | Notes |
 |---|---|---|
-| Training coverage | 8.5 (T13) | Core 2026 set + distillation (GKD), LoRA adapter merging (TIES/DARE/SVD), IA3; missing async/agentic RL, full-model merges |
+| Training coverage | 9 (T17) | Core 2026 set + distillation (GKD), LoRA adapter merging (TIES/DARE/SVD), IA3; embedding models for search/RAG (MNRL + Matryoshka, mined hard negatives, LoRA merged on save, retrieval scored before/after); missing async/agentic RL, full-model merges, rerankers |
 | Data | 8 (T16) | CSV/JSON/Excel/PDF/ZIP, Hub streaming, chat/tools/images, augmentation; training data from documents (PDF/.docx/.txt/.md → LLM-written Q/A pairs, LLM-rated, de-duplicated — synthetic-data-kit recipe) |
 | Export & deploy | 8 | GGUF, FP8/W4A16, Hub card, llama-server / vLLM serving, remote client |
 | Reproducibility | 9 | run_config.yaml, dataset SHA-256, early seeding, resume, tracking, one version |
 | Security | 8 | See Security below |
 | Scale | 6.5 (T14) | DDP + FSDP2 / FSDP-QLoRA / DeepSpeed ZeRO-2/3 presets for `train`; MoE support; activation offloading, padding-free. Sharding **not yet run on GPUs**; no context/sequence parallelism |
 | Code quality | 7 | mypy on all layers; `train_model()` still ~580 lines |
-| Test depth | 8 (was 6) | 88 % coverage, 505 tests; GPU suite written, not yet run on a GPU |
+| Test depth | 8 (was 6) | 90 % coverage, 657 tests (639 CPU + 18 GPU-only); GPU suite written, not yet run on a GPU |
 
 ---
 
@@ -212,6 +213,7 @@ New findings from this audit are marked **NEW**.
 | 2026-09-29 | Tier 14 branch | 7.4 | MoE LoRA fixed on Transformers 5 (was failing); MoE router loss/freeze; sharding presets; long-context options; SOTA 7.5/10 (8 once the GPU suite passes) |
 | 2026-10-02 | Tier 15 branch | 7.9 | 12 audit findings fixed (path allow-list, deps, checkpoints out of uploads, redaction, vision cleanup, small fixes); remaining: GPU run, structural refactors |
 | 2026-10-02 | Tier 16 branch | 7.9 | Training data from documents (UI + `synthesize` CLI: chunking, Q/A writing via server or local model, LLM rating, dedup); SOTA 7.5/10 (8 once the GPU suite passes) |
+| 2026-10-03 | Tier 17 branch | 7.9 | Embedding-model fine-tuning (Embeddings tab + `embed` CLI; sentence-transformers 5.4–6.x); synthetic data keeps its source passage for question ↔ passage training; SOTA 7.5/10 (8 once the GPU suite passes) |
 
 Work between the two audits (all verified with the CI workflow replayed locally, floor and
 ceiling library versions, live UI and Docker CPU checks before each push):

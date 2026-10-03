@@ -100,6 +100,10 @@ COL_MESSAGES = "messages"  # chat format: [{"role": ..., "content": ...}, ...]
 COL_TOOLS = "tools"  # tool-calling chats: JSON schemas of the available functions
 COL_IMAGES = "images"  # vision chats: images for the {"type": "image"} parts, in order
 COL_IMAGE = "image"  # single-image variant, normalised to COL_IMAGES
+COL_CONTEXT = "context"  # synthetic data: the document passage a question was written from
+COL_ANCHOR = "anchor"  # embedding pairs: the query …
+COL_POSITIVE = "positive"  # … the passage that answers it …
+COL_NEGATIVE = "negative"  # … and (optional) a similar passage that does not
 CHAT_COLUMNS = (COL_MESSAGES, COL_TOOLS, COL_IMAGES)  # columns kept for chat data
 CHAT_ROLES = ("system", "user", "assistant", "tool")
 # Extra message fields kept for training (rendered by the model's chat template):
@@ -311,6 +315,10 @@ try:
 except ImportError:
     HAS_GKD = False
 
+# ── sentence-transformers (embedding-model fine-tuning) ───────────────────
+# find_spec, not import: importing it loads scikit-learn and scipy at startup.
+HAS_SENTENCE_TRANSFORMERS: bool = importlib.util.find_spec("sentence_transformers") is not None
+
 # ── Liger kernels (fused Triton kernels; CUDA only) ───────────────────────
 # find_spec, not import: importing liger_kernel initialises Triton at startup.
 HAS_LIGER: bool = importlib.util.find_spec("liger_kernel") is not None
@@ -431,6 +439,26 @@ DISTILL_TEMPERATURE = 0.9
 DISTILL_MAX_NEW_TOKENS = 128
 DISTILL_LORA_RANK = 16
 DISTILL_LORA_ALPHA = 32
+
+# ── Embedding-model fine-tuning (sentence-transformers) ───────────────────
+# Ungated, no custom code (checked on the Hub): small English → multilingual → larger.
+EMBED_MODEL_SUGGESTIONS = (
+    "sentence-transformers/all-MiniLM-L6-v2",
+    "BAAI/bge-small-en-v1.5",
+    "intfloat/multilingual-e5-small",
+    "BAAI/bge-m3",
+    "Qwen/Qwen3-Embedding-0.6B",
+)
+EMBED_METHODS = ("Full fine-tuning", "LoRA")  # LoRA is merged into the model on save
+EMBED_LORA_RANK = 16
+EMBED_LORA_ALPHA = 32
+EMBED_MAX_SEQ_LENGTH = 256
+# Matryoshka: also train the first N dimensions, so embeddings can be truncated.
+EMBED_MATRYOSHKA_DIMS = (768, 512, 256, 128, 64)
+EMBED_MIN_EVAL_QUERIES = 5  # fewer held-out pairs: evaluate on the training pairs instead
+# Hard negatives must score below this share of their positive's score (NV-Retriever's
+# positive-aware filter), so near-duplicates of the answer are not used as negatives.
+EMBED_NEGATIVE_MARGIN = 0.05
 # Combining LoRA adapters trained on the same base (PEFT add_weighted_adapter).
 # linear / ties / dare_* need equal ranks; cat and svd accept any. density: share kept.
 ADAPTER_MERGE_METHODS: dict[str, str] = {

@@ -83,6 +83,7 @@ LLM-fine-tuner/
 │   ├── test_data_loader.py
 │   ├── test_deploy.py
 │   ├── test_distill_and_merge.py
+│   ├── test_embedding.py
 │   ├── test_evaluation_batching.py
 │   ├── test_evaluation_suite.py
 │   ├── test_export_and_vllm.py
@@ -111,6 +112,7 @@ LLM-fine-tuner/
 ├── training/
 │   ├── __init__.py
 │   ├── distill.py
+│   ├── embedding.py
 │   ├── grpo.py
 │   ├── kto.py
 │   ├── orpo.py
@@ -121,6 +123,7 @@ LLM-fine-tuner/
 │   ├── tabs/
 │   │   ├── __init__.py
 │   │   ├── data_tab.py
+│   │   ├── embedding_tab.py
 │   │   ├── evaluation_tab.py
 │   │   ├── gguf_tab.py
 │   │   ├── inference_tab.py

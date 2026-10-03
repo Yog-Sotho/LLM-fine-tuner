@@ -59,6 +59,7 @@ from export.utils import create_zip_from_folder
 from inference.generate import batch_generate, generate_text
 from inference.remote import remote_chat
 from inference.synthesize import format_stats, local_writer, remote_writer, synthesize_pairs
+from training.embedding import train_embedding
 from training.sft import train_model
 
 # ── Training ───────────────────────────────────────────────────────────────
@@ -266,6 +267,36 @@ def on_train_click(
         if not run_exists and not glob.glob(os.path.join(output_dir, "checkpoint-*")):
             shutil.rmtree(output_dir, ignore_errors=True)
         return f"❌ Training failed: {redact_sensitive_info(str(e))}\n{issues_str}", None, None, []
+
+
+def on_embed_click(
+    model_name,
+    file,
+    run_name,
+    method,
+    learning_rate,
+    epochs,
+    batch_size,
+    max_seq_length,
+    matryoshka,
+    hard_negatives,
+    eval_split,
+    query_prompt,
+    progress=gr.Progress(),
+    request: gr.Request | None = None,
+) -> str:
+    """Embeddings tab: train into <runs folder>/<run name>/ (never a raw user path)."""
+    try:
+        run_name = (run_name or "").strip() or new_run_name("embedding")
+        output_dir = run_dir_for(run_name)
+    except ValueError as e:
+        return f"❌ {redact_sensitive_info(str(e))}"
+    if os.path.isdir(output_dir):
+        return f"❌ Run '{run_name}' already exists. Choose another run name."
+    return train_embedding(
+        model_name, file, output_dir, method, learning_rate, epochs, batch_size, max_seq_length,
+        matryoshka, hard_negatives, eval_split, query_prompt, progress=progress, request=request,
+    )  # fmt: skip
 
 
 def on_stop(request: gr.Request | None = None) -> str:

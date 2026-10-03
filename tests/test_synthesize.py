@@ -97,6 +97,7 @@ def test_curation_dedup_and_failures():
     questions = [r["instruction"] for r in rows]
     assert len(rows) == 3 and questions.count("Same question?") == 1  # duplicate dropped
     assert stats["failed_chunks"] == 1 and stats["duplicates"] == 1 and rows[0]["score"] == 8
+    assert rows[0]["context"] == "first chunk"  # the passage, for embedding training
     assert {r["source"] for r in rows} == {"a.pdf"}
     _, low = synthesize_pairs(chunks[:1], _fake_writer(4), 2, 7)
     assert low["kept"] == 0 and low["rejected"] == 2
