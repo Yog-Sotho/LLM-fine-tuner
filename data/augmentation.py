@@ -28,7 +28,7 @@ from config.constants import (
 )
 from core.state import redact_sensitive_info
 from data.loader import detect_file_type, load_dataset_from_file
-from data.preprocessing import preview_dataset
+from data.preprocessing import column_mapping, preview_dataset
 
 # ── Core augmentation logic ────────────────────────────────────────────────
 
@@ -231,7 +231,27 @@ def quality_filter_v27(
 # ── Gradio UI handlers ─────────────────────────────────────────────────────
 
 
-def on_augment_click(file, training_mode, aug_factor, aug_type, progress=gr.Progress()):
+def _source_dataset(file, prepared_ds, is_dpo, col_inst, col_out, col_text):
+    """The dataset prepared in the Data tab (Hub load, documents, an earlier augment or
+    filter), else the uploaded file read with the column mapping — so filter-then-augment
+    chains instead of starting over from the file."""
+    if prepared_ds is not None:
+        return prepared_ds
+    mapping = column_mapping(is_dpo, col_inst, col_out, col_text)
+    return load_dataset_from_file(file, detect_file_type(file), mapping, is_dpo=is_dpo)
+
+
+def on_augment_click(
+    file,
+    training_mode,
+    aug_factor,
+    aug_type,
+    prepared_ds=None,
+    col_inst=None,
+    col_out=None,
+    col_text=None,
+    progress=gr.Progress(),
+):
     """Handler for the Augment button in the Data tab.
 
     C-5 FIX: Now returns the augmented Dataset object as the FOURTH return value
@@ -241,7 +261,7 @@ def on_augment_click(file, training_mode, aug_factor, aug_type, progress=gr.Prog
 
     Returns (status_str, preview_df, stats_md, augmented_dataset_or_None)
     """
-    if file is None:
+    if file is None and prepared_ds is None:
         return (
             "❌ Upload a dataset first.",
             gr.update(visible=False),
@@ -251,9 +271,8 @@ def on_augment_click(file, training_mode, aug_factor, aug_type, progress=gr.Prog
 
     is_dpo = "dpo" in str(training_mode).lower()
     try:
-        ftype = detect_file_type(file)
         progress(0, desc="Loading dataset for augmentation…")
-        ds = load_dataset_from_file(file, ftype, is_dpo=is_dpo)
+        ds = _source_dataset(file, prepared_ds, is_dpo, col_inst, col_out, col_text)
 
         progress(0.3, desc="Augmenting…")
         aug_ds, msg = augment_dataset_v27(
@@ -286,7 +305,17 @@ def on_augment_click(file, training_mode, aug_factor, aug_type, progress=gr.Prog
         )
 
 
-def on_quality_filter_click(file, training_mode, min_len, max_len, progress=gr.Progress()):
+def on_quality_filter_click(
+    file,
+    training_mode,
+    min_len,
+    max_len,
+    prepared_ds=None,
+    col_inst=None,
+    col_out=None,
+    col_text=None,
+    progress=gr.Progress(),
+):
     """Handler for the Quality Filter button in the Data tab.
 
     C-5 FIX: Now returns the filtered Dataset object as the FOURTH return value
@@ -295,7 +324,7 @@ def on_quality_filter_click(file, training_mode, min_len, max_len, progress=gr.P
 
     Returns (status_str, preview_df, stats_md, filtered_dataset_or_None)
     """
-    if file is None:
+    if file is None and prepared_ds is None:
         return (
             "❌ Upload a dataset first.",
             gr.update(visible=False),
@@ -305,8 +334,7 @@ def on_quality_filter_click(file, training_mode, min_len, max_len, progress=gr.P
 
     is_dpo = "dpo" in str(training_mode).lower()
     try:
-        ftype = detect_file_type(file)
-        ds = load_dataset_from_file(file, ftype, is_dpo=is_dpo)
+        ds = _source_dataset(file, prepared_ds, is_dpo, col_inst, col_out, col_text)
 
         progress(0.3, desc="Applying quality filter…")
         filtered_ds, msg = quality_filter_v27(

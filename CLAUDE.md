@@ -154,6 +154,7 @@ Tab files (`ui/tabs/*.py`) define **layout only** — no `.click()`, `.change()`
 - Trainers must work under `accelerate launch` / `torchrun` (data-parallel): load 4-bit models with `device_map=quantized_device_map()` (never `"auto"`), pass `**training_device_args(device)` to the TRL config, and write outputs (`save_pretrained`, `save_run_config`, subprocesses) only `if is_main_process():` — all from `core/hardware.py`.
 - New heavy GPU event handlers in `ui/app.py` get `**GPU_JOB` so they join the shared queue; Stop must stay outside it.
 - Sharding (FSDP / DeepSpeed via `configs/accelerate/`): `sharding_backend()` (needs CUDA — the launcher sets the env on CPU too, but accelerate only shards on GPUs). Only `train_model` supports it: 4-bit loads get `bnb_4bit_quant_storage = sharded_quant_storage()` = `torch_dtype` and no `device_map`; the final save is `trainer.save_model()` on **every** process (collective; FSDP switched to `FULL_STATE_DICT` first). Other trainers return `sharding_unsupported(name)`. Presets keep `mixed_precision: 'no'` so the app's precision wins.
+- 4-bit (QLoRA) configs come from `nf4_quantization_config(device, quant_storage=None)` in `core/hardware.py` — never build `BitsAndBytesConfig` by hand. `tests/test_loading_snapshot.py` pins every GPU load's `from_pretrained` arguments (simulated CUDA); a change there must be deliberate: regenerate with `LFT_UPDATE_SNAPSHOT=1` and review the JSON diff.
 - MoE: call `setup_moe(model, router_aux_loss=…, freeze_router=…)` before creating the TRL trainer (and again on `trainer.model` when TRL applies LoRA). Use the combination the smoke tests verify per trainer: DPO/KTO pass `freeze_router=False` and DPO/KTO/GRPO `router_aux_loss=False` (they fail otherwise). LoRA dropout comes from `lora_dropout(model)` (0 for MoE).
 
 ### Security defaults
@@ -229,7 +230,7 @@ pytest tests/test_cli.py::test_help_flag_exits_zero -v
 
 `tests/test_gpu.py` (marker `gpu`) covers what CPU CI can't: 4-bit QLoRA, half-precision full fine-tuning, Flash Attention + packing, vLLM GRPO, NCCL. It skips without CUDA; `.github/workflows/gpu.yml` runs it on a GPU runner (manual, or weekly when the `GPU_RUNNER` repository variable is set). New GPU-only code gets a test there.
 
-Tests use `CliRunner` (no subprocess spawning) and patch heavy functions so they run without a GPU or downloaded models. `conftest.py` inserts the repo root into `sys.path[0]` — **do not remove this**.
+CLI commands report errors with `_fail(message)` (stderr, exit 1), check paths with `_check_paths(*paths)` and print results with `_report(result)`. Tests use `CliRunner` (no subprocess spawning) and patch heavy functions so they run without a GPU or downloaded models. `conftest.py` inserts the repo root into `sys.path[0]` — **do not remove this**.
 
 ### Code style
 
@@ -286,10 +287,13 @@ HF_TOKEN=hf_xxx docker compose up llm-fine-tuner-gpu
 
 ### Training (UI path)
 ```
-File upload → load_dataset_from_file() → validate_and_clean_dataset()
-    → [optional: augment/filter] → on_train_click() → train_model()
+File upload → load_dataset_from_file(column_mapping(...)) → validate_and_clean_dataset()
+    → [optional: augment/filter — on augmented_ds_state if set (Hub load, documents, an
+       earlier step), else the file] → on_train_click() → train_model()
     → create_model_card() + create_zip_from_folder()
 ```
+`train_model()` runs `_load_tokenizer` → `_split_train_eval` → `_load_model` (QLoRA Enhanced /
+Unsloth / plain) → `_apply_peft` → `_training_args` + `_build_trainer` → train → save → `_heretic_note`.
 
 ### Inference
 ```

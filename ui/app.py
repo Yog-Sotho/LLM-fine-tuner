@@ -169,12 +169,20 @@ def build_demo() -> gr.Blocks:
             outputs=[dt["preview_box"], dt["stats_box"]],
         )
 
-        # C-5 FIX: Augment button now has 4 outputs — the fourth is augmented_ds_state.
-        # Previously the augmented Dataset was returned to the UI but never stored in
-        # state, so training always used the original file.
+        # Augment / filter read the prepared dataset (Hub load, documents, an earlier
+        # augment or filter) when there is one, else the file with the column mapping,
+        # and store their result in augmented_ds_state — so the steps chain and the
+        # Start Training button uses the result.
+        prepared = [dt["augmented_ds_state"], dt["col_inst"], dt["col_out"], dt["col_text"]]
         dt["aug_btn"].click(
             fn=on_augment_click,
-            inputs=[dt["file_input"], tt["training_mode"], dt["aug_factor"], dt["aug_type"]],
+            inputs=[
+                dt["file_input"],
+                tt["training_mode"],
+                dt["aug_factor"],
+                dt["aug_type"],
+                *prepared,
+            ],  # fmt: skip
             outputs=[
                 dt["aug_status"],
                 dt["aug_preview"],
@@ -183,10 +191,15 @@ def build_demo() -> gr.Blocks:
             ],
         )
 
-        # C-5 FIX: Quality filter button also stores its result in augmented_ds_state.
         dt["qf_btn"].click(
             fn=on_quality_filter_click,
-            inputs=[dt["file_input"], tt["training_mode"], dt["qf_min_len"], dt["qf_max_len"]],
+            inputs=[
+                dt["file_input"],
+                tt["training_mode"],
+                dt["qf_min_len"],
+                dt["qf_max_len"],
+                *prepared,
+            ],  # fmt: skip
             outputs=[dt["qf_status"], dt["aug_preview"], dt["aug_stats"], dt["augmented_ds_state"]],
         )
 
@@ -403,7 +416,7 @@ def build_demo() -> gr.Blocks:
         it["batch_btn"].click(
             fn=on_batch_test,
             inputs=[it["batch_file"], it["infer_model"], it["infer_custom"], it["lora_path"]],
-            outputs=[it["batch_out"]],
+            outputs=[it["batch_status"], it["batch_out"]],
         )
         it["lora_zip_upload"].change(
             fn=on_peft_zip_upload,

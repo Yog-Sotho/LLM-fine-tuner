@@ -15,7 +15,7 @@ import time
 
 import torch
 from peft import LoraConfig, TaskType
-from transformers import BitsAndBytesConfig, EarlyStoppingCallback, set_seed
+from transformers import EarlyStoppingCallback, set_seed
 
 from config.constants import (
     ALLOW_REMOTE_CODE,
@@ -35,6 +35,7 @@ from core.hardware import (
     is_main_process,
     lora_dropout,
     lora_variant_kwargs,
+    nf4_quantization_config,
     quantized_device_map,
     setup_moe,
     training_device_args,
@@ -109,12 +110,7 @@ def train_vision_sft(
         model_kwargs["torch_dtype"] = full_finetune_dtype(device)
     elif device == "cuda":  # LoRA on a 4-bit base (QLoRA), as for text models
         model_kwargs.update(
-            quantization_config=BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=compute_dtype(device),
-                bnb_4bit_use_double_quant=True,
-            ),
+            quantization_config=nf4_quantization_config(device),
             device_map=quantized_device_map(),
             torch_dtype=compute_dtype(device),
         )

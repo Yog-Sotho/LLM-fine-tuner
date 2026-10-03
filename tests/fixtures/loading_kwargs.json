@@ -1,0 +1,278 @@
+{
+ "orpo|bf16=False": {
+  "device_map": "auto",
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "float16",
+   "bnb_4bit_quant_storage": "uint8",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "trust_remote_code": "False"
+ },
+ "orpo|bf16=True": {
+  "device_map": "auto",
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "bfloat16",
+   "bnb_4bit_quant_storage": "uint8",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "trust_remote_code": "False"
+ },
+ "sft|Full Fine-tuning|bf16=False|fa2=False": {
+  "torch_dtype": "torch.float32",
+  "trust_remote_code": "False"
+ },
+ "sft|Full Fine-tuning|bf16=False|fa2=False|fsdp": {
+  "torch_dtype": "torch.float32",
+  "trust_remote_code": "False"
+ },
+ "sft|Full Fine-tuning|bf16=False|fa2=True": {
+  "torch_dtype": "torch.float32",
+  "trust_remote_code": "False"
+ },
+ "sft|Full Fine-tuning|bf16=False|fa2=True|fsdp": {
+  "torch_dtype": "torch.float32",
+  "trust_remote_code": "False"
+ },
+ "sft|Full Fine-tuning|bf16=True|fa2=False": {
+  "torch_dtype": "torch.bfloat16",
+  "trust_remote_code": "False"
+ },
+ "sft|Full Fine-tuning|bf16=True|fa2=False|fsdp": {
+  "torch_dtype": "torch.bfloat16",
+  "trust_remote_code": "False"
+ },
+ "sft|Full Fine-tuning|bf16=True|fa2=True": {
+  "attn_implementation": "flash_attention_2",
+  "torch_dtype": "torch.bfloat16",
+  "trust_remote_code": "False"
+ },
+ "sft|Full Fine-tuning|bf16=True|fa2=True|fsdp": {
+  "attn_implementation": "flash_attention_2",
+  "torch_dtype": "torch.bfloat16",
+  "trust_remote_code": "False"
+ },
+ "sft|LoRA|bf16=False|fa2=False": {
+  "device_map": "auto",
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "float16",
+   "bnb_4bit_quant_storage": "uint8",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "torch_dtype": "torch.float16",
+  "trust_remote_code": "False"
+ },
+ "sft|LoRA|bf16=False|fa2=False|fsdp": {
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "float16",
+   "bnb_4bit_quant_storage": "float32",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "torch_dtype": "torch.float32",
+  "trust_remote_code": "False"
+ },
+ "sft|LoRA|bf16=False|fa2=True": {
+  "attn_implementation": "flash_attention_2",
+  "device_map": "auto",
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "float16",
+   "bnb_4bit_quant_storage": "uint8",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "torch_dtype": "torch.float16",
+  "trust_remote_code": "False"
+ },
+ "sft|LoRA|bf16=False|fa2=True|fsdp": {
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "float16",
+   "bnb_4bit_quant_storage": "float32",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "torch_dtype": "torch.float32",
+  "trust_remote_code": "False"
+ },
+ "sft|LoRA|bf16=True|fa2=False": {
+  "device_map": "auto",
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "bfloat16",
+   "bnb_4bit_quant_storage": "uint8",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "torch_dtype": "torch.bfloat16",
+  "trust_remote_code": "False"
+ },
+ "sft|LoRA|bf16=True|fa2=False|fsdp": {
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "bfloat16",
+   "bnb_4bit_quant_storage": "bfloat16",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "torch_dtype": "torch.bfloat16",
+  "trust_remote_code": "False"
+ },
+ "sft|LoRA|bf16=True|fa2=True": {
+  "attn_implementation": "flash_attention_2",
+  "device_map": "auto",
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "bfloat16",
+   "bnb_4bit_quant_storage": "uint8",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "torch_dtype": "torch.bfloat16",
+  "trust_remote_code": "False"
+ },
+ "sft|LoRA|bf16=True|fa2=True|fsdp": {
+  "attn_implementation": "flash_attention_2",
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "bfloat16",
+   "bnb_4bit_quant_storage": "bfloat16",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "torch_dtype": "torch.bfloat16",
+  "trust_remote_code": "False"
+ },
+ "sft|QLoRA Enhanced|bf16=False|fa2=False": {
+  "device_map": "auto",
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "float16",
+   "bnb_4bit_quant_storage": "bfloat16",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "trust_remote_code": "False"
+ },
+ "sft|QLoRA Enhanced|bf16=False|fa2=False|fsdp": {
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "float16",
+   "bnb_4bit_quant_storage": "float32",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "torch_dtype": "torch.float32",
+  "trust_remote_code": "False"
+ },
+ "sft|QLoRA Enhanced|bf16=False|fa2=True": {
+  "attn_implementation": "flash_attention_2",
+  "device_map": "auto",
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "float16",
+   "bnb_4bit_quant_storage": "bfloat16",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "torch_dtype": "torch.float16",
+  "trust_remote_code": "False"
+ },
+ "sft|QLoRA Enhanced|bf16=False|fa2=True|fsdp": {
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "float16",
+   "bnb_4bit_quant_storage": "float32",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "torch_dtype": "torch.float32",
+  "trust_remote_code": "False"
+ },
+ "sft|QLoRA Enhanced|bf16=True|fa2=False": {
+  "device_map": "auto",
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "bfloat16",
+   "bnb_4bit_quant_storage": "bfloat16",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "trust_remote_code": "False"
+ },
+ "sft|QLoRA Enhanced|bf16=True|fa2=False|fsdp": {
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "bfloat16",
+   "bnb_4bit_quant_storage": "bfloat16",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "torch_dtype": "torch.bfloat16",
+  "trust_remote_code": "False"
+ },
+ "sft|QLoRA Enhanced|bf16=True|fa2=True": {
+  "attn_implementation": "flash_attention_2",
+  "device_map": "auto",
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "bfloat16",
+   "bnb_4bit_quant_storage": "bfloat16",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "torch_dtype": "torch.bfloat16",
+  "trust_remote_code": "False"
+ },
+ "sft|QLoRA Enhanced|bf16=True|fa2=True|fsdp": {
+  "attn_implementation": "flash_attention_2",
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "bfloat16",
+   "bnb_4bit_quant_storage": "bfloat16",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "torch_dtype": "torch.bfloat16",
+  "trust_remote_code": "False"
+ },
+ "vision|Full Fine-tuning|bf16=False": {
+  "torch_dtype": "torch.float32",
+  "trust_remote_code": "False"
+ },
+ "vision|Full Fine-tuning|bf16=True": {
+  "torch_dtype": "torch.bfloat16",
+  "trust_remote_code": "False"
+ },
+ "vision|LoRA|bf16=False": {
+  "device_map": "auto",
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "float16",
+   "bnb_4bit_quant_storage": "uint8",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "torch_dtype": "torch.float16",
+  "trust_remote_code": "False"
+ },
+ "vision|LoRA|bf16=True": {
+  "device_map": "auto",
+  "quantization_config": {
+   "bnb_4bit_compute_dtype": "bfloat16",
+   "bnb_4bit_quant_storage": "uint8",
+   "bnb_4bit_quant_type": "nf4",
+   "bnb_4bit_use_double_quant": "True",
+   "load_in_4bit": "True"
+  },
+  "torch_dtype": "torch.bfloat16",
+  "trust_remote_code": "False"
+ }
+}

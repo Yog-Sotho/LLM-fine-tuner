@@ -462,6 +462,8 @@ def test_cli_replay_reproduces_run_and_warns_on_different_data(tiny_model, tmp_p
         ],
     )
     assert result.exit_code == 0, result.output
+    # The trainer's summary already starts with ✅ (it was printed as "✅ ✅ Training …").
+    assert "✅ Training complete!" in result.output and "✅ ✅" not in result.output
 
     replay = tmp_path / "replay"
     cfg_path = first / "run_config.yaml"
@@ -470,6 +472,7 @@ def test_cli_replay_reproduces_run_and_warns_on_different_data(tiny_model, tmp_p
     )
     assert result.exit_code == 0, result.output
     assert "differs" not in result.output
+    assert "✅ Training complete!" in result.output and "✅ ✅" not in result.output
     original, replayed = (
         load_run_config(str(cfg_path)),
         load_run_config(str(replay / "run_config.yaml")),
@@ -1221,6 +1224,36 @@ def test_heretic_result_follows_its_exit_code(tiny_model, tmp_path, monkeypatch,
     )  # fmt: skip
     assert expected in summary
     assert ("model too small" in summary) == (exit_code != 0)
+
+
+@pytest.mark.parametrize(
+    ("installed", "expected"),
+    [
+        (False, "✅ Training complete!\n⚠️ Heretic Mode skipped — binary not found.\n"
+                "   Install with: pip install heretic-llm\n⏱ Elapsed: "),
+        (True, "✅ Training complete!\n⚠️ Heretic failed: Command '['heretic', "),
+    ],
+)  # fmt: skip
+def test_heretic_missing_or_crashing_keeps_the_trained_model(tiny_model, tmp_path, monkeypatch,
+                                                             installed, expected):  # fmt: skip
+    import subprocess
+
+    import training.sft as sft
+
+    monkeypatch.setattr(sft, "HAS_HERETIC", installed)
+
+    def timeout(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, 600)
+
+    monkeypatch.setattr(sft.subprocess, "run", timeout)
+    ds = Dataset.from_dict({"text": ["alpha beta", "gamma delta", "epsilon zeta", "eta theta"]})
+    summary, _ = sft.train_model(
+        tiny_model, ds, str(tmp_path / "out"), _hyperparams(), "cpu", "LoRA", True, 4, 8,
+        10, 64, 1, 10, False, 0, "linear", False, False, False, "",
+        heretic_mode=True, progress=None,
+    )  # fmt: skip
+    assert summary.startswith(expected), summary
+    assert f"📁 Model saved to: {tmp_path / 'out'}\n" in summary
 
 
 # ── LoRA variants (every linear layer) ─────────────────────────────────────

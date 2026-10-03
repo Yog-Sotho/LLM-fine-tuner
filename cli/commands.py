@@ -34,6 +34,7 @@ Fix history preserved inline:
 
 import os
 from datetime import datetime
+from typing import NoReturn
 
 import torch
 import typer
@@ -134,6 +135,26 @@ def _main(
     """Options that apply to every command."""
 
 
+def _fail(message: str) -> NoReturn:
+    """Print ``message`` to stderr and exit with status 1."""
+    typer.echo(message, err=True)
+    raise typer.Exit(code=1)
+
+
+def _check_paths(*paths: str | None) -> None:
+    """Exit with the path-traversal error of the first unsafe path (empty ones are fine)."""
+    for path in paths:
+        if err := validate_path_traversal(path):
+            _fail(err)
+
+
+def _report(result: str) -> None:
+    """Print a command's result: stdout on success (✅), else stderr and exit status 1."""
+    if not result.startswith("✅"):
+        _fail(result)
+    typer.echo(result)
+
+
 class DummyFile:
     """Minimal file-like proxy so core functions that expect gr.File work in CLI context."""
 
@@ -203,52 +224,37 @@ def train(
     ),
 ):
     """Headless SFT/DPO training — reuses the same pipeline as the Gradio UI."""
-    if err := validate_path_traversal(config):
-        typer.echo(err, err=True)
-        raise typer.Exit(code=1)
+    _check_paths(config)
     replay = None
     if config:
         try:
             replay = load_run_config(config)
         except (OSError, ValueError, yaml.YAMLError) as e:
-            typer.echo(f"❌ Cannot read run config: {e}", err=True)
-            raise typer.Exit(code=1) from e
+            _fail(f"❌ Cannot read run config: {e}")
         if replay["mode"] not in ("sft", "dpo"):
-            typer.echo(
-                f"❌ {config} is a '{replay['mode']}' run; the train command replays sft/dpo runs.",
-                err=True,
+            _fail(
+                f"❌ {config} is a '{replay['mode']}' run; the train command replays sft/dpo runs."
             )
-            raise typer.Exit(code=1)
         model = replay["model"]
         typer.echo(f"🔁 Replaying {config}: training flags come from the config file.")
     if not model:
-        typer.echo("❌ Give --model or --config.", err=True)
-        raise typer.Exit(code=1)
+        _fail("❌ Give --model or --config.")
     try:
         report_to = resolve_report_to(replay.get("report_to") if replay else report_to)
     except ValueError as e:
-        typer.echo(f"❌ {e}", err=True)
-        raise typer.Exit(code=1) from e
+        _fail(f"❌ {e}")
     if lora_variant not in LORA_VARIANTS:
-        typer.echo(f"❌ --lora-variant must be one of: {', '.join(LORA_VARIANTS)}", err=True)
-        raise typer.Exit(code=1)
+        _fail(f"❌ --lora-variant must be one of: {', '.join(LORA_VARIANTS)}")
     # Minor Fix 1: --qlora-enhanced actually overrides --peft instead of being ignored.
     if use_qlora_enhanced:
         if peft_method != "QLoRA Enhanced":
             typer.echo(f"⚠️  --qlora-enhanced overrides --peft '{peft_method}' → 'QLoRA Enhanced'")
         peft_method = "QLoRA Enhanced"
 
-    if err := (
-        validate_path_traversal(model)
-        or validate_path_traversal(data)
-        or validate_path_traversal(output)
-    ):
-        typer.echo(err, err=True)
-        raise typer.Exit(code=1)
+    _check_paths(model, data, output)
 
     if bool(data) == bool(hf_dataset):
-        typer.echo("❌ Give exactly one of --data or --hf-dataset.", err=True)
-        raise typer.Exit(code=1)
+        _fail("❌ Give exactly one of --data or --hf-dataset.")
     source = data or f"hf:{hf_dataset}"
     typer.echo(
         f"🚀 Starting training: {model} | PEFT: {peft_method} | Data: {source} | Output: {output}"
@@ -257,12 +263,10 @@ def train(
     ftype = None
     if data:
         if not os.path.exists(data):
-            typer.echo(f"❌ Dataset not found: {data}", err=True)
-            raise typer.Exit(code=1)
+            _fail(f"❌ Dataset not found: {data}")
         ftype = _infer_ftype(data)
         if ftype is None:
-            typer.echo("❌ Unsupported format. Use .csv, .json or .jsonl", err=True)
-            raise typer.Exit(code=1)
+            _fail("❌ Unsupported format. Use .csv, .json or .jsonl")
 
     is_dpo = bool(replay and replay["mode"] == "dpo")
     try:
@@ -274,8 +278,7 @@ def train(
             ds = load_dataset_from_file(DummyFile(data), ftype, is_dpo=is_dpo)
         ds, issues = validate_and_clean_dataset(ds, is_dpo=is_dpo)
         if len(ds) == 0:
-            typer.echo("❌ Dataset empty after validation", err=True)
-            raise typer.Exit(code=1)
+            _fail("❌ Dataset empty after validation")
         _print_issues(issues)
 
         if replay:
@@ -313,7 +316,7 @@ def train(
                 report_to=report_to,
                 lora_variant=peft.get("lora_variant", DEFAULT_LORA_VARIANT),
             )
-            typer.echo(f"\n✅ {msg}")
+            typer.echo(f"\n{msg}")  # the summary starts with ✅
             typer.echo(f"📁 Model saved to: {os.path.abspath(output)}")
             return
 
@@ -362,14 +365,13 @@ def train(
             report_to=report_to,
             lora_variant=lora_variant,
         )
-        typer.echo(f"\n✅ {msg}")
+        typer.echo(f"\n{msg}")  # the summary starts with ✅
         typer.echo(f"📁 Model saved to: {os.path.abspath(output)}")
 
     except typer.Exit:
         raise
     except Exception as e:
-        typer.echo(f"\n❌ Training failed: {e}", err=True)
-        raise typer.Exit(code=1) from e
+        _fail(f"\n❌ Training failed: {e}")
 
 
 # ── reward ─────────────────────────────────────────────────────────────────
@@ -388,34 +390,23 @@ def reward(
     batch_size: int = typer.Option(4, "--batch-size"),
 ):
     """Train a prompt-aware reward model (sequence classifier) for GRPO."""
-    if err := (
-        validate_path_traversal(model)
-        or validate_path_traversal(data)
-        or validate_path_traversal(output)
-    ):
-        typer.echo(err, err=True)
-        raise typer.Exit(code=1)
+    _check_paths(model, data, output)
 
     typer.echo(f"🎖️  Training reward model: {model} | Max Length: {max_length}")
 
     if not HAS_REWARD_TRAINER:
-        typer.echo(
-            '❌ RewardTrainer not available. Install: pip install "trl>=0.29.1,<2"', err=True
-        )
-        raise typer.Exit(code=1)
+        _fail('❌ RewardTrainer not available. Install: pip install "trl>=0.29.1,<2"')
 
     # N-4 FIX: Added ftype guard (was missing for reward/orpo — only train had it).
     # Without this, an unsupported extension silently passes ftype=None into
     # load_dataset_from_file, which crashes deep in the stack with
     # "Unsupported file type: None" — confusing for non-technical users.
     if not os.path.exists(data):
-        typer.echo(f"❌ Dataset not found: {data}", err=True)
-        raise typer.Exit(code=1)
+        _fail(f"❌ Dataset not found: {data}")
 
     ftype = _infer_ftype(data)
     if ftype is None:
-        typer.echo("❌ Unsupported format. Use .csv or .jsonl", err=True)
-        raise typer.Exit(code=1)
+        _fail("❌ Unsupported format. Use .csv or .jsonl")
 
     try:
         result = train_reward_model_v27(
@@ -433,14 +424,12 @@ def reward(
             typer.echo(f"\n{result}")
             typer.echo(f"📁 Reward model saved to: {os.path.abspath(output)}")
         else:
-            typer.echo(result, err=True)
-            raise typer.Exit(code=1)
+            _fail(result)
 
     except typer.Exit:
         raise
     except Exception as e:
-        typer.echo(f"\n❌ Reward training failed: {e}", err=True)
-        raise typer.Exit(code=1) from e
+        _fail(f"\n❌ Reward training failed: {e}")
 
 
 # ── orpo ───────────────────────────────────────────────────────────────────
@@ -458,36 +447,26 @@ def orpo(
     batch_size: int = typer.Option(2, "--batch-size"),
 ):
     """ORPO alignment training (FIX 3c: full implementation)."""
-    if err := (
-        validate_path_traversal(model)
-        or validate_path_traversal(data)
-        or validate_path_traversal(output)
-    ):
-        typer.echo(err, err=True)
-        raise typer.Exit(code=1)
+    _check_paths(model, data, output)
 
     typer.echo(f"🌀 ORPO training: {model} | Beta: {beta} | Alpha: {alpha}")
 
     if not HAS_ORPO:
-        typer.echo('❌ ORPO not available. Install: pip install "trl>=0.29.1,<2"', err=True)
-        raise typer.Exit(code=1)
+        _fail('❌ ORPO not available. Install: pip install "trl>=0.29.1,<2"')
 
     # N-4 FIX: Added ftype guard (was missing for reward/orpo — only train had it).
     if not os.path.exists(data):
-        typer.echo(f"❌ Dataset not found: {data}", err=True)
-        raise typer.Exit(code=1)
+        _fail(f"❌ Dataset not found: {data}")
 
     ftype = _infer_ftype(data)
     if ftype is None:
-        typer.echo("❌ Unsupported format. Use .csv or .jsonl", err=True)
-        raise typer.Exit(code=1)
+        _fail("❌ Unsupported format. Use .csv or .jsonl")
 
     try:
         ds = load_dataset_from_file(DummyFile(data), ftype, is_dpo=True)
         required = [COL_PROMPT, COL_CHOSEN, COL_REJECTED]
         if not all(c in ds.column_names for c in required):
-            typer.echo(f"❌ Dataset requires columns: {required}", err=True)
-            raise typer.Exit(code=1)
+            _fail(f"❌ Dataset requires columns: {required}")
 
         result = train_orpo_v27(
             model_name=model,
@@ -504,14 +483,12 @@ def orpo(
             typer.echo(f"\n{result}")
             typer.echo(f"📁 ORPO model saved to: {os.path.abspath(output)}")
         else:
-            typer.echo(result, err=True)
-            raise typer.Exit(code=1)
+            _fail(result)
 
     except typer.Exit:
         raise
     except Exception as e:
-        typer.echo(f"\n❌ ORPO training failed: {e}", err=True)
-        raise typer.Exit(code=1) from e
+        _fail(f"\n❌ ORPO training failed: {e}")
 
 
 # ── grpo ───────────────────────────────────────────────────────────────────
@@ -556,20 +533,11 @@ def grpo(
     ),
 ):
     """GRPO fine-tuning with a reward model and/or reference answers (replaces PPO)."""
-    if err := (
-        validate_path_traversal(policy_model)
-        or validate_path_traversal(reward_model)
-        or validate_path_traversal(data)
-        or validate_path_traversal(output)
-    ):
-        typer.echo(err, err=True)
-        raise typer.Exit(code=1)
+    _check_paths(policy_model, reward_model, data, output)
     if not HAS_GRPO:
-        typer.echo('❌ GRPO not available. Install: pip install "trl>=0.29.1,<2"', err=True)
-        raise typer.Exit(code=1)
+        _fail('❌ GRPO not available. Install: pip install "trl>=0.29.1,<2"')
     if not os.path.exists(data):
-        typer.echo(f"❌ Dataset not found: {data}", err=True)
-        raise typer.Exit(code=1)
+        _fail(f"❌ Dataset not found: {data}")
 
     typer.echo(f"🎯 GRPO: Policy={policy_model} | Reward model={reward_model or '—'}")
     result = train_grpo(
@@ -594,8 +562,7 @@ def grpo(
         progress=None,
     )
     if "✅" not in result:
-        typer.echo(result, err=True)
-        raise typer.Exit(code=1)
+        _fail(result)
     typer.echo(f"\n{result}")
 
 
@@ -621,19 +588,11 @@ def kto(
     ),
 ):
     """KTO alignment from thumbs-up / thumbs-down feedback."""
-    if err := (
-        validate_path_traversal(model)
-        or validate_path_traversal(data)
-        or validate_path_traversal(output)
-    ):
-        typer.echo(err, err=True)
-        raise typer.Exit(code=1)
+    _check_paths(model, data, output)
     if not HAS_KTO:
-        typer.echo('❌ KTO not available. Install: pip install "trl>=0.29.1,<2"', err=True)
-        raise typer.Exit(code=1)
+        _fail('❌ KTO not available. Install: pip install "trl>=0.29.1,<2"')
     if not os.path.exists(data):
-        typer.echo(f"❌ Dataset not found: {data}", err=True)
-        raise typer.Exit(code=1)
+        _fail(f"❌ Dataset not found: {data}")
 
     typer.echo(f"👍 KTO: {model} | Beta: {beta}")
     result = train_kto(
@@ -649,8 +608,7 @@ def kto(
         progress=None,
     )
     if "✅" not in result:
-        typer.echo(result, err=True)
-        raise typer.Exit(code=1)
+        _fail(result)
     typer.echo(f"\n{result}")
 
 
@@ -686,20 +644,11 @@ def distill(
     ),
 ):
     """Knowledge distillation (GKD): train a small student on a larger teacher's outputs."""
-    if err := (
-        validate_path_traversal(student)
-        or validate_path_traversal(teacher)
-        or validate_path_traversal(data)
-        or validate_path_traversal(output)
-    ):
-        typer.echo(err, err=True)
-        raise typer.Exit(code=1)
+    _check_paths(student, teacher, data, output)
     if not HAS_GKD:
-        typer.echo('❌ GKD not available. Install: pip install "trl>=0.29.1,<2"', err=True)
-        raise typer.Exit(code=1)
+        _fail('❌ GKD not available. Install: pip install "trl>=0.29.1,<2"')
     if not os.path.exists(data):
-        typer.echo(f"❌ Dataset not found: {data}", err=True)
-        raise typer.Exit(code=1)
+        _fail(f"❌ Dataset not found: {data}")
 
     typer.echo(f"🎓 Distillation: {teacher} → {student} | lmbda {lmbda} | beta {beta}")
     result = train_distill(
@@ -719,8 +668,7 @@ def distill(
         progress=None,
     )
     if "✅" not in result:
-        typer.echo(result, err=True)
-        raise typer.Exit(code=1)
+        _fail(result)
     typer.echo(f"\n{result}")
 
 
@@ -759,19 +707,13 @@ def embed(
     ),
 ):
     """Fine-tune an embedding model for search / RAG; reports retrieval before and after."""
-    for path in (model, data, output):
-        if err := validate_path_traversal(path):
-            typer.echo(err, err=True)
-            raise typer.Exit(code=1)
+    _check_paths(model, data, output)
     if not HAS_SENTENCE_TRANSFORMERS:
-        typer.echo(
-            '❌ sentence-transformers not installed. Install: pip install "llm-fine-tuner[embedding]"',
-            err=True,
+        _fail(
+            '❌ sentence-transformers not installed. Install: pip install "llm-fine-tuner[embedding]"'
         )
-        raise typer.Exit(code=1)
     if not os.path.exists(data):
-        typer.echo(f"❌ Dataset not found: {data}", err=True)
-        raise typer.Exit(code=1)
+        _fail(f"❌ Dataset not found: {data}")
 
     method = EMBED_METHODS[1] if lora else EMBED_METHODS[0]
     typer.echo(f"🔎 Embedding training: {model} | {method} | batch {batch_size}")
@@ -791,8 +733,7 @@ def embed(
         progress=None,
     )
     if "✅" not in result:
-        typer.echo(result, err=True)
-        raise typer.Exit(code=1)
+        _fail(result)
     typer.echo(f"\n{result}")
 
 
@@ -813,21 +754,13 @@ def evaluate(
 ):
     """Batched BLEU / ROUGE / BERTScore evaluation (greedy decoding)."""
     if compare_base and not lora:
-        typer.echo("❌ --compare-base needs a LoRA adapter (--lora).", err=True)
-        raise typer.Exit(code=1)
-    if err := (
-        validate_path_traversal(model)
-        or validate_path_traversal(data)
-        or validate_path_traversal(lora)
-    ):
-        typer.echo(err, err=True)
-        raise typer.Exit(code=1)
+        _fail("❌ --compare-base needs a LoRA adapter (--lora).")
+    _check_paths(model, data, lora)
 
     typer.echo(f"🧪 Evaluating {model} on {data} (batch_size={batch_size})")
 
     if not os.path.isfile(data):
-        typer.echo(f"❌ Dataset not found: {data}", err=True)
-        raise typer.Exit(code=1)
+        _fail(f"❌ Dataset not found: {data}")
 
     try:
         import pandas as pd
@@ -837,8 +770,7 @@ def evaluate(
             # to save memory and parsing overhead, especially with large datasets.
             header_cols = pd.read_csv(data, nrows=0).columns.tolist()
             if "prompt" not in header_cols:
-                typer.echo("❌ Dataset requires 'prompt' column", err=True)
-                raise typer.Exit(code=1)
+                _fail("❌ Dataset requires 'prompt' column")
             usecols = ["prompt"]
             if "reference" in header_cols:
                 usecols.append("reference")
@@ -846,8 +778,7 @@ def evaluate(
         else:
             df = pd.read_json(data, lines=True)
             if "prompt" not in df.columns:
-                typer.echo("❌ Dataset requires 'prompt' column", err=True)
-                raise typer.Exit(code=1)
+                _fail("❌ Dataset requires 'prompt' column")
 
         prompts = df["prompt"].astype(str).tolist()
         references = df["reference"].astype(str).tolist() if "reference" in df.columns else []
@@ -898,8 +829,7 @@ def evaluate(
     except typer.Exit:
         raise
     except Exception as e:
-        typer.echo(f"\n❌ Evaluation failed: {e}", err=True)
-        raise typer.Exit(code=1) from e
+        _fail(f"\n❌ Evaluation failed: {e}")
 
 
 @app.command()
@@ -920,15 +850,12 @@ def benchmark(
 ):
     """Standard benchmarks with lm-evaluation-harness (ARC, HellaSwag, GSM8K, …)."""
     task_list = [t.strip() for t in tasks.split(",") if t.strip()]
-    if err := validate_path_traversal(output):
-        typer.echo(err, err=True)
-        raise typer.Exit(code=1)
+    _check_paths(output)
     typer.echo(f"📏 Benchmarking {model} on {', '.join(task_list)} (limit={limit})")
     try:
         table = run_benchmarks(model, lora, task_list, limit, compare_base, batch_size)
     except Exception as e:
-        typer.echo(f"❌ Benchmarks failed: {e}", err=True)
-        raise typer.Exit(code=1) from e
+        _fail(f"❌ Benchmarks failed: {e}")
     typer.echo(table.to_string(index=False))
     if output:
         table.to_csv(output, index=False)
@@ -951,18 +878,13 @@ def merge(
     """Merge a LoRA or IA3 adapter into its base model (a standalone full model)."""
     import json
 
-    if err := (validate_path_traversal(adapter) or validate_path_traversal(output)
-               or validate_path_traversal(base)):  # fmt: skip
-        typer.echo(err, err=True)
-        raise typer.Exit(code=1)
+    _check_paths(adapter, output, base)
     config = os.path.join(adapter, "adapter_config.json")
     if not base and os.path.isfile(config):
         with open(config, encoding="utf-8") as f:
             base = json.load(f).get("base_model_name_or_path")
     result = merge_adapter_for_inference(base or "", adapter, output)
-    typer.echo(result, err=not result.startswith("✅"))
-    if not result.startswith("✅"):
-        raise typer.Exit(code=1)
+    _report(result)
 
 
 @app.command("merge-adapters")
@@ -983,9 +905,7 @@ def merge_adapters(
 ):
     """Combine LoRA adapters trained on the same base model into one (TIES, DARE, SVD, …)."""
     result = merge_lora_adapters(adapter, output, weight or None, method, density)
-    typer.echo(result, err=not result.startswith("✅"))
-    if not result.startswith("✅"):
-        raise typer.Exit(code=1)
+    _report(result)
 
 
 @app.command()
@@ -1009,20 +929,14 @@ def synthesize(
     import json
 
     if bool(server) == bool(model):
-        typer.echo("❌ Give either --server (OpenAI-compatible URL) or --model (local).", err=True)
-        raise typer.Exit(code=1)
-    for path in [*input, output, model]:
-        if err := validate_path_traversal(path):
-            typer.echo(err, err=True)
-            raise typer.Exit(code=1)
+        _fail("❌ Give either --server (OpenAI-compatible URL) or --model (local).")
+    _check_paths(*input, output, model)
     try:
         chunks = document_chunks(input)[:max_chunks]
     except ValueError as e:
-        typer.echo(f"❌ {e}", err=True)
-        raise typer.Exit(code=1) from e
+        _fail(f"❌ {e}")
     if not chunks:
-        typer.echo("❌ No text found in the documents.", err=True)
-        raise typer.Exit(code=1)
+        _fail("❌ No text found in the documents.")
     api_key = os.environ.get("LFT_SYNTH_API_KEY", "")
     ask = remote_writer(server, server_model, api_key) if server else local_writer(model)
     typer.echo(f"✍️  {len(chunks)} chunks → {pairs} pairs each ({server or model})")
@@ -1054,21 +968,16 @@ def export(
     ),
 ):
     """Export for deployment: GGUF (llama.cpp/Ollama) or FP8/W4A16 safetensors (vLLM)."""
-    for path in (model, output, calibration_data):
-        if err := validate_path_traversal(path):
-            typer.echo(err, err=True)
-            raise typer.Exit(code=1)
+    _check_paths(model, output, calibration_data)
     if fmt == "gguf":
         if quant not in GGUF_QUANT_PRESETS:
-            typer.echo(f"❌ --quant must be one of: {', '.join(GGUF_QUANT_PRESETS)}", err=True)
-            raise typer.Exit(code=1)
+            _fail(f"❌ --quant must be one of: {', '.join(GGUF_QUANT_PRESETS)}")
         result = export_to_gguf(model, output, quant)
     elif fmt in QUANT_EXPORT_FORMATS:
         texts = None
         if fmt == "w4a16":
             if not calibration_data or not os.path.isfile(calibration_data):
-                typer.echo("❌ w4a16 needs --calibration-data (CSV/JSONL).", err=True)
-                raise typer.Exit(code=1)
+                _fail("❌ w4a16 needs --calibration-data (CSV/JSONL).")
             from transformers import AutoTokenizer
 
             ds, _ = validate_and_clean_dataset(
@@ -1078,12 +987,8 @@ def export(
                                       limit=calibration_samples)  # fmt: skip
         result = quantize_model(model, output, fmt, texts)
     else:
-        typer.echo(f"❌ --format must be gguf or one of: {', '.join(QUANT_EXPORT_FORMATS)}",
-                   err=True)  # fmt: skip
-        raise typer.Exit(code=1)
-    typer.echo(result, err=not result.startswith("✅"))
-    if not result.startswith("✅"):
-        raise typer.Exit(code=1)
+        _fail(f"❌ --format must be gguf or one of: {', '.join(QUANT_EXPORT_FORMATS)}")
+    _report(result)
 
 
 @app.command()
@@ -1096,9 +1001,7 @@ def push(
 ):
     """Upload a model folder to the Hugging Face Hub (creates the repo if needed)."""
     result = push_to_hub(model, repo, token or os.environ.get("HF_TOKEN", ""))
-    typer.echo(result, err=not result.startswith("✅"))
-    if not result.startswith("✅"):
-        raise typer.Exit(code=1)
+    _report(result)
 
 
 @app.command(name="serve")
@@ -1115,8 +1018,7 @@ def serve_cmd(
     try:
         code = serve(model, host, port, os.environ.get("LFT_SERVE_API_KEY", ""), name)
     except ValueError as e:
-        typer.echo(f"❌ {e}", err=True)
-        raise typer.Exit(code=1) from e
+        _fail(f"❌ {e}")
     raise typer.Exit(code=code)
 
 

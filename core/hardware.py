@@ -43,6 +43,7 @@ from config.constants import (
     LORA_VARIANTS,
     MOE_EXPERT_FIELDS,
     MOE_ROUTER_MODULES,
+    QLORA_ENHANCED_BNB_KWARGS,
 )
 
 
@@ -224,6 +225,20 @@ def quantized_device_map():
     own GPU — ``"auto"`` would spread every copy of the model over all GPUs.
     """
     return {"": int(os.environ.get("LOCAL_RANK") or 0)} if world_size() > 1 else "auto"
+
+
+def nf4_quantization_config(device: str, quant_storage: torch.dtype | None = None):
+    """QLoRA's 4-bit config: NF4 + double quantisation, computing in the training precision.
+
+    ``quant_storage``: dtype the packed 4-bit weights are stored in; sharded QLoRA
+    (FSDP / ZeRO-3) needs it to equal the model dtype (``sharded_quant_storage``).
+    """
+    from transformers import BitsAndBytesConfig  # lazy: keeps transformers out of startup
+
+    kwargs = {**QLORA_ENHANCED_BNB_KWARGS, "bnb_4bit_compute_dtype": compute_dtype(device)}
+    if quant_storage is not None:
+        kwargs["bnb_4bit_quant_storage"] = quant_storage
+    return BitsAndBytesConfig(**kwargs)
 
 
 def sharding_backend() -> str | None:

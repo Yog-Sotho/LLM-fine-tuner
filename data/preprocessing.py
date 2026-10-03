@@ -239,6 +239,21 @@ def _dedup_key(frame: pd.DataFrame, columns: list[str]) -> pd.Series:
     return joined.str.lower().str.replace(r"\s+", " ", regex=True).str.strip()
 
 
+def column_mapping(is_dpo: bool, col_inst=None, col_out=None, col_text=None) -> dict:
+    """{source column: app column} from the Data tab's column dropdowns.
+
+    DPO: instruction / output / text dropdowns → prompt / chosen / rejected (all three
+    needed). SFT: instruction + output, else text. Unset dropdowns map nothing.
+    """
+    if is_dpo:
+        if col_inst and col_out and col_text:
+            return {col_inst: COL_PROMPT, col_out: COL_CHOSEN, col_text: COL_REJECTED}
+        return {}
+    if col_inst and col_out:
+        return {col_inst: COL_INSTRUCTION, col_out: COL_OUTPUT}
+    return {col_text: COL_TEXT} if col_text else {}
+
+
 def get_dataset_stats(dataset: Dataset, is_dpo: bool = False) -> dict:
     """Calculate dataset statistics (count and average length) efficiently.
 

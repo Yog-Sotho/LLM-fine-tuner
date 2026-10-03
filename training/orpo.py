@@ -16,7 +16,7 @@ import time
 import gradio as gr
 import torch
 from peft import LoraConfig, TaskType, get_peft_model
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, set_seed
+from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
 from config.constants import (
     ALLOW_REMOTE_CODE,
@@ -34,10 +34,10 @@ from core.callbacks import (
     final_train_loss,
 )  # F-2: ETAProgressCallback added
 from core.hardware import (
-    compute_dtype,
     get_lora_targets,
     is_main_process,
     lora_dropout,
+    nf4_quantization_config,
     quantized_device_map,
     setup_moe,
     sharding_unsupported,
@@ -114,16 +114,9 @@ def train_orpo_v27(
             tokenizer.pad_token = tokenizer.eos_token
 
         if device == "cuda":
-            bnb = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                # Same dtype as the mixed-precision mode (bf16 where supported, else fp16).
-                bnb_4bit_compute_dtype=compute_dtype(device),
-                bnb_4bit_use_double_quant=True,
-            )
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
-                quantization_config=bnb,
+                quantization_config=nf4_quantization_config(device),
                 device_map=quantized_device_map(),
                 trust_remote_code=ALLOW_REMOTE_CODE,
             )
