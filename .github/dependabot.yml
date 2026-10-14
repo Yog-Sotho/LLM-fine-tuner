@@ -1,0 +1,44 @@
+# Weekly update pull requests, grouped so each ecosystem opens at most a couple.
+# Security updates (Dependabot alerts) are separate and open as soon as an advisory lands.
+version: 2
+updates:
+  # requirements.txt, pyproject.toml and requirements-docs.txt.
+  # increase-if-necessary: a range only changes when a new release falls outside it
+  # (e.g. a new major past a `<6` cap), so CI tests it. Minimums stay at the first
+  # release without known advisories (see CLAUDE.md) instead of rising every week.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    versioning-strategy: increase-if-necessary
+    groups:
+      python-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      # TRL 1.15+ needs Triton on a GPU for SFT/DPO/KTO/GRPO, so CPU training breaks.
+      # Lift the `<1.15` cap by hand once TRL trains on CPU again.
+      - dependency-name: trl
+        versions: [">=1.15"]
+      # MkDocs 2 drops the plugin and theme system Material for MkDocs needs.
+      - dependency-name: mkdocs
+        versions: [">=2"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Dockerfile (nvidia/cuda) and Dockerfile.cpu (python). Patch releases only: a new
+  # CUDA or Python minor changes which torch wheels fit, so bump those by hand.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major, version-update:semver-minor]
