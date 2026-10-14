@@ -43,7 +43,7 @@ def build_rlhf_tab() -> dict:
         gr.Markdown(
             f"Reward model {_ok(HAS_REWARD_TRAINER)} | GRPO {_ok(HAS_GRPO)} | "
             f"ORPO {_ok(HAS_ORPO)} | KTO {_ok(HAS_KTO)} | Distillation {_ok(HAS_GKD)}\n"
-            '_All five use TRL. If one shows ❌, install: `pip install "trl>=0.29.1,<2"`._'
+            '_All five use TRL. If one shows ❌, install: `pip install "trl>=0.29.1,<1.15"`._'
         )
 
         with gr.Tabs():
@@ -166,7 +166,7 @@ def build_rlhf_tab() -> dict:
                             interactive=HAS_VLLM,
                             info="Shares the training GPU."
                             if HAS_VLLM
-                            else 'Not installed: pip install "trl[vllm]" (CUDA GPU needed).',
+                            else 'Not installed: pip install "trl[vllm]<1.15" (CUDA GPU needed).',
                         )
                         grpo_resume = gr.Checkbox(
                             label="Resume from last checkpoint",

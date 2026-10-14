@@ -361,9 +361,9 @@ try:
 except ImportError:
     HAS_BERTSCORE = False
 
-# ── NLTK (BLEU) ───────────────────────────────────────────────────────────
-# find_spec, not import + nltk.download: BLEU splits on whitespace (no tokenizer data
-# needed), and a download at every start blocks offline / proxied servers.
+# ── NLTK (synonym augmentation) ───────────────────────────────────────────
+# Opt-in: nlpaug's WordNet synonyms need it; BLEU is built in (inference/evaluation.py).
+# find_spec, not import + nltk.download: a download at every start blocks offline servers.
 HAS_NLTK: bool = importlib.util.find_spec("nltk") is not None
 
 # ── nlpaug (data augmentation) ────────────────────────────────────────────

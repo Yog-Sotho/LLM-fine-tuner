@@ -95,7 +95,7 @@ def get_hardware_summary() -> str:
     v27.append("ORPO ✓" if HAS_ORPO else "ORPO ✗")
     v27.append("evaluate ✓" if HAS_EVALUATE else "evaluate ✗")
     v27.append("bert_score ✓" if HAS_BERTSCORE else "bert_score ✗")
-    v27.append("nltk ✓" if HAS_NLTK else "nltk ✗")
+    v27.append("nltk ✓ (synonyms)" if HAS_NLTK else "nltk ✗ (optional, synonyms)")
     v27.append("nlpaug ✓" if HAS_NLPAUG else "nlpaug ✗")
     v27.append("vLLM ✓ (cached)" if HAS_VLLM else "vLLM ✗")
     lines.append("- 🧩 **Training & eval:** " + " &nbsp;|&nbsp; ".join(v27))

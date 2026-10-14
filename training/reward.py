@@ -72,7 +72,7 @@ def train_reward_model_v27(
     if err := sharding_unsupported("Reward model training"):
         return err
     if not HAS_REWARD_TRAINER:
-        return '❌ RewardTrainer not available. Install: pip install "trl>=0.29.1,<2"'
+        return '❌ RewardTrainer not available. Install: pip install "trl>=0.29.1,<1.15"'
     if reward_file is None:
         return "❌ Please upload a preference dataset (prompt, chosen, rejected)."
 

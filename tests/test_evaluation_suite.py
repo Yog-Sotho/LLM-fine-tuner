@@ -7,7 +7,50 @@ import numpy as np
 import pytest
 
 import inference.benchmarks as benchmarks
-from inference.evaluation import _format_metrics, mean_judge_score, parse_judge_score
+from inference.evaluation import (
+    _format_metrics,
+    compute_bleu_rouge,
+    mean_judge_score,
+    parse_judge_score,
+    sentence_bleu,
+)
+
+# ── BLEU ───────────────────────────────────────────────────────────────────
+
+# Expected values computed with nltk 3.10.3:
+#   sentence_bleu([ref.split()], hyp.split(), smoothing_function=SmoothingFunction().method4)
+# (the built-in BLEU must keep giving the scores earlier versions reported).
+NLTK_BLEU_CASES = [
+    ("", "the cat", 0.0),
+    ("hello", "hello world", 0.36787944117144233),  # one word: no smoothing, brevity penalty
+    ("foo bar", "the cat sat", 0.0),  # no common word
+    ("the", "the", 1.0),
+    ("the cat sat on the mat", "the cat sat on the mat", 1.0),
+    ("the cat sat on a mat", "the cat sat on the mat", 0.537284965911771),
+    ("the cat", "the cat sat on the mat", 0.029961687346935995),  # short: smoothing + penalty
+    ("cat the", "the cat", 0.08032423517939204),
+    (
+        "the quick brown fox jumps over the lazy dog today",  # longer than the reference
+        "the quick brown fox jumped over the lazy dog",
+        0.5253819788848316,
+    ),
+]
+
+
+@pytest.mark.parametrize(("hypothesis", "reference", "expected"), NLTK_BLEU_CASES)
+def test_sentence_bleu_matches_nltk(hypothesis, reference, expected):
+    assert sentence_bleu(hypothesis.split(), reference.split()) == pytest.approx(
+        expected, abs=1e-12
+    )
+
+
+def test_bleu_is_averaged_and_needs_no_optional_package():
+    scores = compute_bleu_rouge(
+        ["the cat sat on the mat", "foo bar"], ["the cat sat on the mat"] * 2
+    )
+    assert scores["BLEU-1"] == 0.5
+    assert compute_bleu_rouge([], [])["BLEU-1"] == 0.0
+
 
 # ── Judge scores ───────────────────────────────────────────────────────────
 

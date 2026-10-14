@@ -86,3 +86,6 @@ Thumbs.db
 
 # User datasets mounted into Docker at /app/datasets
 datasets/
+
+# MkDocs build output (published by .github/workflows/docs.yml)
+/site/

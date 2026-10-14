@@ -89,10 +89,11 @@ You'll see `(llm_finetuner_env)` at the start of your terminal prompt. That mean
 ```bash
 # CUDA 12.x (most modern NVIDIA cards)
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
-
-# CUDA 11.x (older cards like RTX 2000 series)
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 ```
+
+If `nvidia-smi` reports CUDA 11.x, update the NVIDIA driver first: PyTorch 2.13 and newer
+(which the app needs) ship no CUDA 11 build. Any current driver supports CUDA 12, RTX 2000
+series included.
 
 **If you have no GPU or an AMD/Apple GPU:**
 
@@ -181,7 +182,7 @@ After launching, the top of the UI shows a hardware summary like:
 ```
 🖥️ GPU: NVIDIA RTX 4090 — 24.0 GB VRAM
 💾 RAM: 64.0 GB
-🔥 PyTorch: 2.5.1+cu126
+🔥 PyTorch: 2.14.1+cu126
 ✅ Unsloth: available
 ✅ Flash Attention 2: available
 ```

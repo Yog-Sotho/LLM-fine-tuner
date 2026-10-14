@@ -230,7 +230,7 @@ python main.py grpo \
 | `--loss-type` | `dapo` | `dapo`, `dr_grpo`, `grpo` or `bnpo` |
 | `--lora-rank` / `--lora-alpha` | `16` / `32` | LoRA size |
 | `--lora-variant` | `LoRA` | `LoRA`, `rsLoRA` or `DoRA` |
-| `--use-vllm` | off | Generate with vLLM on the training GPU (CUDA; `pip install "trl[vllm]"`) |
+| `--use-vllm` | off | Generate with vLLM on the training GPU (CUDA; `pip install "trl[vllm]<1.15"`) |
 
 Example — reward JSON output that also matches a pattern:
 ```bash

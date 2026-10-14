@@ -112,7 +112,7 @@ def train_kto(
     if err := sharding_unsupported("KTO"):
         return err
     if not HAS_KTO:
-        return '❌ KTOTrainer not available. Install: pip install "trl>=0.29.1,<2"'
+        return '❌ KTOTrainer not available. Install: pip install "trl>=0.29.1,<1.15"'
     if kto_file is None:
         return "❌ Please upload a dataset (prompt/completion/label or prompt/chosen/rejected)."
     if int(batch_size) < 2:

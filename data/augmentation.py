@@ -25,6 +25,7 @@ from config.constants import (
     COL_REJECTED,
     COL_TEXT,
     HAS_NLPAUG,
+    HAS_NLTK,
 )
 from core.state import redact_sensitive_info
 from data.loader import detect_file_type, load_dataset_from_file
@@ -44,16 +45,24 @@ def augment_dataset_v27(
     ----------
     dataset            : input HuggingFace Dataset
     augmentation_factor: total copies per example (1 = no augmentation)
-    aug_type           : 'synonym' | 'random_word' | 'spelling'
+    aug_type           : 'synonym' (needs nltk) | 'random_word' | 'spelling'
 
     Returns
     -------
     (augmented_dataset, status_message)
-    Original dataset is returned unchanged if nlpaug is not installed.
+    Original dataset is returned unchanged if nlpaug (or, for synonyms, nltk) is not installed.
     """
     if not HAS_NLPAUG:
         return dataset, (
             "⚠️ nlpaug not installed. Run: pip install nlpaug\nOriginal dataset returned unchanged."
+        )
+
+    # Synonyms come from WordNet, which nlpaug reads through nltk. nltk is not a direct
+    # dependency (no release fixes its open advisory), so only this mode needs it.
+    if aug_type not in ("random_word", "spelling") and not HAS_NLTK:
+        return dataset, (
+            "⚠️ Synonym augmentation needs nltk. Run: pip install nltk\n"
+            "Or pick 'random_word' or 'spelling'. Original dataset returned unchanged."
         )
 
     try:

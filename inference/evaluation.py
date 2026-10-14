@@ -6,6 +6,7 @@ Imports: config.constants, core.state, inference.generate, stdlib, pandas, gradi
 
 Functions
 ---------
+sentence_bleu                 — built-in sentence BLEU (same score as nltk's smoothing 4)
 compute_bleu_rouge            — compute BLEU-1 and ROUGE-1/2/L scores
 compute_bertscore_metric      — compute BERTScore precision / recall / F1
 llm_judge_evaluate            — score responses with a local LLM judge
@@ -37,8 +38,10 @@ Patch log
            the comment to accurately describe what the code does.
 """
 
+import math
 import random
 import re
+from collections import Counter
 
 import gradio as gr
 import numpy as np  # M-5 FIX: moved from inside compute_bleu_rouge() to module top-level
@@ -47,7 +50,6 @@ import torch
 
 from config.constants import (
     HAS_BERTSCORE,
-    HAS_NLTK,
     HAS_ROUGE,
 )
 from core.state import app_state, redact_sensitive_info, validate_path_traversal
@@ -74,6 +76,50 @@ def _esc(s: str) -> str:
     )
 
 
+# ── BLEU (built in) ────────────────────────────────────────────────────────
+# Same score as nltk's ``sentence_bleu(..., smoothing_function=SmoothingFunction().method4)``
+# (Chen & Cherry 2014, smoothing 4), so results match earlier versions of the app without
+# depending on nltk. Tested against values computed with nltk.
+
+_BLEU_MAX_N = 4
+_BLEU_SMOOTHING_K = 5  # nltk's SmoothingFunction default
+
+
+def _ngrams(tokens: list[str], n: int) -> Counter[tuple[str, ...]]:
+    return Counter(tuple(tokens[i : i + n]) for i in range(len(tokens) - n + 1))
+
+
+def sentence_bleu(hypothesis: list[str], reference: list[str]) -> float:
+    """Sentence BLEU-4 (uniform weights) of one tokenised hypothesis against one reference.
+
+    Clipped n-gram precisions, smoothing 4 for n-gram orders with no match, brevity
+    penalty. 0.0 when the hypothesis is empty or shares no word with the reference.
+    """
+    hyp_len, ref_len = len(hypothesis), len(reference)
+    precisions: list[float] = []
+    smoothing_step = 1
+    for n in range(1, _BLEU_MAX_N + 1):
+        hyp_counts = _ngrams(hypothesis, n)
+        ref_counts = _ngrams(reference, n)
+        matches = sum(min(count, ref_counts[gram]) for gram, count in hyp_counts.items())
+        total = max(1, sum(hyp_counts.values()))
+        if n == 1 and matches == 0:
+            return 0.0
+        if matches == 0 and hyp_len > 1:
+            matches_smoothed = 1 / (2**smoothing_step * _BLEU_SMOOTHING_K / math.log(hyp_len))
+            precisions.append(matches_smoothed / total)
+            smoothing_step += 1
+        else:
+            precisions.append(matches / total)
+
+    if hyp_len > ref_len:
+        brevity = 1.0
+    else:
+        brevity = math.exp(1 - ref_len / hyp_len)
+    weight = 1 / _BLEU_MAX_N
+    return brevity * math.exp(math.fsum(weight * math.log(p) for p in precisions if p > 0))
+
+
 # ── BLEU + ROUGE ───────────────────────────────────────────────────────────
 
 
@@ -89,28 +135,13 @@ def compute_bleu_rouge(predictions: list[str], references: list[str]) -> dict[st
         results["ROUGE-1"] = results["ROUGE-2"] = results["ROUGE-L"] = 0.0
         return results
 
-    has_nltk = bool(HAS_NLTK)
     has_rouge = bool(HAS_ROUGE)
 
-    if has_nltk:
-        from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu  # lazy
-
-        smoothing = SmoothingFunction().method4
-        bleu_scores = []
-        for pred, ref in zip(predictions, references, strict=False):
-            pred_tokens = pred.split()
-            ref_tokens = [ref.split()]
-            if pred_tokens:
-                try:
-                    score = sentence_bleu(ref_tokens, pred_tokens, smoothing_function=smoothing)
-                    bleu_scores.append(score)
-                except Exception:
-                    bleu_scores.append(0.0)
-            else:
-                bleu_scores.append(0.0)
-        results["BLEU-1"] = round(float(np.mean(bleu_scores)), 4) if bleu_scores else 0.0
-    else:
-        results["BLEU-1"] = "nltk not installed"
+    bleu_scores = [
+        sentence_bleu(pred.split(), ref.split())
+        for pred, ref in zip(predictions, references, strict=False)
+    ]
+    results["BLEU-1"] = round(float(np.mean(bleu_scores)), 4) if bleu_scores else 0.0
 
     if has_rouge:
         from rouge_score import rouge_scorer as rouge_scorer_lib  # lazy

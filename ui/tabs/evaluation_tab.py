@@ -17,7 +17,6 @@ from config.constants import (
     BENCHMARK_TASKS,
     HAS_BERTSCORE,
     HAS_LM_EVAL,
-    HAS_NLTK,
     HAS_ROUGE,
     LLM_JUDGE_CRITERIA,
 )
@@ -32,7 +31,7 @@ def build_evaluation_tab() -> dict:
             "</h3></div>"
         )
         gr.Markdown(
-            f"BLEU: {'✅ (nltk)' if HAS_NLTK else '❌ pip install nltk'} | "
+            "BLEU: ✅ (built in) | "
             f"ROUGE: {'✅ (rouge_score)' if HAS_ROUGE else '❌ pip install rouge-score'} | "
             f"BERTScore: {'✅ (bert_score)' if HAS_BERTSCORE else '❌ pip install bert-score'}"
         )

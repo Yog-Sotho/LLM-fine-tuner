@@ -425,7 +425,7 @@ def _build_trainer(
     """TRL DPOTrainer or SFTTrainer for the prepared model and data."""
     if is_dpo:
         if not HAS_TRL:
-            raise ImportError('TRL not installed. Run: pip install "trl>=0.29.1,<2"')
+            raise ImportError('TRL not installed. Run: pip install "trl>=0.29.1,<1.15"')
         from trl import DPOConfig, DPOTrainer  # lazy
 
         dpo_config = DPOConfig(

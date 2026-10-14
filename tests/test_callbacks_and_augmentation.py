@@ -170,6 +170,15 @@ def test_augmentation_edge_cases(fake_nlpaug, monkeypatch):
     assert same is ds and "nlpaug not installed" in msg
 
 
+def test_synonyms_need_nltk_but_other_modes_do_not(fake_nlpaug, monkeypatch):
+    monkeypatch.setattr(aug, "HAS_NLTK", False)
+    ds = Dataset.from_dict({"text": ["one"]})
+    same, msg = aug.augment_dataset_v27(ds, 2, aug_type="synonym")
+    assert same is ds and "pip install nltk" in msg
+    out, msg = aug.augment_dataset_v27(ds, 2, aug_type="random_word")
+    assert len(out) == 2 and msg.startswith("✅")
+
+
 def test_quality_filter_by_format():
     sft = Dataset.from_dict({"instruction": ["hi", "a" * 40], "output": ["x", "b" * 40]})
     kept, msg = aug.quality_filter_v27(sft, min_length=20, max_length=100)

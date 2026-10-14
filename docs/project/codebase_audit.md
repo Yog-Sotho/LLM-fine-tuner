@@ -3,7 +3,7 @@
 **Date:** 2026-09-29 (supersedes the 2026-09-27 baseline, merged in below)
 **Project:** llm-fine-tuner 3.2.0 (`APP_VERSION`)
 **Audited revision:** branch `claude/project-audit-report-qsOS1` — `main` after PR #175 (Tier 10) + Tier 11 (PR #176) + Tier 12
-**Language / Framework:** Python 3.10–3.12 · Gradio 6 · Transformers 4.56–5.x · TRL 0.29–1.x · PEFT 0.17–0.21 · Typer
+**Language / Framework:** Python 3.10–3.12 · Gradio 6 · Transformers 5.10+ · TRL 0.29–1.x · PEFT 0.18+ · Typer
 **Project Type:** Web service (Gradio UI, `127.0.0.1` by default) + CLI — all 9 dimensions applicable
 **Audit Mode:** Global (flat layered packages: `config → core → data → training → inference → export → ui/cli`)
 

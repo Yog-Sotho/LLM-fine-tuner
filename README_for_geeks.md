@@ -17,7 +17,7 @@
   </a>
   <img src="https://img.shields.io/badge/Python-3.10%2B-yellow?style=for-the-badge&logo=python" alt="Python">
   <img src="https://img.shields.io/badge/PyTorch-2.6%2B-ee4c2c?style=for-the-badge&logo=pytorch" alt="PyTorch">
-  <img src="https://img.shields.io/badge/Transformers-4.56%2B-ffd21e?style=for-the-badge" alt="Transformers">
+  <img src="https://img.shields.io/badge/Transformers-5.10%2B-ffd21e?style=for-the-badge" alt="Transformers">
 </div>
 
 ---
@@ -60,17 +60,17 @@ config/ → core/ → data/ → training/ → inference/ → export/ → ui/ / c
 ### Core (required)
 
 ```
-torch>=2.5.0              # CUDA 12.x wheel: --index-url https://download.pytorch.org/whl/cu126
-transformers>=4.48.0
-datasets>=3.0.0
-peft>=0.14.0
-accelerate>=1.3.0
+torch>=2.13.0             # CUDA 12.x wheel: --index-url https://download.pytorch.org/whl/cu126
+transformers>=5.10.1
+datasets>=5.0.1
+peft>=0.18.0
+accelerate>=1.15.0
 bitsandbytes>=0.45.0
-trl>=0.29.1,<2            # SFT, DPO, ORPO, KTO, GRPO and Reward trainers
-gradio>=5.0.0
+trl>=0.29.1,<1.15            # SFT, DPO, ORPO, KTO, GRPO and Reward trainers
+gradio>=6.16.0
 typer>=0.15.0
 pandas>=2.2.0
-huggingface_hub>=0.25.0
+huggingface_hub>=1.5.0
 safetensors
 einops
 ```
@@ -84,10 +84,10 @@ trl[vllm]                 # HAS_VLLM     — CUDA; TRL pins the supported vLLM
 evaluate>=0.4.0           # HAS_EVALUATE
 rouge-score>=0.1.2        # HAS_ROUGE
 bert-score>=0.3.13        # HAS_BERTSCORE
-nltk>=3.8.0               # HAS_NLTK     — BLEU corpus scoring
+nltk                      # HAS_NLTK     — synonym augmentation (comes with rouge-score)
 lm-eval>=0.4.13,<0.5      # HAS_LM_EVAL  — standard benchmarks
 nlpaug>=1.1.10            # HAS_NLPAUG   — data augmentation
-pypdf>=6.16.1             # HAS_PDF
+pypdf>=6.19.0             # HAS_PDF
 openpyxl>=3.1.0           # HAS_OPENPYXL
 heretic-llm>=1.2.0        # Heretic Mode abliteration
 psutil>=6.0.0             # HAS_PSUTIL   — RAM reporting
@@ -124,8 +124,7 @@ The installer:
 # CUDA 12.x
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 
-# CUDA 11.x  
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# CUDA 11.x: PyTorch 2.13+ has no CUDA 11 build — update the NVIDIA driver, then use cu126
 
 # CPU / MPS
 pip install torch torchvision torchaudio

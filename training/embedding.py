@@ -12,7 +12,7 @@ with the base model (similar passages that do not answer the query). Retrieval q
 
 LoRA is merged into the model before saving: the result is a plain sentence-transformers
 model that any tool loads (sentence-transformers, TEI, vLLM, LangChain, LlamaIndex).
-Works with sentence-transformers 5.4+ (Transformers 4.56) and 6.x (Transformers 5).
+Works with sentence-transformers 5.6+ and 6.x (on Transformers 5).
 """
 
 import gc
