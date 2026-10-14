@@ -57,7 +57,7 @@ def build_serve_command(
         return cmd, ({"LLAMA_API_KEY": api_key} if api_key else {})
 
     if not HAS_VLLM:
-        raise ValueError('vLLM is not installed (CUDA only): pip install "trl[vllm]".')
+        raise ValueError('vLLM is not installed (CUDA only): pip install "trl[vllm]<1.15".')
     vllm = shutil.which("vllm")
     if vllm is None:
         raise ValueError("The `vllm` command is not on PATH.")

@@ -110,18 +110,16 @@ if command -v nvidia-smi >/dev/null; then
 
     # [FIX-7]: Guard against unparseable CUDA version (e.g. driver reports N/A)
     if [[ -z "$CUDA_VERSION_FULL" || "$CUDA_VERSION_FULL" == "0" ]]; then
-        print_warning "Could not parse CUDA version from nvidia-smi — defaulting to cu118 PyTorch index"
-        TORCH_INDEX="https://download.pytorch.org/whl/cu118"
+        print_warning "Could not parse CUDA version from nvidia-smi — defaulting to cu126 PyTorch index"
+        TORCH_INDEX="https://download.pytorch.org/whl/cu126"
     else
         print_success "GPU detected: $GPU_NAME (CUDA $CUDA_VERSION_FULL)"
 
         if [[ "$CUDA_MAJOR" -ge 12 ]]; then
             TORCH_INDEX="https://download.pytorch.org/whl/cu126"
-        elif [[ "$CUDA_MAJOR" -eq 11 ]]; then
-            TORCH_INDEX="https://download.pytorch.org/whl/cu118"
         else
-            # No PyTorch >= 2.6 build exists for CUDA < 11 (cu117 stops at 2.0.1).
-            print_warning "CUDA $CUDA_VERSION_FULL is too old for PyTorch >= 2.6 — installing CPU wheels"
+            # No PyTorch >= 2.13 build exists for CUDA < 12 (cu118 stops at 2.7).
+            print_warning "CUDA $CUDA_VERSION_FULL is too old for PyTorch >= 2.13 (update the NVIDIA driver) — installing CPU wheels"
             TORCH_INDEX="https://download.pytorch.org/whl/cpu"
         fi
     fi
@@ -164,8 +162,8 @@ pip install --upgrade pip setuptools wheel
 # PyTorch
 # ----------------------------------------------------------------------------
 print_step "Installing PyTorch"
-# torch >= 2.6 is required: <= 2.5.1 is affected by CVE-2025-32434 (torch.load RCE).
-pip install "torch>=2.6.0,<3" --index-url "$TORCH_INDEX"
+# Same floor as pyproject.toml: the first torch release without known advisories.
+pip install "torch>=2.13.0,<3" --index-url "$TORCH_INDEX"
 print_success "PyTorch installed (${TORCH_INDEX##*/})"
 
 
@@ -176,9 +174,9 @@ print_success "PyTorch installed (${TORCH_INDEX##*/})"
 # ----------------------------------------------------------------------------
 # Version ranges mirror requirements.txt / pyproject.toml.
 CORE_DEPS=(
-    "transformers>=4.56.2,<6" "datasets>=4.0.0,<6" "accelerate>=1.4.0,<2"
-    "peft>=0.17.0,<1" bitsandbytes "trl>=0.29.1,<2"
-    "gradio>=6.0.0,<7" typer pandas numpy matplotlib tqdm "huggingface-hub>=0.34.0,<2"
+    "transformers>=5.10.1,<6" "datasets>=5.0.1,<6" "accelerate>=1.15.0,<2"
+    "peft>=0.18.0,<1" bitsandbytes "trl>=0.29.1,<1.15"
+    "gradio>=6.16.0,<7" typer pandas numpy matplotlib "tqdm>=4.66.3" "huggingface-hub>=1.5.0,<2"
     safetensors einops heretic-llm
 )
 
@@ -208,14 +206,13 @@ ask "Install Unsloth (2-5× faster training, GGUF export)?" && {
 
 
 ask "Install vLLM (high-throughput inference, CUDA only)?" && {
-    pip install "trl[vllm]"   # the vLLM version this TRL supports
+    pip install "trl[vllm]<1.15"   # the vLLM version this TRL supports
     print_success "vLLM installed"
 }
 
 
-ask "Install evaluation & data tools (nltk, rouge, bert-score, nlpaug, PDF/Excel)?" && {
-    pip install nltk rouge-score bert-score evaluate nlpaug "pypdf>=6.16.1" openpyxl
-    python -c "import nltk; nltk.download('punkt', quiet=True)"
+ask "Install evaluation & data tools (rouge, bert-score, nlpaug, PDF/Excel)?" && {
+    pip install rouge-score bert-score evaluate nlpaug "pypdf>=6.19.0" openpyxl
     print_success "Evaluation & data tools installed"
 }
 

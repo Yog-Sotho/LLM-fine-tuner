@@ -132,13 +132,13 @@ You selected DPO training mode but your dataset doesn't have the right columns.
 
 ---
 
-### ❌ `Install: pip install "trl>=0.29.1,<2"`
+### ❌ `Install: pip install "trl>=0.29.1,<1.15"`
 
 The reward trainer, GRPO, ORPO or KTO isn't available because `trl` is too old or not installed.
 
 **Fix:**
 ```bash
-pip install "trl>=0.29.1,<2" --upgrade
+pip install "trl>=0.29.1,<1.15" --upgrade
 ```
 
 ---
@@ -193,7 +193,7 @@ The model isn't following the format of your prompts.
 **Fixes:**
 1. Make sure you have a CUDA GPU: `python -c "import torch; print(torch.cuda.is_available())"`
 2. Make sure you're passing a **merged** model path (see [06 — Inference](06_inference.md))
-3. Check vLLM is installed: `pip install "trl[vllm]"` (CUDA only)
+3. Check vLLM is installed: `pip install "trl[vllm]<1.15"` (CUDA only)
 
 ---
 

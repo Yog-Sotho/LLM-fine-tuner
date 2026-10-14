@@ -179,7 +179,7 @@ def vllm_generate_v27(
     if err := validate_identifier(vllm_quantization):
         raise ValueError(err)
     if not HAS_VLLM:
-        raise ImportError('vLLM not installed (CUDA only). Run: pip install "trl[vllm]"')
+        raise ImportError('vLLM not installed (CUDA only). Run: pip install "trl[vllm]<1.15"')
 
     from vllm import LLM, SamplingParams  # lazy — only when vLLM is available
 

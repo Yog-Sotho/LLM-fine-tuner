@@ -395,7 +395,7 @@ def reward(
     typer.echo(f"🎖️  Training reward model: {model} | Max Length: {max_length}")
 
     if not HAS_REWARD_TRAINER:
-        _fail('❌ RewardTrainer not available. Install: pip install "trl>=0.29.1,<2"')
+        _fail('❌ RewardTrainer not available. Install: pip install "trl>=0.29.1,<1.15"')
 
     # N-4 FIX: Added ftype guard (was missing for reward/orpo — only train had it).
     # Without this, an unsupported extension silently passes ftype=None into
@@ -452,7 +452,7 @@ def orpo(
     typer.echo(f"🌀 ORPO training: {model} | Beta: {beta} | Alpha: {alpha}")
 
     if not HAS_ORPO:
-        _fail('❌ ORPO not available. Install: pip install "trl>=0.29.1,<2"')
+        _fail('❌ ORPO not available. Install: pip install "trl>=0.29.1,<1.15"')
 
     # N-4 FIX: Added ftype guard (was missing for reward/orpo — only train had it).
     if not os.path.exists(data):
@@ -526,7 +526,9 @@ def grpo(
         DEFAULT_LORA_VARIANT, "--lora-variant", help=f"{' | '.join(LORA_VARIANTS)}"
     ),
     use_vllm: bool = typer.Option(
-        False, "--use-vllm", help='Generate with vLLM on the training GPU (pip install "trl[vllm]")'
+        False,
+        "--use-vllm",
+        help='Generate with vLLM on the training GPU (pip install "trl[vllm]<1.15")',
     ),
     resume: bool = typer.Option(
         False, "--resume", help="Continue from the newest checkpoint in --output"
@@ -535,7 +537,7 @@ def grpo(
     """GRPO fine-tuning with a reward model and/or reference answers (replaces PPO)."""
     _check_paths(policy_model, reward_model, data, output)
     if not HAS_GRPO:
-        _fail('❌ GRPO not available. Install: pip install "trl>=0.29.1,<2"')
+        _fail('❌ GRPO not available. Install: pip install "trl>=0.29.1,<1.15"')
     if not os.path.exists(data):
         _fail(f"❌ Dataset not found: {data}")
 
@@ -590,7 +592,7 @@ def kto(
     """KTO alignment from thumbs-up / thumbs-down feedback."""
     _check_paths(model, data, output)
     if not HAS_KTO:
-        _fail('❌ KTO not available. Install: pip install "trl>=0.29.1,<2"')
+        _fail('❌ KTO not available. Install: pip install "trl>=0.29.1,<1.15"')
     if not os.path.exists(data):
         _fail(f"❌ Dataset not found: {data}")
 
@@ -646,7 +648,7 @@ def distill(
     """Knowledge distillation (GKD): train a small student on a larger teacher's outputs."""
     _check_paths(student, teacher, data, output)
     if not HAS_GKD:
-        _fail('❌ GKD not available. Install: pip install "trl>=0.29.1,<2"')
+        _fail('❌ GKD not available. Install: pip install "trl>=0.29.1,<1.15"')
     if not os.path.exists(data):
         _fail(f"❌ Dataset not found: {data}")
 

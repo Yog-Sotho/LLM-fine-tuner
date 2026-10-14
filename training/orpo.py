@@ -78,7 +78,7 @@ def train_orpo_v27(
     if err := sharding_unsupported("ORPO"):
         return err
     if not HAS_ORPO:
-        return '❌ ORPOTrainer not available. Install: pip install "trl>=0.29.1,<2"'
+        return '❌ ORPOTrainer not available. Install: pip install "trl>=0.29.1,<1.15"'
     if orpo_file is None:
         return "❌ Please upload a preference dataset (prompt, chosen, rejected)."
 

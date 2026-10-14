@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77", "wheel"]  # 77+: SPDX `license` (PEP 639)
+requires = ["setuptools>=83", "wheel"]  # 77+: SPDX `license` (PEP 639); 83+: no known advisories
 # C-1 FIX: "setuptools.backends.legacy:build" does not exist — correct value is "setuptools.build_meta"
 build-backend = "setuptools.build_meta"
 
@@ -28,23 +28,23 @@ classifiers = [
 # Heavy optional deps (vllm, bert-score, unsloth, heretic-llm) are listed
 # under [project.optional-dependencies] and installed on demand.
 dependencies = [
-    "gradio>=6.0.0,<7",
-    "transformers>=4.56.2,<6",
-    "datasets>=4.7.0,<6",  # 4.7: Json feature (tool-calling chats keep exact arguments)
-    "peft>=0.17.0,<1",
-    "accelerate>=1.4.0,<2",
+    "gradio>=6.16.0,<7",
+    "transformers>=5.10.1,<6",
+    "datasets>=5.0.1,<6",  # Json feature (tool-calling chats keep exact arguments)
+    "peft>=0.18.0,<1",  # 0.18: Transformers 5
+    "accelerate>=1.15.0,<2",
     "bitsandbytes>=0.45.0",
-    "trl>=0.29.1,<2",
-    "torch>=2.6.0,<3",
+    "trl>=0.29.1,<1.15",  # 1.15+ needs Triton + a GPU (fused LM head): no CPU training
+    "torch>=2.13.0,<3",
     "numpy>=2.0.0",
     "pandas>=2.2.0",
     "safetensors>=0.4.3",
-    "tqdm>=4.66.0",
+    "tqdm>=4.66.3",
     "einops>=0.8.0",
     "matplotlib>=3.9.0",
-    "huggingface_hub>=0.34.0,<2",
+    "huggingface_hub>=1.5.0,<2",
     "typer>=0.15.0",
-    "pypdf>=6.16.1",
+    "pypdf>=6.19.0",
     "openpyxl>=3.1.0",
     "python-docx>=1.1.0",  # Word documents for "Create training data"
     "psutil>=6.0.0",
@@ -59,14 +59,13 @@ eval = [
     "evaluate>=0.4.0",
     "rouge-score>=0.1.2",
     "bert-score>=0.3.13",
-    "nltk>=3.8.0",
     "nlpaug>=1.1.10",
     "lm-eval>=0.4.13,<0.5",  # standard benchmarks (ARC, HellaSwag, GSM8K, …)
     "math-verify>=0.5.2",  # GRPO maths-answer reward (TRL's accuracy_reward)
 ]
 # CUDA only. TRL's vllm extra pins the vLLM range this TRL supports.
 vllm = [
-    "trl[vllm]>=0.29.1,<2",
+    "trl[vllm]>=0.29.1,<1.15",
 ]
 # H-11 FIX: heretic-llm isolated in its own optional group so a missing package
 # never breaks a standard install.
@@ -74,8 +73,8 @@ heretic = [
     "heretic-llm>=1.2.0",
 ]
 dev = [
-    "black>=24.0.0",
-    "pytest>=8.0.0",
+    "black>=26.3.1",
+    "pytest>=9.0.3",
     "ruff>=0.4.0",
 ]
 # Vision-language fine-tuning. torchvision must match your torch build; with CUDA
@@ -88,9 +87,9 @@ vision = [
 compress = [
     "llmcompressor>=0.14.0",
 ]
-# Embedding-model fine-tuning (search / RAG). 6.x needs Transformers 5; 5.4+ works with 4.56.
+# Embedding-model fine-tuning (search / RAG).
 embedding = [
-    "sentence-transformers>=5.4.0,<7",
+    "sentence-transformers>=5.6.0,<7",
 ]
 all = [
     "llm-fine-tuner[eval,vllm,heretic,vision,embedding,dev]",

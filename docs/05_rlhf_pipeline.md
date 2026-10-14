@@ -30,7 +30,7 @@ Reward model ✅ | GRPO ✅ | ORPO ✅ | KTO ✅
 If you see ❌, install TRL:
 
 ```bash
-pip install "trl>=0.29.1,<2"
+pip install "trl>=0.29.1,<1.15"
 ```
 
 ---
@@ -112,7 +112,7 @@ A prompts-only file (`prompt` column) works when you give a reward model path.
 | Resume from last checkpoint | off | Continue from the newest checkpoint in the output directory |
 | Loss | `dapo` | `dapo` (TRL's default) and `dr_grpo` avoid the original `grpo` loss's bias towards short answers; `bnpo` normalises per local batch |
 | LoRA variant / Rank / Alpha | LoRA / 16 / 32 | Same variants as SFT (LoRA, rsLoRA, DoRA), on every linear layer |
-| Generate with vLLM | off | Much faster generation on a CUDA GPU, sharing it with training (TRL colocate mode). Needs `pip install "trl[vllm]"`, which installs the vLLM version your TRL supports |
+| Generate with vLLM | off | Much faster generation on a CUDA GPU, sharing it with training (TRL colocate mode). Needs `pip install "trl[vllm]<1.15"`, which installs the vLLM version your TRL supports |
 
 GRPO generates text during training, so it is slower per step than SFT — vLLM generation helps most there.
 

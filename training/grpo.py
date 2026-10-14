@@ -195,7 +195,7 @@ def train_grpo(
     if err := sharding_unsupported("GRPO"):
         return err
     if not HAS_GRPO:
-        return '❌ GRPOTrainer not available. Install: pip install "trl>=0.29.1,<2"'
+        return '❌ GRPOTrainer not available. Install: pip install "trl>=0.29.1,<1.15"'
     if prompts_file is None:
         return "❌ Please upload a dataset with a 'prompt' column (optionally 'reference')."
     if reward_model_path and not os.path.isfile(os.path.join(reward_model_path, "config.json")):
@@ -212,7 +212,7 @@ def train_grpo(
     if use_vllm and not (HAS_VLLM and torch.cuda.is_available()):
         return (
             "❌ vLLM generation needs a CUDA GPU and vLLM built for your TRL version: "
-            'pip install "trl[vllm]"'
+            'pip install "trl[vllm]<1.15"'
         )
 
     stop_event = app_state.session_for(request).stop_event

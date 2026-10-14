@@ -16,21 +16,21 @@
 #   v3.2.1 (audit fixes) — heretic-llm moved to optional; pyproject.toml backend corrected.
 
 # ── Core dependencies ─────────────────────────────────────────────────
-gradio>=6.0.0,<7
-transformers>=4.56.2,<6
-datasets>=4.7.0,<6           # 4.7: Json feature (tool-calling chats keep exact arguments)
-peft>=0.17.0,<1
-accelerate>=1.4.0,<2
+gradio>=6.16.0,<7
+transformers>=5.10.1,<6
+datasets>=5.0.1,<6           # Json feature (tool-calling chats keep exact arguments)
+peft>=0.18.0,<1             # 0.18: Transformers 5
+accelerate>=1.15.0,<2
 bitsandbytes>=0.45.0
-trl>=0.29.1,<2              # DPO, SFT, ORPO (tested: 0.29.1 and 1.14)
-torch>=2.6.0,<3
+trl>=0.29.1,<1.15           # 1.15+ needs Triton + a GPU for SFT/DPO/KTO/GRPO (no CPU training)
+torch>=2.13.0,<3
 numpy>=2.0.0
 pandas>=2.2.0
 safetensors>=0.4.3          # v3.2: Required for safe model save/load (was implicit via transformers)
-tqdm>=4.66.0                # v3.2: Progress bars for tokenisation & dataset ops (was implicit)
+tqdm>=4.66.3                # v3.2: Progress bars for tokenisation & dataset ops (was implicit)
 
 # ── File-format support ───────────────────────────────────────────────
-pypdf>=6.16.1               # PDF ingestion (PyPDF2 is abandoned; pypdf has the DoS fixes)
+pypdf>=6.19.0               # PDF ingestion (PyPDF2 is abandoned; pypdf has the DoS fixes)
 openpyxl>=3.1.0             # Excel ingestion (optional at runtime, guarded by HAS_OPENPYXL)
 python-docx>=1.1.0          # Word documents for "Create training data" (guarded by HAS_DOCX)
 
@@ -38,7 +38,7 @@ python-docx>=1.1.0          # Word documents for "Create training data" (guarded
 psutil>=6.0.0               # RAM display in hardware summary (optional, guarded by HAS_PSUTIL)
 
 # ── HuggingFace Hub ───────────────────────────────────────────────────
-huggingface_hub>=0.34.0,<2     # Hub push, create_repo (optional, guarded by HAS_HUB)
+huggingface_hub>=1.5.0,<2      # Hub push, create_repo (optional, guarded by HAS_HUB)
 
 # ── CLI / headless mode ───────────────────────────────────────────────
 typer>=0.15.0               # CLI commands: train, reward, orpo, evaluate, ppo
@@ -55,18 +55,20 @@ typer>=0.15.0               # CLI commands: train, reward, orpo, evaluate, ppo
 evaluate>=0.4.0             # HuggingFace evaluate hub (BLEU, perplexity, etc.) — optional
 rouge-score>=0.1.2          # ROUGE-1/2/L metrics — optional
 bert-score>=0.3.13          # BERTScore semantic similarity — optional
-nltk>=3.8.0                 # BLEU scoring + punkt tokeniser (downloads punkt on first run)
 lm-eval>=0.4.13,<0.5        # Standard benchmarks via lm-evaluation-harness — optional
 math-verify>=0.5.2          # GRPO maths-answer reward — optional
 
 # Embedding-model fine-tuning (search / RAG)
-sentence-transformers>=5.4.0,<7  # Embeddings tab / `embed` command — optional
+sentence-transformers>=5.6.0,<7  # Embeddings tab / `embed` command — optional
 
 # Data augmentation
 nlpaug>=1.1.10              # Synonym / random-word / spelling augmentation — optional
+# Synonym augmentation also needs nltk (WordNet). Not listed: BLEU is built in, and no nltk
+# release fixes GHSA-8mgp-746c-j5xp (unreachable here). rouge-score installs it anyway;
+# without rouge-score:  pip install nltk
 
 # High-throughput inference (CUDA only, not installed by this file — it brings its own torch):
-#   pip install "trl[vllm]"   (the vLLM version your TRL supports; or pip install -e ".[vllm]")
+#   pip install "trl[vllm]<1.15"   (the vLLM version your TRL supports; or pip install -e ".[vllm]")
 
 # Utility / performance
 einops>=0.8.0               # v3.2: Tensor rearrangement used by attention layers in some models
@@ -87,5 +89,5 @@ matplotlib>=3.9.0           # v3.2: Plotting backend consumed by Gradio loss-cur
 # Supported model families: LLaMA, Mistral, Gemma, Qwen, Phi, TinyLlama, OPT
 
 # ── Development tools (optional) ─────────────────────────────────────
-black>=24.0.0               # Code formatter
-pytest>=8.0.0               # Test runner
+black>=26.3.1               # Code formatter
+pytest>=9.0.3               # Test runner

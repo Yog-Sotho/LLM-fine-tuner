@@ -66,11 +66,11 @@ jobs:
 
       # The default PyPI torch wheel for Linux is the CUDA build.
       - name: "Install PyTorch (CUDA)"
-        run: pip install --quiet "torch>=2.6.0,<3" torchvision
+        run: pip install --quiet "torch>=2.13.0,<3" torchvision
 
       - name: "Install vLLM"
         if: inputs.vllm
-        run: pip install --quiet "trl[vllm]"
+        run: pip install --quiet "trl[vllm]<1.15"
 
       - name: "Install DeepSpeed"
         if: inputs.deepspeed
@@ -79,7 +79,7 @@ jobs:
       - name: "Install package and test tools"
         run: |
           pip install --quiet -e ".[eval,embedding]"
-          pip install --quiet "pytest>=8.0.0" "pytest-timeout>=2.3.0"
+          pip install --quiet "pytest>=9.0.3" "pytest-timeout>=2.3.0"
 
       - name: "Check CUDA from Python"
         run: |

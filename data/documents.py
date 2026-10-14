@@ -34,7 +34,7 @@ def read_document(path: str) -> str:
         raise ValueError(f"File not found: {path}")
     if ext == FILE_EXT_PDF:
         if not HAS_PDF:
-            raise ValueError('Reading PDFs needs pypdf: pip install "pypdf>=6.16.1"')
+            raise ValueError('Reading PDFs needs pypdf: pip install "pypdf>=6.19.0"')
         return extract_text_from_pdf(path)
     if ext == FILE_EXT_DOCX:
         if not HAS_DOCX:

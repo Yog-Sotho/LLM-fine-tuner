@@ -191,7 +191,7 @@ python main.py serve --model ./runs/my-run --port 8000 --name my-bot # LoRA adap
 ```
 
 - `.gguf` files are served by llama.cpp's `llama-server` (build it as in the GGUF prerequisite,
-  target `llama-server`); anything else by `vllm serve` (`pip install "trl[vllm]"`, CUDA).
+  target `llama-server`); anything else by `vllm serve` (`pip install "trl[vllm]<1.15"`, CUDA).
 - Clients use `http://<host>:8000/v1` — `/v1/chat/completions`, `/v1/models` — with the model
   name from `--name` (default `model`).
 - `--host` defaults to `127.0.0.1`; use `0.0.0.0` to accept network connections, and then set

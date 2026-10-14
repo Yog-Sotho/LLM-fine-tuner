@@ -120,7 +120,7 @@ def train_distill(
     if err := sharding_unsupported("Distillation"):
         return err
     if not HAS_GKD:
-        return '❌ GKDTrainer not available. Install: pip install "trl>=0.29.1,<2"'
+        return '❌ GKDTrainer not available. Install: pip install "trl>=0.29.1,<1.15"'
     if not student_model_name or not teacher_model_name:
         return "❌ Give the student (small) and teacher (large) models."
     if distill_file is None:

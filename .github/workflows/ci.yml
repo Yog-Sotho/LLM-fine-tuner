@@ -197,12 +197,12 @@ jobs:
           restore-keys: "test-py${{ matrix.python-version }}-"
 
       # Install CPU PyTorch before any other dep to avoid pip resolving the
-      # CUDA build (~2 GB) from the default PyPI index. torch >= 2.6 is required
-      # (CVE-2025-32434). torchvision (VLM tests) comes from the same index so the
-      # two builds match.
+      # CUDA build (~2 GB) from the default PyPI index. The floor matches
+      # pyproject.toml (first release without known advisories). torchvision
+      # (VLM tests) comes from the same index so the two builds match.
       - name: "Install CPU-only PyTorch"
         run: |
-          pip install --quiet "torch>=2.6.0,<3" torchvision \
+          pip install --quiet "torch>=2.13.0,<3" torchvision \
             --index-url https://download.pytorch.org/whl/cpu
 
       # Install the package itself so CI tests exactly the declared dependency ranges.
@@ -212,11 +212,12 @@ jobs:
       - name: "Install dev / test tools"
         run: |
           pip install --quiet \
-            "pytest>=8.0.0" \
+            "pytest>=9.0.3" \
             "pytest-cov>=5.0.0" \
             "pytest-timeout>=2.3.0"
 
       # NLTK data for nlpaug (synonym augmentation uses wordnet and the tagger).
+      # nltk itself comes with rouge-score (eval extra).
       - name: "Pre-fetch NLTK data"
         run: |
           python -c "
@@ -300,8 +301,9 @@ jobs:
         run: |
           # GHSA-8mgp-746c-j5xp (nltk <= 3.10.3, no fixed release yet) affects
           # NLTK's model-artifact save/load APIs with caller-controlled paths.
-          # This project only uses sentence_bleu and nlpaug's wordnet lookups, so
-          # it is not reachable. Remove the waiver once nltk publishes a fix.
+          # nltk is no direct dependency (BLEU is built in); rouge-score pulls it
+          # in for its Porter stemmer, and nlpaug uses its wordnet lookups, so it
+          # is not reachable. Remove the waiver once nltk publishes a fix.
           # PYSEC-2026-1939 / GHSA-g4r7-86gm-pgqc (CVE-2024-35515, sqlitedict
           # <= 2.1.0, no fixed release): unpickling an untrusted cache file.
           # lm-eval only opens sqlitedict for simple_evaluate(use_cache=...),
@@ -375,7 +377,7 @@ jobs:
           restore-keys: "pkg-"
 
       - name: "Install build toolchain"
-        run: pip install --quiet "build>=1.2.0" twine "setuptools>=77" wheel
+        run: pip install --quiet "build>=1.2.0" twine "setuptools>=83" wheel
 
       - name: "Build sdist + wheel"
         # --no-isolation: reuse the current env (avoids a redundant heavy install)
