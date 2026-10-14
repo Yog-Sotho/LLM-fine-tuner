@@ -1,0 +1,5 @@
+# Documentation site (MkDocs + Material), built by .github/workflows/docs.yml and
+# published to https://yog-sotho.github.io/LLM-fine-tuner/
+#   pip install -r requirements-docs.txt && mkdocs serve
+mkdocs==1.6.1                # MkDocs 2 drops the plugin and theme system Material needs
+mkdocs-material==9.7.7

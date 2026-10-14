@@ -1,0 +1,64 @@
+site_name: LLM Fine-Tuner
+site_description: Fine-tune your own language model without code. Upload data, click Train, get a model you can run anywhere.
+site_url: https://yog-sotho.github.io/LLM-fine-tuner/
+repo_url: https://github.com/Yog-Sotho/LLM-fine-tuner
+edit_uri: edit/main/docs/
+strict: true
+# docs/Images links to the repo's Images/ folder, so the guides' pictures reach the site.
+exclude_docs: |
+  dirtree.txt
+
+theme:
+  name: material
+  logo: Images/logo.jpg
+  favicon: Images/logo.jpg
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+  palette:
+    - scheme: slate
+      primary: deep purple
+      accent: purple
+      toggle: {icon: material/brightness-4, name: Light mode}
+    - scheme: default
+      primary: deep purple
+      accent: purple
+      toggle: {icon: material/brightness-7, name: Dark mode}
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      # GitHub-style anchors, so in-page links work the same on GitHub and on the site.
+      slugify: !!python/object/apply:pymdownx.slugs.slugify {kwds: {case: lower}}
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: 01_installation.md
+      - Quick start: 02_quick_start.md
+      - Preparing your data: 03_data_preparation.md
+  - Training:
+      - Training guide: 04_training.md
+      - Alignment (RLHF): 05_rlhf_pipeline.md
+      - Advanced usage: 10_advanced.md
+  - Using your model:
+      - Inference: 06_inference.md
+      - Evaluation: 07_evaluation.md
+      - Export & deploy: 08_export_and_deploy.md
+      - Docker: 13_docker.md
+  - Reference:
+      - CLI reference: 09_cli_reference.md
+      - Troubleshooting: 11_troubleshooting.md
+      - FAQ: 12_faq.md
+  - Guides:
+      - Fine-tuning Llama 3: Llama3_guide.md
+  - Project:
+      - Codebase audit: project/codebase_audit.md

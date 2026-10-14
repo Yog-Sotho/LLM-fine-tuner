@@ -91,7 +91,8 @@ LLM-fine-tuner/
 │   ├── test_training_guards.py
 │   └── …                    # one file per area (security, formats, deploy, smoke training…)
 │
-└── docs/                    # User-facing documentation (01_installation.md … 13_docker.md)
+└── docs/                    # User-facing documentation (01_installation.md … 13_docker.md);
+                             # mkdocs.yml builds it into https://yog-sotho.github.io/LLM-fine-tuner/
 ```
 
 ---

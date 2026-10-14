@@ -228,7 +228,7 @@ Once trained, your model can be:
 
 ## 📖 Documentation
 
-New to fine-tuning? The docs are written for non-technical users:
+New to fine-tuning? The docs are written for non-technical users. Read them as a website at **[yog-sotho.github.io/LLM-fine-tuner](https://yog-sotho.github.io/LLM-fine-tuner/)**, or right here:
 
 | Guide | What you'll learn |
 |---|---|
