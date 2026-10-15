@@ -38,7 +38,7 @@ python-docx>=1.1.0          # Word documents for "Create training data" (guarded
 psutil>=6.0.0               # RAM display in hardware summary (optional, guarded by HAS_PSUTIL)
 
 # ── HuggingFace Hub ───────────────────────────────────────────────────
-huggingface_hub>=1.5.0,<2      # Hub push, create_repo (optional, guarded by HAS_HUB)
+huggingface_hub>=1.5.0,<3      # Hub push, create_repo (optional, guarded by HAS_HUB)
 
 # ── CLI / headless mode ───────────────────────────────────────────────
 typer>=0.15.0               # CLI commands: train, reward, orpo, evaluate, ppo
