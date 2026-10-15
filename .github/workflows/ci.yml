@@ -76,14 +76,14 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
       - name: "Cache pip"
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: "lint-${{ hashFiles('pyproject.toml') }}"
@@ -113,14 +113,14 @@ jobs:
     needs: [lint]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
       - name: "Cache pip"
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: "mypy-${{ hashFiles('pyproject.toml') }}"
@@ -181,14 +181,14 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "${{ matrix.python-version }}"
 
       - name: "Cache pip"
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: >-
@@ -260,7 +260,7 @@ jobs:
 
       - name: "Upload coverage to Codecov"
         if: matrix.python-version == '3.11'
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: coverage.xml
           flags: unittests
@@ -281,14 +281,14 @@ jobs:
     needs: [lint]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
       - name: "Cache pip"
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: "audit-${{ hashFiles('requirements.txt') }}"
@@ -334,17 +334,17 @@ jobs:
     needs: [lint]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: "Lint GPU Dockerfile"
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.5.0
         with:
           dockerfile: Dockerfile
           ignore: DL3008,DL3013
           failure-threshold: warning
 
       - name: "Lint CPU Dockerfile"
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.5.0
         with:
           dockerfile: Dockerfile.cpu
           ignore: DL3008,DL3013
@@ -363,14 +363,14 @@ jobs:
     needs: [lint]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
       - name: "Cache pip"
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: "pkg-${{ hashFiles('pyproject.toml', 'setup.py') }}"
