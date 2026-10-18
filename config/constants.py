@@ -23,7 +23,7 @@ import torch
 # ── Version ────────────────────────────────────────────────────────────────
 # The only place the version is written: pyproject.toml reads it from here (a plain
 # string literal, so setuptools parses it without importing this module).
-APP_VERSION = "3.2.0"
+APP_VERSION = "3.3.0"
 APP_NAME = f"LLM Fine-Tuner v{APP_VERSION}"
 
 # ── Logging ────────────────────────────────────────────────────────────────

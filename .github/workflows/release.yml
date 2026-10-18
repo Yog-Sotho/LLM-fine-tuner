@@ -1,0 +1,81 @@
+name: Release
+
+# Push a tag `vX.Y.Z` (matching APP_VERSION in config/constants.py) to publish a signed
+# release: the wheel and sdist, each signed keylessly with Sigstore using this workflow's
+# GitHub OIDC identity, with the CHANGELOG.md section as the notes. Verify a download with:
+#   pip install sigstore
+#   python -m sigstore verify github --cert-identity \
+#     "https://github.com/Yog-Sotho/LLM-fine-tuner/.github/workflows/release.yml@refs/tags/vX.Y.Z" \
+#     llm_fine_tuner-X.Y.Z-py3-none-any.whl
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  SIGSTORE: "sigstore==4.5.0"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write   # create the GitHub release
+      id-token: write   # Sigstore keyless signing
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Tag must match APP_VERSION
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(sed -nE 's/^APP_VERSION = "([^"]+)"$/\1/p' config/constants.py)
+          test -n "$version" || { echo "::error::APP_VERSION not found in config/constants.py"; exit 1; }
+          test "$TAG" = "v$version" || { echo "::error::tag $TAG does not match APP_VERSION $version"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Build wheel and sdist
+        run: |
+          python -m pip install --quiet "build>=1.2.0" twine "setuptools>=83" wheel
+          python -m build --outdir dist
+          python -m twine check --strict dist/*
+          test -f "dist/llm_fine_tuner-$VERSION-py3-none-any.whl" \
+            || { echo "::error::the built wheel is not version $VERSION"; ls dist; exit 1; }
+
+      - name: Sign with Sigstore
+        run: |
+          python -m pip install --quiet "$SIGSTORE"
+          python -m sigstore sign dist/*.whl dist/*.tar.gz
+
+      - name: Verify the signatures
+        env:
+          IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release.yml@${{ github.ref }}
+        run: |
+          for f in dist/*.whl dist/*.tar.gz; do
+            python -m sigstore verify github --cert-identity "$IDENTITY" "$f"
+          done
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" {on=1; next}
+            on && /^## \[/ {exit}
+            on {print}
+          ' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "::error::no CHANGELOG.md section for $VERSION"; exit 1; }
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" dist/* --title "LLM Fine-Tuner $VERSION" \
+            --notes-file notes.md --verify-tag
