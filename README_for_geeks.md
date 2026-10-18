@@ -16,7 +16,7 @@
     <img src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2FYog-Sotho%2FLLM-fine-tuner%2Fmain%2Fconfig%2Fconstants.py&search=APP_VERSION%20%3D%20%22(%5B%5E%22%5D%2B)%22&replace=v%241&label=version&style=for-the-badge&color=3b82f6" alt="Version">
   </a>
   <img src="https://img.shields.io/badge/Python-3.10%2B-yellow?style=for-the-badge&logo=python" alt="Python">
-  <img src="https://img.shields.io/badge/PyTorch-2.6%2B-ee4c2c?style=for-the-badge&logo=pytorch" alt="PyTorch">
+  <img src="https://img.shields.io/badge/PyTorch-2.13%2B-ee4c2c?style=for-the-badge&logo=pytorch" alt="PyTorch">
   <img src="https://img.shields.io/badge/Transformers-5.10%2B-ffd21e?style=for-the-badge" alt="Transformers">
 </div>
 
@@ -32,7 +32,7 @@ config/ → core/ → data/ → training/ → inference/ → export/ → ui/ / c
 
 | Module | Responsibility |
 |---|---|
-| `config/constants.py` | All `COL_*`, `HAS_*`, `GGUF_QUANT_PRESETS`, `QLORA_ENHANCED_*`, `LORA_TARGET_MAP` |
+| `config/constants.py` | All `COL_*`, `HAS_*`, `GGUF_QUANT_PRESETS`, `QLORA_ENHANCED_*`, `LORA_TARGET_MODULES` |
 | `core/state.py` | `AppState` singleton — shared `inference_cache` / `vllm_cache`, per-session `SessionState` (stop event, temp files) |
 | `core/hardware.py` | VRAM detection, model recommendation, Unsloth compatibility check |
 | `core/callbacks.py` | `StopCallback`, `LoggingCallback` |
@@ -51,7 +51,7 @@ config/ → core/ → data/ → training/ → inference/ → export/ → ui/ / c
 | `export/hub.py` | HuggingFace Hub push with auto model card |
 | `export/registry.py` | Model registry — reads `adapter_config.json` before `config.json` |
 | `ui/app.py` | `build_demo()` — all Gradio event wiring (single source of truth) |
-| `cli/commands.py` | Typer app — 5 fully-implemented commands |
+| `cli/commands.py` | Typer app — 15 commands (`train` … `serve`, see the CLI section) |
 
 ---
 
@@ -114,8 +114,8 @@ The installer:
 3. Creates `llm_finetuner_env/` venv, upgrades pip/setuptools/wheel
 4. Installs torch with correct wheel, then `CORE_DEPS` array
 5. Attempts `flash-attn --no-build-isolation` (non-fatal on failure)
-6. Prompts for Unsloth, vLLM, quantization tools, eval/data tools
-7. Optionally clones and builds `llama.cpp` with `LLAMA_CUDA=1`
+6. Prompts for Unsloth, vLLM, eval/data tools, psutil + wandb
+7. Optionally clones and builds `llama.cpp` with CMake (`-DGGML_CUDA=ON` on NVIDIA)
 8. Creates the `llm_finetuner_env/bin/llm-finetune` launcher
 
 ### Manual (PyTorch first, then requirements)
@@ -152,14 +152,14 @@ pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git" 
 LoraConfig(
     r=8,  # rank — increase to 16/32/64 for harder tasks
     lora_alpha=16,  # scaling factor; rule of thumb: 2 × r
-    target_modules=LORA_TARGET_MAP[model_family],  # auto-detected per architecture
-    lora_dropout=0.05,
+    target_modules=get_lora_targets(),  # "all-linear": every attention + MLP projection
+    lora_dropout=lora_dropout(model),  # 0.05, or 0 for MoE models
     bias="none",
     task_type=TaskType.CAUSAL_LM,
 )
 ```
 
-**`LORA_TARGET_MAP` covers:** llama, mistral, qwen, gemma, phi, falcon, gpt-neox, opt, bloom, gpt2.
+**`"all-linear"`** works for every architecture (never the output head), so there is no per-model target list to maintain.
 
 **Rank selection guide:**
 | Task | Suggested rank | lora_alpha |
@@ -282,9 +282,9 @@ hyperparams = {
 if len(dataset) < 2:
     train_ds, eval_ds = dataset, None
 else:
-    split = dataset.train_test_split(test_size=0.2, seed=42)
+    split = dataset.train_test_split(test_size=eval_split, seed=seed)  # eval_split: default 0.1
     train_ds, eval_ds = split["train"], split["test"]
-    if len(eval_ds) == 0:  # e.g. 2 examples → 0.2 rounds to 0
+    if len(eval_ds) == 0:  # e.g. 2 examples → 0.1 rounds to 0
         train_ds = dataset.select(range(len(dataset) - 1))
         eval_ds = dataset.select([len(dataset) - 1])
 
@@ -460,7 +460,7 @@ GGUF_QUANT_PRESETS = {
   *The CLI lets you run the full pipeline — training, alignment, evaluation — without touching the UI.*
 </div>
 
-All 5 commands are fully implemented (not stubs) since v2.7 Fix 3c.
+All 15 commands are fully implemented; `python main.py <command> --help` lists every option.
 
 ### `train`
 
@@ -475,8 +475,9 @@ python main.py train \
     --lr 2e-4 \
     --peft "QLoRA Enhanced" \
     --lora-rank 64 \
-    --qlora-enhanced \        # overrides --peft to "QLoRA Enhanced" (Minor Fix 1)
-    --flash-attn              # requires Ampere+ GPU + bf16
+    --qlora-enhanced \
+    --flash-attn
+# --qlora-enhanced overrides --peft to "QLoRA Enhanced"; --flash-attn needs an Ampere+ GPU + bf16
 ```
 
 ### `reward`
@@ -488,8 +489,9 @@ python main.py reward \
     --output ./reward_model \
     --epochs 3 \
     --lr 1.4e-5 \
-    --max-length 1024 \       # Fix 2c: critical for reward model quality
+    --max-length 1024 \
     --batch-size 4
+# --max-length matters a lot for reward model quality
 ```
 
 ### `orpo`
@@ -501,7 +503,7 @@ python main.py orpo \
     --output ./orpo_model \
     --lr 1e-4 \
     --beta 0.1 \
-    --alpha 0.1 \             # v2.9 Minor Fix #7
+    --alpha 0.1 \
     --epochs 3
 ```
 

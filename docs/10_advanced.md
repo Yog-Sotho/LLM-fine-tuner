@@ -24,7 +24,7 @@ That's it. The abliteration is applied automatically at the end of your training
 
 Heretic Mode uses the `heretic-llm` library, which identifies and removes the "refusal direction" from the model's residual stream. This is different from just removing RLHF — it directly modifies the model's internal weights to reduce the influence of the trained refusal behaviour.
 
-- Requires: `pip install heretic-llm>=1.2.0` (installed by default)
+- Requires: `pip install "heretic-llm>=1.2.0"` (`install.sh` installs it; with pip, add it yourself or use `pip install -e ".[heretic]"`)
 - Works with: LoRA, QLoRA, Full Fine-tuning
 - Source: [github.com/Yog-Sotho/LLM-fine-tuner](https://github.com/Yog-Sotho/LLM-fine-tuner)
 
@@ -108,7 +108,7 @@ Unsloth rewrites the core training kernels in Triton (a GPU programming language
 
 ### How to Enable
 
-Check **🚀 Enable Unsloth** in the Training tab. That's it — the rest is automatic.
+Check **🚀 Use Unsloth (2-5× faster)** in the Training tab. That's it — the rest is automatic.
 
 Unsloth is only available for LoRA and QLoRA training on NVIDIA GPUs. If you try to enable it with Full Fine-Tuning or without a NVIDIA GPU, you'll see a warning.
 
@@ -118,7 +118,7 @@ Unsloth is only available for LoRA and QLoRA training on NVIDIA GPUs. If you try
 
 Modern instruct models (Llama-3, Mistral, Qwen, Gemma-2, Phi, etc.) expect prompts formatted in a specific way. For example:
 
-**Llama-3 format:**
+**ChatML format (Qwen and others):**
 ```
 <|im_start|>system
 You are a helpful assistant.<|im_end|>
@@ -277,8 +277,8 @@ For most users: **leave it on `cosine`**.
 
 If training was interrupted (power cut, crash, timeout), you can resume from the last checkpoint:
 
-1. In the Training tab, enable **Resume from checkpoint**
-2. Set the **Output directory** to the same path as the interrupted run
+1. In the Training tab, enter the interrupted run's **Run name**
+2. Tick **Resume from last checkpoint**
 3. Start training
 
 The tool will find the latest checkpoint automatically and continue from there.

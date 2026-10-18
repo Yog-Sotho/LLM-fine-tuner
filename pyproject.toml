@@ -10,7 +10,7 @@ dynamic = ["version"]  # from config.constants.APP_VERSION
 description = "Advanced LLM Fine-Tuner — SFT, DPO, ORPO, KTO, GRPO, reward modelling and evaluation"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "MIT"
+license = "GPL-3.0-only"  # matches LICENSE and the README
 license-files = ["LICENSE"]
 authors = [{ name = "Yog-Sotho" }]
 keywords = ["llm", "fine-tuning", "peft", "lora", "qlora", "dpo", "grpo", "kto", "orpo", "rlhf"]

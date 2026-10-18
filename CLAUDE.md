@@ -33,7 +33,7 @@ LLM-fine-tuner/
 │   └── callbacks.py         # Trainer callbacks (Stop, Logging, ETA)
 │
 ├── data/
-│   ├── loader.py            # Multi-format file ingestion (CSV/JSON/PDF/Excel/ZIP)
+│   ├── loader.py            # Multi-format file ingestion (CSV/JSON/JSONL/TXT/PDF/Excel)
 │   ├── documents.py         # read_document() (PDF/.docx/.txt/.md) + chunk_text() for synthetic data
 │   ├── preprocessing.py     # Dataset validation, cleaning, deduplication
 │   └── augmentation.py      # nlpaug-backed data augmentation
@@ -236,8 +236,8 @@ CLI commands report errors with `_fail(message)` (stderr, exit 1), check paths w
 ### Code style
 
 ```bash
-# Format
-black .
+# Format (CI runs `ruff format --check`; black would reformat at 88 columns)
+ruff format .
 
 # Lint
 ruff check .

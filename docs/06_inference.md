@@ -36,7 +36,7 @@ The response appears in the **Output** box within a few seconds.
 
 | Setting | Default | What it does |
 |---|---|---|
-| **Max New Tokens** | 150 | Maximum length of the response. Increase for longer answers. |
+| **Max New Tokens** | 200 | Maximum length of the response. Increase for longer answers. |
 | **Temperature** | 0.7 | Creativity vs. accuracy. Lower (0.1–0.3) = more focused and predictable. Higher (0.8–1.0) = more creative and varied. |
 | **Top-p** | 0.9 | Filters out very unlikely words. 0.9 is a good balance. Leave this alone unless you know what it does. |
 
@@ -76,14 +76,14 @@ responses against reference answers (BLEU / ROUGE / BERTScore / LLM judge), use 
 
 By default your fine-tuned model is stored as a small "adapter" file that sits on top of the base model. This is efficient for training, but some deployment tools (like Ollama and LM Studio) need the adapter merged into the base model first.
 
-1. In the **vLLM / Merge** section, find the **🔗 Merge Adapter** tool
-2. Enter:
+1. In the **⚡ vLLM Production Inference** section, under **🔗 Step 1 — Merge LoRA Adapter**, enter:
    - **Base Model ID** — same as used in training
-   - **Adapter Path** — the folder with your fine-tuned adapter
-   - **Output Path** — where to save the merged model (e.g. `./my_model_merged`)
-3. Click **🔗 Merge Adapter into Base**
+   - **Adapter / Model Path** — the folder with your fine-tuned adapter (filled in after training)
+2. Click **🔗 Merge Adapter into Full Model**
 
-This creates a new folder containing a standalone model that doesn't need the base model separately. Use this merged folder for GGUF export or direct deployment.
+The merged model goes to a temporary folder that the vLLM step below uses. To keep a merged
+copy for deployment, use the CLI: `python main.py merge --help`. (GGUF export merges adapters
+on its own, so it doesn't need this step.)
 
 ---
 
@@ -95,15 +95,14 @@ vLLM is a specialised inference engine that can handle many users simultaneously
 
 - NVIDIA GPU with CUDA
 - vLLM installed (CUDA): `pip install "trl[vllm]<1.15"`
-- A **merged** model (see above — vLLM doesn't support unmerged adapters)
+- A **merged** model (step 1 above)
 
 ### How to Use
 
-1. In the **vLLM Generation** section:
-   - Enter your merged model path
-   - Select the quantisation type (leave on `none` unless you know you need gptq/awq)
-2. Click **⚡ Start vLLM Engine** — this loads the model once into the engine
-3. Type a prompt and click **⚡ vLLM Generate**
+1. Under **⚡ Step 2 — vLLM Inference**, type a **vLLM Prompt** and pick the **vLLM Quantization**
+   (leave on `none` unless you know you need gptq/awq)
+2. Click **⚡ Generate with vLLM (merged model)** — the first click loads the merged model into
+   the engine
 
 The engine stays loaded between requests, so each generation after the first is very fast.
 

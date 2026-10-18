@@ -54,6 +54,8 @@ services:
       - GRADIO_AUTH=${GRADIO_AUTH:-}
       - ALLOW_REMOTE_CODE=${ALLOW_REMOTE_CODE:-false}
       - LFT_REPORT_TO=${LFT_REPORT_TO:-none}
+      - LFT_RUNS_DIR=${LFT_RUNS_DIR:-/app/models}
+      - LFT_ALLOWED_PATHS=${LFT_ALLOWED_PATHS:-}
       # Disable tokenizer parallelism warning inside Docker
       - TOKENIZERS_PARALLELISM=false
       # Point HF cache to the mounted volume
@@ -102,6 +104,8 @@ services:
       - GRADIO_AUTH=${GRADIO_AUTH:-}
       - ALLOW_REMOTE_CODE=${ALLOW_REMOTE_CODE:-false}
       - LFT_REPORT_TO=${LFT_REPORT_TO:-none}
+      - LFT_RUNS_DIR=${LFT_RUNS_DIR:-/app/models}
+      - LFT_ALLOWED_PATHS=${LFT_ALLOWED_PATHS:-}
       - TOKENIZERS_PARALLELISM=false
       - HF_HOME=/app/cache/huggingface
 
