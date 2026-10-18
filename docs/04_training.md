@@ -142,7 +142,7 @@ Unsloth is a library that dramatically speeds up training and reduces VRAM usage
 
 ### Smart Chat Template (💬 recommended ON)
 
-Automatically formats your data using the correct chat format for the model you chose (e.g. Llama-3 uses `<|im_start|>` tags, Mistral uses `[INST]` blocks). This improves output quality significantly for chat models.
+Automatically formats your data using the correct chat format for the model you chose (e.g. Llama 3 uses `<|start_header_id|>` headers, Qwen uses ChatML `<|im_start|>` tags, Mistral uses `[INST]` blocks). This improves output quality significantly for chat models.
 
 ### Flash Attention 2 (⚡ for modern GPUs)
 
@@ -194,7 +194,7 @@ The log on the right side shows:
 🏃 Epoch 2/3 — Step 100/113 — Train loss: 1.432 — Eval loss: 1.541
 🏃 Epoch 3/3 — Step 113/113 — Train loss: 1.201 — Eval loss: 1.318
 ✅ Training complete! Time: 0:18:42
-📁 Model saved to: /tmp/abc123
+📁 Model saved to: runs/my-run
 ```
 
 **What to watch for:**
@@ -275,7 +275,7 @@ scores = model.similarity(
 )
 ```
 
-Needs `sentence-transformers` (in `requirements.txt`; or `pip install "llm-fine-tuner[embedding]"`).
+Needs `sentence-transformers` (in `requirements.txt`; or `pip install -e ".[embedding]"` from the repo folder).
 From the CLI: `python main.py embed --data pairs.jsonl --output ./my-embedder`.
 
 ---

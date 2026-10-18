@@ -14,7 +14,6 @@ Your data is the most important part of fine-tuning. This guide explains every s
 | Plain text | `.txt` | One training example per line. |
 | Excel | `.xlsx` | Requires openpyxl (installed by default). |
 | PDF | `.pdf` | Text is extracted automatically. Good for documents. |
-| ZIP | `.zip` | Any of the above formats, zipped together. |
 
 ---
 
@@ -229,18 +228,6 @@ The tool automatically checks for and warns you about:
 When training starts, the log also reports **tokens per example** as the model sees them (mean, 95th percentile, max) and how many examples exceed **Max Sequence Length** and are truncated. That's the number that matters — the character counts above are only a rough guide.
 
 All warnings appear in the **Statistics** box after uploading.
-
----
-
-## ZIP Files
-
-You can upload a ZIP containing multiple files. The tool will:
-
-1. Extract the ZIP safely (path traversal attacks are blocked)
-2. Try to load each file inside
-3. Combine all examples into a single dataset
-
-This is useful if your data is split across many CSV files.
 
 ---
 

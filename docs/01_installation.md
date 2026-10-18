@@ -101,7 +101,7 @@ series included.
 pip install torch torchvision torchaudio
 ```
 
-> `torchvision` is needed for vision-language (image + text) fine-tuning. It must be the build that matches your `torch`, so install both in one command as above. Adding it later: `pip install "llm-fine-tuner[vision]"` works for CPU installs; with CUDA wheels, install it from the same PyTorch index as `torch`.
+> `torchvision` is needed for vision-language (image + text) fine-tuning. It must be the build that matches your `torch`, so install both in one command as above. Adding it later: `pip install -e ".[vision]"` from the repo folder works for CPU installs; with CUDA wheels, install it from the same PyTorch index as `torch`.
 
 ### Step 5 — Install all other dependencies
 
@@ -127,7 +127,7 @@ pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git" 
 python main.py
 ```
 
-Your browser should open automatically at `http://localhost:7860`. If it doesn't, open that address manually.
+Open `http://localhost:7860` in your browser.
 
 ---
 
@@ -148,9 +148,9 @@ Google Colab gives you free GPU access in your browser. Perfect if your computer
 !pip install -r requirements.txt -q
 !pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git" --no-deps -q
 
-# Launch (share=True gives you a public URL)
-import subprocess
-proc = subprocess.Popen(["python", "main.py", "--share"])
+# Launch (SHARE=true gives you a public URL)
+import os, subprocess
+proc = subprocess.Popen(["python", "main.py"], env={**os.environ, "SHARE": "true"})
 ```
 
 4. A public URL will appear (e.g. `https://xxxxx.gradio.live`) — open it in your browser.

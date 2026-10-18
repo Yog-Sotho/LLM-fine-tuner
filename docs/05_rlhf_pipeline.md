@@ -1,6 +1,6 @@
 # 05 — Alignment (RLHF) Pipeline
 
-Alignment training teaches a model which of its possible answers are *better* — the technique behind helpful chat assistants. The **🤖 RLHF Pipeline** tab offers four methods, all built on Hugging Face TRL.
+Alignment training teaches a model which of its possible answers are *better* — the technique behind helpful chat assistants. The **🤖 RLHF Pipeline** tab offers five methods, all built on Hugging Face TRL.
 
 > **This is an advanced feature.** If you're new to fine-tuning, complete standard SFT training first ([04 — Training](04_training.md)).
 

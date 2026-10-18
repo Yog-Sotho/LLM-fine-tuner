@@ -16,7 +16,7 @@ This guide covers the most common errors, what they mean, and how to fix them.
 
 **Fix:** Install Python 3.11 from [python.org](https://www.python.org/downloads/). On Linux:
 ```bash
-sudo apt install python3.11 python3.11-venv python3.11-pip
+sudo apt install python3.11 python3.11-venv python3-pip
 ```
 
 ---
@@ -165,7 +165,7 @@ Output: ,,,,,,,,,,,,,,,,,,,,
 
 **Fixes:**
 1. **Increase temperature** — set it to 0.7–0.9 (if it was very low)
-2. **Increase max new tokens** — the default (150) might be cutting off the response
+2. **Increase max new tokens** — the default (200) might be cutting off the response
 3. **Check the adapter path** — make sure the adapter was loaded correctly
 4. **Try a fresh prompt** — some prompts are out of distribution
 
@@ -241,7 +241,7 @@ huggingface_hub.utils._errors.RepositoryNotFoundError: 401
 **Fix:** Your API token is missing or expired.
 1. Go to [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
 2. Create a new token with **Write** access
-3. Paste it into the **HF API Token** field in the Share tab
+3. Paste it into the **HF Token (write access)** field in the Share tab
 
 ---
 

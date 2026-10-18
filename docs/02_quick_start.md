@@ -25,7 +25,7 @@ source llm_finetuner_env/bin/activate   # Linux / macOS
 python main.py
 ```
 
-Your browser opens to `http://localhost:7860`. You'll see the LLM Fine-Tuner interface with a dark purple theme.
+Open `http://localhost:7860` in your browser. You'll see the LLM Fine-Tuner interface with a dark purple theme.
 
 At the top you'll see your hardware summary — this tells you what model sizes you can realistically train.
 
@@ -33,7 +33,7 @@ At the top you'll see your hardware summary — this tells you what model sizes 
 
 ## Step 2 — Prepare a Sample Dataset
 
-Create a file called `my_data.csv` with this content (or download it from the repo's `examples/` folder):
+Create a file called `my_data.csv` with this content:
 
 ```csv
 instruction,output
@@ -94,7 +94,7 @@ You'll see the training log fill up in real time on the right side:
 🏃 Epoch 1/1 — step 2/3 — loss: 2.87
 🏃 Epoch 1/1 — step 3/3 — loss: 2.31
 ✅ Training complete! Time: 0:01:12
-📁 Model saved to: /tmp/xxxxx
+📁 Model saved to: runs/my-first-run
 ```
 
 The **loss number dropping** is good — it means the model is learning. When it says `✅ Training complete`, you're done.

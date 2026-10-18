@@ -28,9 +28,6 @@ You can't bake a cake without flour, and you can't tune an LLM without data. Her
 
 🧪 4. Step 1: Setting Up the Laboratory
 First, we need to get the tool onto your machine. Open your terminal (that black window where you type commands that makes you look like a hacker in a movie). 🕵️‍♂️
-pip install llm-fine-tuner
-
-If you want the absolute latest features from the source, do this:
 git clone https://github.com/Yog-Sotho/LLM-fine-tuner.git
 cd LLM-fine-tuner
 pip install -r requirements.txt

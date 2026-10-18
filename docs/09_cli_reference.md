@@ -86,13 +86,13 @@ python main.py train \
 | Flag | Default | Description |
 |---|---|---|
 | `--model` | *(required)* | Base model ID or local path |
-| `--data` | *(required)* | Dataset file (`.csv` or `.jsonl`) |
+| `--data` | *(required)* | Dataset file (`.csv`, `.json` or `.jsonl`) |
 | `--output` | `./output` | Where to save the trained model |
 | `--epochs` | `3` | Number of training epochs |
 | `--batch-size` | `2` | Per-device batch size |
 | `--max-length` | `256` | Maximum sequence length in tokens |
 | `--lr` | `2e-4` | Learning rate |
-| `--peft` | `LoRA` | PEFT method: `LoRA`, `QLoRA Enhanced`, `Full Fine-tuning`, `Auto` |
+| `--peft` | `LoRA` | PEFT method: `LoRA`, `QLoRA Enhanced`, `IA3`, `Full Fine-tuning`, `Auto` |
 | `--lora-rank` | `8` | LoRA rank |
 | `--lora-variant` | `LoRA` | `LoRA`, `rsLoRA` or `DoRA` (LoRA goes on every linear layer) |
 | `--qlora-enhanced` | off | Enable QLoRA Enhanced (overrides `--peft`) |
@@ -459,7 +459,7 @@ DoRA adapters can't be merged (the merge would drop their magnitude vectors).
 | `--calibration-data` | — | `w4a16`: CSV/JSONL of training-like examples |
 | `--calibration-samples` | `128` | `w4a16`: how many examples to use |
 
-GGUF needs Unsloth or llama.cpp; `fp8`/`w4a16` need `pip install "llm-fine-tuner[compress]"`.
+GGUF needs Unsloth or llama.cpp; `fp8`/`w4a16` need `pip install -e ".[compress]"` (from the repo folder).
 See [08 — Export & Deploy](08_export_and_deploy.md).
 
 ---

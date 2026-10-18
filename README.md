@@ -15,9 +15,6 @@
   <a href="https://github.com/Yog-Sotho/LLM-fine-tuner/releases">
     <img src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2FYog-Sotho%2FLLM-fine-tuner%2Fmain%2Fconfig%2Fconstants.py&search=APP_VERSION%20%3D%20%22(%5B%5E%22%5D%2B)%22&replace=v%241&label=version&style=for-the-badge&color=3b82f6" alt="Version">
   </a>
-  <a href="https://huggingface.co/spaces?sort=trending">
-    <img src="https://img.shields.io/badge/🤗-Try_on_HF_Spaces-8b5cf6?style=for-the-badge" alt="HF Spaces">
-  </a>
   <a href="https://github.com/sponsors/Yog-Sotho" target="_blank" rel="noopener">
     <img src="https://img.shields.io/badge/Sponsor❤️-30363D.svg?logo=githubsponsors&logoColor=EA4AAA" alt="Sponsor on GitHub">
   </a>
@@ -100,7 +97,7 @@ source llm_finetuner_env/bin/activate
 llm-finetune
 ```
 
-Your browser opens automatically. You're ready to train.
+Open <http://localhost:7860> in your browser. You're ready to train.
 
 ### Want to skip all the questions?
 
@@ -160,7 +157,6 @@ That's it. No special formatting, no coding. Just questions and the answers you 
 | JSON / JSONL | Export from your database or app |
 | Plain text (.txt) | One example per line |
 | PDF | Any PDF document — text is extracted automatically |
-| ZIP | Put multiple files in a ZIP and upload them all at once |
 
 ---
 

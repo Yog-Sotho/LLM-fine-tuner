@@ -20,7 +20,7 @@ A: Nothing, if you run it on your own hardware. The software is free and open so
 
 **Q: Will this work on a Mac?**
 
-A: Yes. Macs with Apple Silicon (M1/M2/M3/M4) can run fine-tuning using the MPS (Metal Performance Shaders) backend. Performance is between CPU and a dedicated NVIDIA GPU. QLoRA Enhanced and Flash Attention 2 are not supported on MPS, so use standard LoRA.
+A: Yes, on the CPU: the app trains on an NVIDIA GPU (CUDA) or on the CPU, and does not use Apple's MPS backend. That works for small models (up to about 1B parameters) with standard LoRA; QLoRA Enhanced and Flash Attention 2 need an NVIDIA GPU. For bigger models, use a cloud GPU (see [Installation](01_installation.md)).
 
 ---
 
@@ -81,7 +81,7 @@ A: Yes, as long as the base model you're using supports that language. Multiling
 
 **Q: Can I mix CSV and JSONL data?**
 
-A: Not directly in a single upload. However, you can put multiple files into a ZIP and upload the ZIP — the tool will combine them automatically.
+A: Not in a single upload: each upload is one file. Convert them to one format first (for example, all to JSONL) and combine them.
 
 ---
 
@@ -145,7 +145,7 @@ A: That depends on the licence of the base model you used. Many popular models (
 
 **Q: Can I make the HuggingFace repo private?**
 
-A: Yes. Tick the **Private repository** checkbox in the Share tab before pushing. Private repos require a HuggingFace Pro account for more than a small number of private models.
+A: Yes. The app creates the repo with your account's default visibility; make it private in the repo's settings on Hugging Face (or create it as private there before pushing).
 
 ---
 

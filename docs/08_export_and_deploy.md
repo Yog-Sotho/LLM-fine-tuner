@@ -1,6 +1,6 @@
 # 08 — Export & Deploy
 
-Once your model is trained, you have several ways to share it and put it to use. This guide covers all four export methods.
+Once your model is trained, you have several ways to share it and put it to use. This guide covers each export method.
 
 ---
 
@@ -23,9 +23,8 @@ Once your model is trained, you have several ways to share it and put it to use.
 The simplest option. Packages your entire model (weights + tokenizer + config) into a single downloadable ZIP.
 
 1. Go to the **📤 Share** tab
-2. Under **Download Model as ZIP**, click **📦 Create ZIP**
-3. Wait for the ZIP to be created (a few seconds to a minute depending on model size)
-4. Click the download link that appears
+2. Under **Download your model**, the **Model ZIP** appears once training has finished
+3. Click it to download
 
 **What's inside the ZIP:**
 ```
@@ -56,10 +55,10 @@ You need a free HuggingFace account and an API token:
 
 ### Uploading
 
-1. In the **📤 Share** tab, find **Push to HuggingFace Hub**
+1. In the **📤 Share** tab, find **Push to Hugging Face Hub**
 2. Fill in:
-   - **HF API Token** — paste your `hf_...` token
-   - **Repository Name** — e.g. `my-username/my-cool-model`
+   - **Repo ID** — e.g. `my-username/my-cool-model`
+   - **HF Token (write access)** — paste your `hf_...` token
 3. Click **🚀 Push to Hub** — it uploads the model you trained in this session
 
 The repository is created if it doesn't exist yet, with your account's default visibility
@@ -109,12 +108,11 @@ GGUF files are quantised (compressed) to reduce file size. Choose based on your 
 
 ### Exporting
 
-1. Go to the **🗜️ GGUF Export** tab
+1. Go to the **📦 GGUF Export** tab
 2. Fill in:
-   - **Model path** — your trained model (merged adapter, not raw adapter)
-   - **Quantisation** — select from the dropdown
-   - **Output path** — where to save the `.gguf` file
-3. Click **🗜️ Export to GGUF**
+   - **Model Path** — your trained model (a LoRA adapter folder is fine, see below)
+   - **Quantization** — select from the dropdown
+3. Click **🔄 Export to GGUF**; the file appears under **Download GGUF**
 
 The tool will:
 1. First try Unsloth (fastest, if available)
@@ -159,8 +157,8 @@ ollama run my-model
 ## Method 4 — Quantized safetensors for vLLM
 
 For serving on NVIDIA GPUs with [vLLM](https://docs.vllm.ai), export a compressed model with
-[llm-compressor](https://github.com/vllm-project/llm-compressor) (`pip install
-"llm-fine-tuner[compress]"` — it pins recent torch/Transformers, so a separate environment can
+[llm-compressor](https://github.com/vllm-project/llm-compressor) (`pip install -e
+".[compress]"` from the repo folder — it pins recent torch/Transformers, so a separate environment can
 be simpler):
 
 | Format | What it does | Needs |
@@ -204,17 +202,14 @@ Test it from the **💬 Inference** tab (**🌐 Remote endpoint**) or with any O
 
 ## Method 6 — Model Registry
 
-The Model Registry is an internal catalogue inside the tool for keeping track of your models. Useful if you're training many versions and want to compare them.
+The Model Registry keeps versioned snapshots of your models in a Hugging Face Hub repo, each
+with its metadata (base model, filled in automatically) and your notes. Useful if you train many
+versions and want to keep track of them.
 
-1. In the **📤 Share** tab, find **Model Registry**
-2. Click **➕ Register Model**
-3. Fill in the model path — the registry will automatically read the config files and fill in the base model name
-4. Add any notes you want
-
-You can then:
-- Browse all registered models
-- Filter by base model or training type
-- See training metadata at a glance
+1. In the **📤 Share** tab, find **📊 Model Registry & Versioning**
+2. Fill in the **Registry Repo ID**, your **HF Token (write access)**, a **Version Tag** and
+   optional **Notes / Changelog**
+3. Click **📤 Upload Versioned Model**; **📋 List Versions** shows what the repo holds
 
 ---
 
