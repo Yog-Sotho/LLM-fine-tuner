@@ -20,7 +20,7 @@
 # =============================================================================
 
 # ── Stage 1: builder ─────────────────────────────────────────────────────────
-FROM nvidia/cuda:12.6.0-cudnn-runtime-ubuntu22.04 AS builder
+FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04 AS builder
 
 LABEL maintainer="Yog-Sotho"
 LABEL description="LLM Fine-Tuner build stage"
@@ -108,7 +108,7 @@ RUN python3 -c "import nltk; nltk.download('punkt', quiet=True); nltk.download('
 
 
 # ── Stage 2: runtime ─────────────────────────────────────────────────────────
-FROM nvidia/cuda:12.6.0-cudnn-runtime-ubuntu22.04 AS runtime
+FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04 AS runtime
 
 LABEL maintainer="Yog-Sotho"
 LABEL description="LLM Fine-Tuner — GPU runtime"
