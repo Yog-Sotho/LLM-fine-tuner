@@ -27,7 +27,7 @@ Output:
 ```
 Usage: main.py [OPTIONS] COMMAND [ARGS]...
 
-  🧠 LLM Fine-Tuner v3.2.0 — headless CLI for every training mode.
+  🧠 LLM Fine-Tuner v3.3.0 — headless CLI for every training mode.
 
 Options:
   --version  Show the version and exit.
