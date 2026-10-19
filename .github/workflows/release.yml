@@ -50,6 +50,16 @@ jobs:
           test -f "dist/llm_fine_tuner-$VERSION-py3-none-any.whl" \
             || { echo "::error::the built wheel is not version $VERSION"; ls dist; exit 1; }
 
+      - name: Collect distributions for PyPI
+        run: |
+          mkdir -p pypi-dist
+          cp dist/*.whl dist/*.tar.gz pypi-dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pypi-dist
+          path: pypi-dist/
+
       - name: Sign with Sigstore
         run: |
           python -m pip install --quiet "$SIGSTORE"
@@ -79,3 +89,20 @@ jobs:
         run: |
           gh release create "$TAG" dist/* --title "LLM Fine-Tuner $VERSION" \
             --notes-file notes.md --verify-tag
+
+  # PyPI upload via Trusted Publishing. Independent of the signed GitHub
+  # release above: a PyPI configuration problem never loses the release or
+  # its tag, and re-running after a failed upload reuses the existing release.
+  publish:
+    needs: release
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write       # Trusted Publishing; also uploads PEP 740 attestations
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pypi-dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
