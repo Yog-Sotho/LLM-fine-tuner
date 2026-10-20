@@ -1,0 +1,53 @@
+name: Docker
+
+# The release publishes the CPU image (Dockerfile.cpu) for linux/amd64 and
+# linux/arm64. This builds it natively on both architectures (without pushing)
+# and smoke-tests the CLI whenever the image or its inputs change.
+
+on:
+  pull_request:
+    paths:
+      - 'Dockerfile.cpu'
+      - '.dockerignore'
+      - 'docker-entrypoint.sh'
+      - 'requirements.txt'
+      - '.github/workflows/docker.yml'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    name: image (${{ matrix.platform }})
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux/amd64, runner: ubuntu-24.04 }
+          - { platform: linux/arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.cpu
+          platforms: ${{ matrix.platform }}
+          load: true
+          tags: llm-fine-tuner:ci
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          # Any argument goes to the CLI (main.py) after the entrypoint's hardware
+          # check, so this imports torch and the training stack.
+          out="$(docker run --rm llm-fine-tuner:ci --help)"
+          echo "$out"
+          grep -q 'Usage' <<<"$out"

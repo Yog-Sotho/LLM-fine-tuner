@@ -7,6 +7,14 @@ signed release (`.github/workflows/release.yml`) with this file's section as its
 
 ## [Unreleased]
 
+### Added
+
+- **Container image** `ghcr.io/yog-sotho/llm-fine-tuner:{version,latest}` (built from
+  `Dockerfile.cpu`) for `linux/amd64` and `linux/arm64`, published by the release workflow,
+  signed with Sigstore (keyless) and with build provenance. A `Docker` workflow builds and
+  smoke-tests it on both architectures for pull requests that change it. The GPU image is not
+  published: its CUDA stack is too large for hosted build runners.
+
 ## [3.3.1] - 2026-10-20
 
 ### Added
