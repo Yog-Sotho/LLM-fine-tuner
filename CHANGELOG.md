@@ -7,6 +7,13 @@ signed release (`.github/workflows/release.yml`) with this file's section as its
 
 ## [Unreleased]
 
+## [3.3.1] - 2026-10-20
+
+### Added
+- PyPI publishing via OIDC Trusted Publishing. The distribution is named
+  `llm-finetuner-pro` (the bare name `llm-fine-tuner` is unavailable on PyPI);
+  the `llm-finetune` command and the project brand are unchanged.
+
 ## [3.3.0] - 2026-10-18
 
 The first published release. It covers everything since version 3.2.0 was set
