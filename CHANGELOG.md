@@ -7,6 +7,8 @@ signed release (`.github/workflows/release.yml`) with this file's section as its
 
 ## [Unreleased]
 
+## [3.3.2] - 2026-10-20
+
 ### Added
 
 - **Container image** `ghcr.io/yog-sotho/llm-fine-tuner:{version,latest}` (built from
