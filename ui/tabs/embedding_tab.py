@@ -21,7 +21,7 @@ def build_embedding_tab() -> dict:
             "(question ↔ source passage), `instruction` + `output`, `prompt` + `completion`, or "
             "chats. Retrieval quality is measured on held-out pairs before and after training."
             + ("" if HAS_SENTENCE_TRANSFORMERS else
-               '\n\n❌ Not installed: `pip install "llm-fine-tuner[embedding]"`')
+               '\n\n❌ Not installed: `pip install "llm-finetuner-pro[embedding]"`')
         )  # fmt: skip
         with gr.Row():
             with gr.Column():

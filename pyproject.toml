@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 
 [project]
-name = "llm-fine-tuner"
+name = "llm-finetuner-pro"
 dynamic = ["version"]  # from config.constants.APP_VERSION
 description = "Advanced LLM Fine-Tuner — SFT, DPO, ORPO, KTO, GRPO, reward modelling and evaluation"
 readme = "README.md"
@@ -50,7 +50,7 @@ dependencies = [
     "psutil>=6.0.0",
     # H-11 FIX: heretic-llm removed from core deps — if unavailable on PyPI it broke every install.
     # Install separately:  pip install heretic-llm>=1.2.0
-    # or:  pip install "llm-fine-tuner[heretic]"
+    # or:  pip install "llm-finetuner-pro[heretic]"
 ]
 
 
@@ -92,7 +92,7 @@ embedding = [
     "sentence-transformers>=5.6.0,<7",
 ]
 all = [
-    "llm-fine-tuner[eval,vllm,heretic,vision,embedding,dev]",
+    "llm-finetuner-pro[eval,vllm,heretic,vision,embedding,dev]",
 ]
 
 

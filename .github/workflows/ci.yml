@@ -406,9 +406,9 @@ jobs:
           (app_version,) = [n.value.value for n in ast.parse(source).body
                             if isinstance(n, ast.Assign)
                             and getattr(n.targets[0], "id", None) == "APP_VERSION"]
-          assert version("llm-fine-tuner") == app_version, (version("llm-fine-tuner"), app_version)
+          assert version("llm-finetuner-pro") == app_version, (version("llm-finetuner-pro"), app_version)
 
-          top = {f.parts[0] for f in distribution("llm-fine-tuner").files}
+          top = {f.parts[0] for f in distribution("llm-finetuner-pro").files}
           stray = top & {"tests", "archive", "docs", "build"}
           assert not stray, f"wheel installs non-application packages: {sorted(stray)}"
           scripts = entry_points(group="console_scripts")

@@ -6,7 +6,7 @@ name: Release
 #   pip install sigstore
 #   python -m sigstore verify github --cert-identity \
 #     "https://github.com/Yog-Sotho/LLM-fine-tuner/.github/workflows/release.yml@refs/tags/vX.Y.Z" \
-#     llm_fine_tuner-X.Y.Z-py3-none-any.whl
+#     llm_finetuner_pro-X.Y.Z-py3-none-any.whl
 on:
   push:
     tags: ["v*"]
@@ -47,7 +47,7 @@ jobs:
           python -m pip install --quiet "build>=1.2.0" twine "setuptools>=83" wheel
           python -m build --outdir dist
           python -m twine check --strict dist/*
-          test -f "dist/llm_fine_tuner-$VERSION-py3-none-any.whl" \
+          test -f "dist/llm_finetuner_pro-$VERSION-py3-none-any.whl" \
             || { echo "::error::the built wheel is not version $VERSION"; ls dist; exit 1; }
 
       - name: Collect distributions for PyPI

@@ -71,7 +71,7 @@ def train_vision_sft(
     if not HAS_TORCHVISION:
         raise ImportError(
             "Vision-language fine-tuning needs torchvision, built for your torch version: "
-            'pip install "llm-fine-tuner[vision]" (see docs/04_training.md).'
+            'pip install "llm-finetuner-pro[vision]" (see docs/04_training.md).'
         )
     if peft_method not in VISION_PEFT_METHODS:
         raise ValueError(

@@ -39,7 +39,7 @@ def build_gguf_tab() -> dict:
             "Saved next to the model as `<model>-fp8` / `<model>-w4a16`; serve with "
             "`python main.py serve --model <folder>`."
             + ("" if HAS_LLMCOMPRESSOR else
-               '\n\n❌ Not installed: `pip install "llm-fine-tuner[compress]"`')
+               '\n\n❌ Not installed: `pip install "llm-finetuner-pro[compress]"`')
         )  # fmt: skip
         with gr.Row():
             with gr.Column():

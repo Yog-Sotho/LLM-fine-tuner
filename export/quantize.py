@@ -64,7 +64,7 @@ def quantize_model(
     if fmt not in QUANT_EXPORT_FORMATS:
         return f"❌ Format must be one of: {', '.join(QUANT_EXPORT_FORMATS)}"
     if not HAS_LLMCOMPRESSOR:
-        return '❌ Quantized export needs llm-compressor: pip install "llm-fine-tuner[compress]"'
+        return '❌ Quantized export needs llm-compressor: pip install "llm-finetuner-pro[compress]"'
     if not model_path or not output_dir:
         return "❌ Give the model path and an output folder."
     if fmt == "w4a16" and not texts:
