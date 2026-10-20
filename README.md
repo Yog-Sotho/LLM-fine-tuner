@@ -15,6 +15,9 @@
   <a href="https://github.com/Yog-Sotho/LLM-fine-tuner/releases">
     <img src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2FYog-Sotho%2FLLM-fine-tuner%2Fmain%2Fconfig%2Fconstants.py&search=APP_VERSION%20%3D%20%22(%5B%5E%22%5D%2B)%22&replace=v%241&label=version&style=for-the-badge&color=3b82f6" alt="Version">
   </a>
+  <a href="https://pypi.org/project/llm-finetuner-pro/">
+    <img src="https://img.shields.io/pypi/v/llm-finetuner-pro?style=for-the-badge&logo=pypi&logoColor=white&color=8b5cf6" alt="PyPI: llm-finetuner-pro">
+  </a>
   <a href="https://github.com/sponsors/Yog-Sotho" target="_blank" rel="noopener">
     <img src="https://img.shields.io/badge/Sponsor❤️-30363D.svg?logo=githubsponsors&logoColor=EA4AAA" alt="Sponsor on GitHub">
   </a>
