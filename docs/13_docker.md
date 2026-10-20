@@ -48,6 +48,21 @@ docker run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu22.04 nvidia-smi
 
 ---
 
+## Quickest — Pull the Published CPU Image
+
+Each release publishes the CPU image (`Dockerfile.cpu`) to the GitHub Container Registry
+for `linux/amd64` and `linux/arm64`, signed with Sigstore and with build provenance:
+
+```bash
+docker run -p 127.0.0.1:7860:7860 -v lft-models:/app/models ghcr.io/yog-sotho/llm-fine-tuner
+# a specific release: ghcr.io/yog-sotho/llm-fine-tuner:<version>
+```
+
+Open <http://localhost:7860>. For an NVIDIA GPU, build the GPU image yourself (Option A or B
+below): its CUDA stack is too large for the registry's hosted build runners.
+
+---
+
 ## Option A — Docker Compose (Recommended)
 
 Docker Compose manages everything — building, volumes, GPU access, environment variables — in one command.
