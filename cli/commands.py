@@ -712,7 +712,7 @@ def embed(
     _check_paths(model, data, output)
     if not HAS_SENTENCE_TRANSFORMERS:
         _fail(
-            '❌ sentence-transformers not installed. Install: pip install "llm-fine-tuner[embedding]"'
+            '❌ sentence-transformers not installed. Install: pip install "llm-finetuner-pro[embedding]"'
         )
     if not os.path.exists(data):
         _fail(f"❌ Dataset not found: {data}")
