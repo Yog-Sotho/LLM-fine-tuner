@@ -25,11 +25,11 @@ jobs:
       contents: write   # create the GitHub release
       id-token: write   # Sigstore keyless signing
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -55,7 +55,7 @@ jobs:
           mkdir -p pypi-dist
           cp dist/*.whl dist/*.tar.gz pypi-dist/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pypi-dist
           path: pypi-dist/
@@ -100,7 +100,7 @@ jobs:
     permissions:
       id-token: write       # Trusted Publishing; also uploads PEP 740 attestations
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: pypi-dist
           path: dist/
@@ -128,7 +128,7 @@ jobs:
     steps:
       - name: Free disk space
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - run: |
@@ -160,7 +160,7 @@ jobs:
         run: |
           mkdir -p digests
           echo "${{ steps.build.outputs.digest }}" > "digests/${{ matrix.arch }}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: digest-${{ matrix.arch }}
           path: digests/
@@ -178,7 +178,7 @@ jobs:
       - run: |
           echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/llm-fine-tuner" >> "$GITHUB_ENV"
           echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: digest-*
           path: digests
